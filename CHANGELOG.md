@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Keep database diagnostics healthy when optional SQLite virtual/vector extension tables cannot be counted, while still reporting per-table count errors.
+
 ## 0.5.0
 
 - Add database diagnostics in Settings with DB path, readability, file size, modified time, table count, and core table row counts.

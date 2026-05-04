@@ -84,12 +84,16 @@ class DashboardStore:
             with self.connect() as con:
                 tables = sorted(self._tables(con))
                 info["tables"] = tables
+                info["table_errors"] = {}
                 for table in tables:
                     if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", table):
-                        info["table_counts"][table] = int(con.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+                        try:
+                            info["table_counts"][table] = int(con.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+                        except Exception as exc:
+                            info["table_errors"][table] = str(exc)
                 required = {"working_memory", "episodic_memory", "triples", "consolidation_log"}
                 info["missing_expected_tables"] = sorted(required - set(tables))
-                info["ok"] = True
+                info["ok"] = not info["missing_expected_tables"]
         except Exception as exc:
             info["error"] = str(exc)
         return info
