@@ -28,12 +28,12 @@ function showLogin(){ $('#loginOverlay')?.classList.remove('hidden'); }
 function hideLogin(){ $('#loginOverlay')?.classList.add('hidden'); }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function shortId(value, head=8, tail=6){ const s = String(value || '').trim(); return s.length > head + tail + 1 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s; }
-function meta(item){
+function meta(item, opts={}){
   const status = item.status || 'active';
   const scope = String(item.scope || '').trim();
   const session = String(item.session_id || '').trim();
   const scopeBadge = scope && scope !== 'session' ? `<span class="badge" title="scope: ${esc(scope)}">${esc(scope)}</span>` : '';
-  const sessionBadge = session && session !== 'default' ? `<button type="button" class="badge session-link" data-session="${esc(session)}" title="Open session: ${esc(session)}">session ${esc(shortId(session))}</button>` : '';
+  const sessionBadge = opts.sessionLink !== false && session && session !== 'default' ? `<button type="button" class="badge session-link" data-session="${esc(session)}" title="Open session: ${esc(session)}">session ${esc(shortId(session))}</button>` : '';
   return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge status-${esc(status)}">${esc(status)}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span>${scopeBadge}${sessionBadge}<span>${esc(item.timestamp || item.created_at || '')}</span></div>`;
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
@@ -233,7 +233,7 @@ function memoryDetailHtml(item){
   const admin = canAdmin();
   return `
     <div class="memory-detail">
-      ${meta(item)}
+      ${meta(item, {sessionLink:false})}
       <div class="content detail-content">${esc(item.content)}</div>
       <div class="diag-grid compact">
         <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
