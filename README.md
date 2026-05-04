@@ -1,8 +1,8 @@
 # Mnemosyne Dashboard
 
-A local, read-only web dashboard for browsing and visualising a Mnemosyne memory store from Hermes Agent.
+A local-first web dashboard for browsing, visualising, and safely maintaining a Mnemosyne memory store from Hermes Agent.
 
-It is intentionally small: Python standard library server, static HTML/CSS/JS frontend, no external JS runtime, no cloud calls, and SQLite opened in read-only mode.
+It is intentionally small: Python standard library server, static HTML/CSS/JS frontend, no external JS runtime, no cloud calls, and read-only browsing by default. Optional password-gated maintenance mode supports safe Mnemosyne-style memory supersession/expiry without hard deletes or raw overwrite edits.
 
 ## Screenshots
 
@@ -37,7 +37,7 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 - Clickable overview breakdown rows and quick actions that jump into filtered workflows
 - Explore section:
   - Global search across memories, triples, and consolidations
-  - Memory browser with query, tier/source/scope/session filters, and sorting
+  - Memory browser with query, tier/source/scope/session/status filters, and sorting
   - Recall debugger with approximate ranking explanations
 - Activity section:
   - Mini timeline grouped by day or session
@@ -48,6 +48,8 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
   - Inspector panel with jumps into Triples and Memories
   - Triples table with clickable row details
 - Optional password authentication, configurable from the Settings tab
+- Password-gated memory maintenance mode with supersede, expire/invalidate, and importance update actions
+- Automatic SQLite backups and JSONL audit log for admin memory mutations
 - Editable Settings fields for bind address, port, and Mnemosyne database path
 - Database diagnostics for install health: path, readability, file size, modified time, tables, row counts, and copyable diagnostics
 - Unified session detail drawer from top sessions, consolidation entries, and timeline session chips
@@ -61,8 +63,11 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 
 - Binds to `127.0.0.1` by default
 - Can bind to `0.0.0.0` only when explicitly configured
-- Opens the Mnemosyne SQLite database with `mode=ro`
-- No edit/delete/write memory HTTP endpoints
+- Browsing opens the Mnemosyne SQLite database with `mode=ro`
+- Memory admin mode is disabled by default and requires password auth before any mutation endpoint works
+- Admin actions are limited to Mnemosyne-aligned supersede, expire/invalidate, and importance updates
+- Raw memory content overwrite and hard delete endpoints are intentionally not exposed
+- Admin mutations create a SQLite backup by default and append to `audit.jsonl`
 - Optional password auth is disabled by default and can be enabled from Settings
 - No external JavaScript or CSS dependencies
 - Runtime state lives under `~/.hermes/plugin-data/mnemosyne-dashboard/`
@@ -123,7 +128,8 @@ Default config:
   "host": "127.0.0.1",
   "port": 8765,
   "db_path": "~/.hermes/mnemosyne/data/mnemosyne.db",
-  "auth_enabled": false
+  "auth_enabled": false,
+  "memory_admin_enabled": false
 }
 ```
 

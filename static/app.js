@@ -3,6 +3,7 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const THEME_KEY = 'mnemosyne-dashboard-theme';
 let graphState = { nodes: [], edges: [], byId: {} };
 let consolidationState = [];
+let authState = { config: {}, auth_enabled: false, authenticated: true };
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -26,7 +27,7 @@ async function postJson(path, body){ return api(path, {method:'POST', headers:{'
 function showLogin(){ $('#loginOverlay')?.classList.remove('hidden'); }
 function hideLogin(){ $('#loginOverlay')?.classList.add('hidden'); }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function meta(item){ return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span><span class="badge">${esc(item.scope || '')}</span><span>${esc(item.timestamp || item.created_at || '')}</span></div>`; }
+function meta(item){ const status = item.status || 'active'; return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge status-${esc(status)}">${esc(status)}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span><span class="badge">${esc(item.scope || '')}</span><span>${esc(item.timestamp || item.created_at || '')}</span></div>`; }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
 function memoryItem(item){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; return `<div class="item ${role ? 'has-role' : ''}" data-id="${esc(item.id)}">${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
 function showDetail(obj, title='Detail'){
@@ -136,6 +137,7 @@ async function loadMemories(){
     source: $('#memorySource').value,
     scope: $('#memoryScope').value,
     session_id: $('#memorySession').value,
+    status: $('#memoryStatus').value,
     sort: $('#memorySort').value,
     limit: '150'
   });
@@ -144,7 +146,52 @@ async function loadMemories(){
   bindMemoryClicks($('#memoryList'));
 }
 function bindMemoryClicks(root){
-  root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = async () => showDetail((await api('/api/memory?id=' + encodeURIComponent(el.dataset.id))).item, 'Memory detail'));
+  root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = async () => openMemoryDetail(el.dataset.id));
+}
+function canAdmin(){ return !!(authState.config && authState.config.memory_admin_enabled && authState.auth_enabled && authState.authenticated); }
+function memoryDetailHtml(item){
+  const admin = canAdmin();
+  return `
+    <div class="memory-detail">
+      ${meta(item)}
+      <div class="content detail-content">${esc(item.content)}</div>
+      <div class="diag-grid compact">
+        <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
+        <div class="diag-row"><span>Session</span><strong>${esc(item.session_id || 'default')}</strong></div>
+        <div class="diag-row"><span>Source</span><strong>${esc(item.source || 'unknown')}</strong></div>
+        <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || 'none')}</strong></div>
+        <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || 'none')}</strong></div>
+      </div>
+      <div class="item-actions memory-actions">
+        <button id="copyMemoryId" class="tiny">Copy ID</button>
+        ${admin ? '<button id="expireMemory" class="tiny warn">Expire now</button><button id="editImportance" class="tiny">Edit importance</button><button id="supersedeMemory" class="primary tiny">Supersede</button>' : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>'}
+      </div>
+      <p id="memoryActionStatus" class="muted"></p>
+    </div>`;
+}
+async function openMemoryDetail(memoryId){
+  const item = (await api('/api/memory?id=' + encodeURIComponent(memoryId))).item;
+  showHtmlDetail(memoryDetailHtml(item), 'Memory detail');
+  $('#copyMemoryId').onclick = async () => { await navigator.clipboard?.writeText(item.id); $('#memoryActionStatus').textContent = 'Memory ID copied.'; };
+  if(!canAdmin()) return;
+  const backup = () => $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
+  $('#expireMemory').onclick = async () => {
+    if(!confirm('Expire this memory now? It will be removed from active recall but kept for history.')) return;
+    try { const r = await postJson('/api/admin/memory/invalidate', {memory_id:item.id, backup: backup()}); $('#memoryActionStatus').textContent = `Expired. Backup: ${r.backup?.path || 'not created'}`; await loadMemories(); await openMemoryDetail(item.id); }
+    catch(e){ $('#memoryActionStatus').textContent = e.message; }
+  };
+  $('#editImportance').onclick = async () => {
+    const v = prompt('New importance, 0.0 to 1.0', Number(item.importance ?? 0.5).toFixed(2));
+    if(v === null) return;
+    try { const r = await postJson('/api/admin/memory/importance', {memory_id:item.id, importance:Number(v), backup: backup()}); $('#memoryActionStatus').textContent = `Importance updated to ${r.importance}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    catch(e){ $('#memoryActionStatus').textContent = e.message; }
+  };
+  $('#supersedeMemory').onclick = async () => {
+    const replacement = prompt('Replacement memory content. This creates a new corrected memory and expires the old one.', item.content || '');
+    if(replacement === null) return;
+    try { const r = await postJson('/api/admin/memory/supersede', {memory_id:item.id, content:replacement, importance:Number(item.importance ?? 0.5), backup: backup()}); $('#memoryActionStatus').textContent = `Superseded by ${r.replacement_id}.`; $('#memoryStatus').value = 'all'; await loadStats(); await loadMemories(); await openMemoryDetail(r.replacement_id); }
+    catch(e){ $('#memoryActionStatus').textContent = e.message; }
+  };
 }
 function sessionEvent(e){ return `<div class="session-event" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><span>${esc(e.timestamp || '')}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview || '')}</div></div>`; }
 async function openSessionDetail(sessionId){
@@ -262,8 +309,11 @@ async function loadAuthStatus(){
   const urls = [`This Mac: ${cfg.local_url || ''}`];
   if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
   $('#configStatus').textContent = `Current access URLs — ${urls.join(' · ')}`;
+  authState = data;
   $('#authEnabled').checked = !!data.auth_enabled;
   $('#authStatus').textContent = data.has_password ? 'Password is set.' : 'No password set.';
+  $('#memoryAdminEnabled').checked = !!cfg.memory_admin_enabled;
+  $('#memoryAdminStatus').textContent = cfg.memory_admin_enabled ? 'Admin maintenance mode is enabled. Mutations require password auth and are audited.' : 'Admin maintenance mode is disabled; dashboard is read-only.';
 }
 
 function graphInspectorDefault(){
@@ -351,8 +401,8 @@ $('#memorySearch').onclick = loadMemories; $('#memoryQuery').onkeydown = e => { 
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
 $('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
-$('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memorySort').value = 'recent'; loadMemories(); };
-['memoryKind','memorySource','memoryScope','memorySession','memorySort'].forEach(id => $('#'+id).onchange = loadMemories);
+$('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; loadMemories(); };
+['memoryKind','memorySource','memoryScope','memorySession','memoryStatus','memorySort'].forEach(id => $('#'+id).onchange = loadMemories);
 $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { if(e.key==='Enter') loadTriples(); };
 $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e.key==='Enter') loadGraph(); };
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };
@@ -383,7 +433,19 @@ $('#saveAuth').onclick = async () => {
   try { const body = {auth_enabled: $('#authEnabled').checked}; if($('#authPassword').value) body.password = $('#authPassword').value; const r = await postJson('/api/config', body); $('#authPassword').value=''; $('#authStatus').textContent = r.message || 'Saved'; }
   catch(e){ $('#authStatus').textContent = e.message; }
 };
-$('#clearAuth').onclick = async () => { const r = await postJson('/api/config', {clear_password:true}); $('#authEnabled').checked=false; $('#authPassword').value=''; $('#authStatus').textContent = r.message || 'Auth disabled'; };
+$('#clearAuth').onclick = async () => { const r = await postJson('/api/config', {clear_password:true}); $('#authEnabled').checked=false; $('#authPassword').value=''; $('#memoryAdminEnabled').checked=false; $('#authStatus').textContent = r.message || 'Auth disabled'; await loadAuthStatus(); };
+$('#saveMemoryAdmin').onclick = async () => {
+  try { const r = await postJson('/api/config', {memory_admin_enabled: $('#memoryAdminEnabled').checked}); authState.config = r.config || {}; $('#memoryAdminStatus').textContent = r.message || 'Saved'; await loadAuthStatus(); }
+  catch(e){ $('#memoryAdminStatus').textContent = e.message; }
+};
+$('#createBackup').onclick = async () => {
+  try { const r = await postJson('/api/admin/backup', {}); $('#memoryAdminStatus').textContent = `Backup created: ${r.backup.path}`; }
+  catch(e){ $('#memoryAdminStatus').textContent = e.message; }
+};
+$('#viewAuditLog').onclick = async () => {
+  try { const r = await api('/api/admin/audit?limit=50'); showDetail(r.items, 'Memory audit log'); }
+  catch(e){ $('#memoryAdminStatus').textContent = e.message; }
+};
 $('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {}); showLogin(); };
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;

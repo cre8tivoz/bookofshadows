@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Add password-gated memory maintenance mode for safe Mnemosyne-aligned mutations.
+- Add supersede, expire/invalidate, and importance update actions from the memory detail drawer.
+- Add active/expired/superseded memory status pills and filters.
+- Add automatic SQLite backups and JSONL audit log entries for every admin mutation.
+- Add admin backup and audit log endpoints while keeping raw content overwrite and hard delete unavailable.
+
 ## 0.5.1
 
 - Keep database diagnostics healthy when optional SQLite virtual/vector extension tables cannot be counted, while still reporting per-table count errors.

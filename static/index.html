@@ -98,6 +98,7 @@
               <select id="memorySource"><option value="">all sources</option></select>
               <select id="memoryScope"><option value="">all scopes</option></select>
               <select id="memorySession"><option value="">all sessions</option></select>
+              <select id="memoryStatus"><option value="active">active</option><option value="all">all statuses</option><option value="expired">expired</option><option value="superseded">superseded</option></select>
               <select id="memorySort"><option value="recent">newest</option><option value="oldest">oldest</option><option value="importance">importance</option><option value="recall">recall count</option></select>
               <button id="memorySearch" class="primary">Search</button>
               <button id="memoryClear">Clear</button>
@@ -193,11 +194,19 @@
             </div>
             <div class="glass settings-card">
               <div class="breakdown-title">Password auth</div>
-              <p class="muted">Optional. If enabled, users must enter the password before API data loads. Good idea on LAN, but not forced.</p>
+              <p class="muted">Optional. If enabled, users must enter the password before API data loads. Required before memory admin mode can be enabled.</p>
               <label class="check-row"><input id="authEnabled" type="checkbox" /> Enable password</label>
               <input id="authPassword" type="password" placeholder="Set / change password" />
               <div class="item-actions"><button id="saveAuth" class="primary">Save auth settings</button><button id="clearAuth">Disable + clear password</button><button id="logoutAuth">Logout</button></div>
               <p id="authStatus" class="muted"></p>
+            </div>
+            <div class="glass settings-card danger-card">
+              <div class="breakdown-title">Memory maintenance</div>
+              <p class="muted">Safe admin actions for correcting the agent brain. This enables supersede, expire, and importance edits only — no raw content overwrite or hard delete.</p>
+              <label class="check-row"><input id="memoryAdminEnabled" type="checkbox" /> Enable admin maintenance mode</label>
+              <label class="check-row"><input id="backupBeforeMutation" type="checkbox" checked /> Backup database before every mutation</label>
+              <div class="item-actions"><button id="saveMemoryAdmin" class="primary">Save admin mode</button><button id="createBackup">Create backup now</button><button id="viewAuditLog">View audit log</button></div>
+              <p id="memoryAdminStatus" class="muted"></p>
             </div>
           </div>
         </section>

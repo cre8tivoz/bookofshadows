@@ -134,6 +134,33 @@ def test_session_detail_unifies_related_items(tmp_path):
     assert {e['type'] for e in detail['events']} == {'memory', 'consolidation'}
 
 
+def test_memory_status_filter_and_safe_mutations(tmp_path, monkeypatch):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    assert [r['id'] for r in store.list_memories(kind='all', status='active', limit=10)] == ['w3', 'w2', 'e1', 'w1']
+
+    expired = store.invalidate_memory('w2')
+    assert expired['ok'] is True
+    assert expired['item']['status'] == 'expired'
+    assert [r['id'] for r in store.list_memories(kind='all', status='expired', limit=10)] == ['w2']
+
+    updated = store.set_memory_importance('w1', 0.33)
+    assert updated['item']['importance'] == 0.33
+
+    superseded = store.supersede_memory('w1', 'YC prefers local-only private memory', importance=0.95)
+    assert superseded['item']['status'] == 'superseded'
+    assert superseded['replacement']['content'] == 'YC prefers local-only private memory'
+    assert superseded['replacement']['status'] == 'active'
+    assert superseded['replacement_id'] in {r['id'] for r in store.list_memories(kind='working', status='active', limit=20)}
+
+    audit = store.audit_log()
+    assert [row['action'] for row in audit[:3]] == ['supersede', 'importance', 'invalidate']
+    assert Path(superseded['backup']['path']).exists()
+
+
 def test_config_file_env_and_runtime_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
     monkeypatch.delenv('MNEMOSYNE_DASHBOARD_CONFIG', raising=False)
@@ -178,3 +205,17 @@ def test_config_validates_port(tmp_path, monkeypatch):
         assert 'between 1 and 65535' in str(exc)
     else:
         raise AssertionError('invalid port should fail')
+
+
+def test_admin_mode_requires_password_auth(tmp_path, monkeypatch):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    save_config(auth_enabled=False, clear_password=True)
+    try:
+        save_config(memory_admin_enabled=True)
+    except ValueError as exc:
+        assert 'password auth' in str(exc)
+    else:
+        raise AssertionError('admin mode should require password auth')
+
+    cfg = save_config(password='secret', auth_enabled=True, memory_admin_enabled=True)
+    assert public_config(cfg)['memory_admin_enabled'] is True

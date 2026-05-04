@@ -125,6 +125,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"error": "auth required", **self._auth_status()}, 401)
         return False
 
+    def _require_admin(self) -> bool:
+        cfg = self.cfg
+        if not cfg.memory_admin_enabled:
+            self._send_json({"error": "memory admin mode is disabled", "config": public_config(cfg)}, 403)
+            return False
+        if not cfg.auth_enabled or not cfg.has_password or not self._authenticated():
+            self._send_json({"error": "password auth is required for memory admin mode", **self._auth_status()}, 401)
+            return False
+        return True
+
     def do_HEAD(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/" or parsed.path.startswith("/static/") or parsed.path.startswith("/api/"):
@@ -152,11 +162,15 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/auth/status":
                 return self._send_json(self._auth_status())
             if path == "/api/health":
-                return self._send_json({"ok": True, "service": "mnemosyne-dashboard", "read_only": True, "config": public_config(self.cfg)})
+                return self._send_json({"ok": True, "service": "mnemosyne-dashboard", "read_only": not self.cfg.memory_admin_enabled, "config": public_config(self.cfg)})
             if path == "/api/config":
                 return self._send_json({"ok": True, "config": public_config(self.cfg)})
             if path == "/api/diagnostics":
                 return self._send_json(self.store.diagnostics())
+            if path == "/api/admin/audit":
+                if not self._require_admin():
+                    return
+                return self._send_json({"items": self.store.audit_log(limit=_safe_int(q.get("limit"), 100, maximum=1000))})
             if path == "/api/stats":
                 return self._send_json(self.store.stats())
             if path == "/api/search":
@@ -169,6 +183,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"items": self.store.list_memories(
                     kind=q.get("kind", "all"), q=q.get("q", ""), source=q.get("source", ""),
                     scope=q.get("scope", ""), session_id=q.get("session_id", ""), sort=q.get("sort", "recent"),
+                    status=q.get("status", "active"),
                     limit=_safe_int(q.get("limit"), 100, maximum=500), offset=_safe_int(q.get("offset"), 0, minimum=0, maximum=100000),
                 )})
             if path == "/api/memory":
@@ -210,11 +225,27 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/auth/logout":
                 return self._send_json({"ok": True}, headers={"Set-Cookie": f"{AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"})
             if path == "/api/config":
-                allowed = {"host", "port", "db_path", "auth_enabled", "password", "clear_password"}
+                allowed = {"host", "port", "db_path", "auth_enabled", "password", "clear_password", "memory_admin_enabled"}
                 updates = {k: body.get(k) for k in allowed if k in body}
                 cfg = save_config(**updates)
                 self.server.saved_config = cfg
                 return self._send_json({"ok": True, "config": public_config(cfg), "message": "Saved. Auth changes take effect immediately; host/port/db changes require restart."})
+            if path == "/api/admin/backup":
+                if not self._require_admin():
+                    return
+                return self._send_json({"ok": True, "backup": self.store.backup_database()})
+            if path == "/api/admin/memory/invalidate":
+                if not self._require_admin():
+                    return
+                return self._send_json(self.store.invalidate_memory(str(body.get("memory_id") or ""), backup=bool(body.get("backup", True))))
+            if path == "/api/admin/memory/importance":
+                if not self._require_admin():
+                    return
+                return self._send_json(self.store.set_memory_importance(str(body.get("memory_id") or ""), body.get("importance"), backup=bool(body.get("backup", True))))
+            if path == "/api/admin/memory/supersede":
+                if not self._require_admin():
+                    return
+                return self._send_json(self.store.supersede_memory(str(body.get("memory_id") or ""), str(body.get("content") or ""), body.get("importance"), backup=bool(body.get("backup", True))))
             return self._send_json({"error": "not found"}, 404)
         except Exception as e:
             return self._send_json({"ok": False, "error": str(e)}, 500)

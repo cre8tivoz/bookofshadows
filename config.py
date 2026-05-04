@@ -65,6 +65,7 @@ class DashboardConfig:
     password_hash: str = ""
     password_salt: str = ""
     auth_secret: str = ""
+    memory_admin_enabled: bool = False
 
     @property
     def bind_url(self) -> str:
@@ -112,6 +113,7 @@ def _defaults() -> dict[str, Any]:
         "password_hash": "",
         "password_salt": "",
         "auth_secret": secrets.token_urlsafe(32),
+        "memory_admin_enabled": False,
     }
 
 
@@ -144,6 +146,7 @@ def _validate(raw: dict[str, Any]) -> DashboardConfig:
         password_hash=str(merged.get("password_hash") or ""),
         password_salt=str(merged.get("password_salt") or ""),
         auth_secret=auth_secret,
+        memory_admin_enabled=_bool(merged.get("memory_admin_enabled", False)),
     )
 
 
@@ -189,6 +192,8 @@ def save_config(**updates: Any) -> DashboardConfig:
     cfg = _validate(current)
     if cfg.auth_enabled and not cfg.has_password:
         raise ValueError("set a password before enabling auth")
+    if cfg.memory_admin_enabled and (not cfg.auth_enabled or not cfg.has_password):
+        raise ValueError("enable password auth before enabling memory admin mode")
     _write_config(cfg)
     return cfg
 
@@ -205,6 +210,7 @@ def public_config(cfg: DashboardConfig | None = None) -> dict[str, Any]:
         "bind_url": cfg.bind_url,
         "local_url": cfg.local_url,
         "lan_url": f"http://{lan}:{cfg.port}/" if lan else "",
+        "memory_admin_enabled": cfg.memory_admin_enabled,
     }
 
 

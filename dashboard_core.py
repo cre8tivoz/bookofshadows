@@ -3,10 +3,28 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sqlite3
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+
+def plugin_data_dir() -> Path:
+    home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
+    path = home / "plugin-data" / "mnemosyne-dashboard"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def _is_expired(value: object, now: str | None = None) -> bool:
+    text = str(value or "").strip()
+    return bool(text and text <= (now or _utc_now()))
 
 def default_db_path() -> Path:
     home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
@@ -28,6 +46,15 @@ class DashboardStore:
         con.create_function("REGEXP", 2, self._regexp)
         return con
 
+    def connect_rw(self) -> sqlite3.Connection:
+        if not self.db_path.exists():
+            raise FileNotFoundError(f"Mnemosyne DB not found: {self.db_path}")
+        con = sqlite3.connect(str(self.db_path), timeout=10)
+        con.row_factory = sqlite3.Row
+        con.create_function("REGEXP", 2, self._regexp)
+        con.execute("PRAGMA busy_timeout=5000")
+        return con
+
     @staticmethod
     def _tables(con: sqlite3.Connection) -> set[str]:
         return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -40,7 +67,16 @@ class DashboardStore:
                 d["metadata"] = json.loads(d["metadata_json"])
             except Exception:
                 d["metadata"] = None
+        d["status"] = DashboardStore._memory_status(d)
         return d
+
+    @staticmethod
+    def _memory_status(item: dict[str, Any]) -> str:
+        if str(item.get("superseded_by") or "").strip():
+            return "superseded"
+        if _is_expired(item.get("valid_until")):
+            return "expired"
+        return "active"
 
     @staticmethod
     def _regexp(pattern: str, value: object) -> int:
@@ -155,6 +191,7 @@ class DashboardStore:
         sort: str = "recent",
         limit: int = 100,
         offset: int = 0,
+        status: str = "active",
     ) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit or 100), 500))
         offset = max(0, int(offset or 0))
@@ -163,6 +200,10 @@ class DashboardStore:
         scope = (scope or "").strip()
         session_id = (session_id or "").strip()
         sort = (sort or "recent").strip()
+        status = (status or "active").strip().lower()
+        if status not in {"active", "expired", "superseded", "all"}:
+            status = "active"
+        now = _utc_now()
         sql_order = {
             "recent": "COALESCE(timestamp, created_at) DESC",
             "oldest": "COALESCE(timestamp, created_at) ASC",
@@ -195,6 +236,16 @@ class DashboardStore:
                 if session_id:
                     where.append("session_id = ?")
                     params.append(session_id)
+                if status == "active":
+                    where.append("COALESCE(superseded_by, '') = ''")
+                    where.append("(valid_until IS NULL OR valid_until = '' OR valid_until > ?)")
+                    params.append(now)
+                elif status == "expired":
+                    where.append("COALESCE(superseded_by, '') = ''")
+                    where.append("valid_until IS NOT NULL AND valid_until != '' AND valid_until <= ?")
+                    params.append(now)
+                elif status == "superseded":
+                    where.append("COALESCE(superseded_by, '') != ''")
                 clause = "WHERE " + " AND ".join(where) if where else ""
                 sql = f"""
                     SELECT id, content, source, timestamp, session_id, importance, metadata_json,
@@ -341,6 +392,170 @@ class DashboardStore:
             "consolidations": [c for c in consolidations if c.get("session_id") == session_id],
             "events": events[:limit],
         }
+
+
+    def audit_log(self, limit: int = 100) -> list[dict[str, Any]]:
+        path = plugin_data_dir() / "audit.jsonl"
+        if not path.exists():
+            return []
+        lines = path.read_text().splitlines()[-max(1, min(int(limit or 100), 1000)):]
+        rows = []
+        for line in lines:
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                rows.append({"raw": line})
+        return list(reversed(rows))
+
+    def _audit(self, action: str, memory_id: str, before: dict[str, Any] | None = None, after: dict[str, Any] | None = None, extra: dict[str, Any] | None = None) -> None:
+        path = plugin_data_dir() / "audit.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "timestamp": _utc_now(),
+            "action": action,
+            "memory_id": memory_id,
+            "before": before,
+            "after": after,
+            "extra": extra or {},
+        }
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+
+    def backup_database(self) -> dict[str, Any]:
+        if not self.db_path.exists():
+            raise FileNotFoundError(f"Mnemosyne DB not found: {self.db_path}")
+        backup_dir = plugin_data_dir() / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = _utc_now().replace(":", "").replace("-", "")
+        target = backup_dir / f"mnemosyne-{stamp}-{uuid.uuid4().hex[:8]}.db"
+        shutil.copy2(self.db_path, target)
+        return {"path": str(target), "size_bytes": target.stat().st_size, "created_at": _utc_now()}
+
+    def invalidate_memory(self, memory_id: str, backup: bool = True) -> dict[str, Any]:
+        memory_id = (memory_id or "").strip()
+        if not memory_id:
+            raise ValueError("memory_id is required")
+        before = self.get_memory(memory_id)
+        if not before:
+            raise ValueError("memory not found")
+        backup_info = self.backup_database() if backup else None
+        now = _utc_now()
+        with self.connect_rw() as con:
+            updated = 0
+            for table in ("working_memory", "episodic_memory"):
+                if table in self._tables(con):
+                    cur = con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = NULL WHERE id = ?", (now, memory_id))
+                    updated += cur.rowcount
+            if "memories" in self._tables(con):
+                cols = {r[1] for r in con.execute("PRAGMA table_info(memories)")}
+                if "valid_until" in cols:
+                    con.execute("UPDATE memories SET valid_until = ? WHERE id = ?", (now, memory_id))
+            con.commit()
+        after = self.get_memory(memory_id)
+        self._audit("invalidate", memory_id, before, after, {"backup": backup_info})
+        return {"ok": updated > 0, "memory_id": memory_id, "status": "expired", "backup": backup_info, "item": after}
+
+    def set_memory_importance(self, memory_id: str, importance: float, backup: bool = True) -> dict[str, Any]:
+        memory_id = (memory_id or "").strip()
+        if not memory_id:
+            raise ValueError("memory_id is required")
+        importance = float(importance)
+        if not 0 <= importance <= 1:
+            raise ValueError("importance must be between 0.0 and 1.0")
+        before = self.get_memory(memory_id)
+        if not before:
+            raise ValueError("memory not found")
+        backup_info = self.backup_database() if backup else None
+        with self.connect_rw() as con:
+            updated = 0
+            for table in ("working_memory", "episodic_memory", "memories"):
+                if table in self._tables(con):
+                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+                    if "importance" in cols:
+                        cur = con.execute(f"UPDATE {table} SET importance = ? WHERE id = ?", (importance, memory_id))
+                        updated += cur.rowcount
+            con.commit()
+        after = self.get_memory(memory_id)
+        self._audit("importance", memory_id, before, after, {"importance": importance, "backup": backup_info})
+        return {"ok": updated > 0, "memory_id": memory_id, "importance": importance, "backup": backup_info, "item": after}
+
+    def supersede_memory(self, memory_id: str, content: str, importance: float | None = None, backup: bool = True) -> dict[str, Any]:
+        memory_id = (memory_id or "").strip()
+        content = (content or "").strip()
+        if not memory_id:
+            raise ValueError("memory_id is required")
+        if not content:
+            raise ValueError("replacement content is required")
+        before = self.get_memory(memory_id)
+        if not before:
+            raise ValueError("memory not found")
+        replacement_id = f"dash_{uuid.uuid4().hex}"
+        now = _utc_now()
+        new_importance = float(before.get("importance") if importance is None else importance)
+        if not 0 <= new_importance <= 1:
+            raise ValueError("importance must be between 0.0 and 1.0")
+        metadata = dict(before.get("metadata") or {})
+        metadata.update({"supersedes": memory_id, "created_by": "mnemosyne-dashboard"})
+        backup_info = self.backup_database() if backup else None
+        with self.connect_rw() as con:
+            tables = self._tables(con)
+            if "working_memory" not in tables:
+                raise ValueError("working_memory table not found")
+            con.execute("""
+                INSERT INTO working_memory(
+                    id, content, source, timestamp, session_id, importance, metadata_json,
+                    created_at, valid_until, superseded_by, scope, author_id, author_type, channel_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)
+            """, (
+                replacement_id,
+                content,
+                before.get("source"),
+                now,
+                before.get("session_id") or "default",
+                new_importance,
+                json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+                now,
+                before.get("scope") or "session",
+                before.get("author_id"),
+                before.get("author_type"),
+                before.get("channel_id"),
+            ))
+            for table in ("working_memory", "episodic_memory"):
+                if table in tables:
+                    con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = ? WHERE id = ?", (now, replacement_id, memory_id))
+            if "memories" in tables:
+                cols = {r[1] for r in con.execute("PRAGMA table_info(memories)")}
+                if {"id", "content"} <= cols:
+                    keys = ["id", "content"]
+                    values = [replacement_id, content]
+                    optional = {
+                        "source": before.get("source"),
+                        "timestamp": now,
+                        "session_id": before.get("session_id") or "default",
+                        "importance": new_importance,
+                        "metadata_json": json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+                    }
+                    for k, v in optional.items():
+                        if k in cols:
+                            keys.append(k)
+                            values.append(v)
+                    con.execute(f"INSERT OR REPLACE INTO memories ({', '.join(keys)}) VALUES ({', '.join(['?'] * len(keys))})", values)
+                    if "superseded_by" in cols or "valid_until" in cols:
+                        sets = []
+                        vals = []
+                        if "valid_until" in cols:
+                            sets.append("valid_until = ?")
+                            vals.append(now)
+                        if "superseded_by" in cols:
+                            sets.append("superseded_by = ?")
+                            vals.append(replacement_id)
+                        vals.append(memory_id)
+                        con.execute(f"UPDATE memories SET {', '.join(sets)} WHERE id = ?", vals)
+            con.commit()
+        replacement = self.get_memory(replacement_id)
+        after = self.get_memory(memory_id)
+        self._audit("supersede", memory_id, before, after, {"replacement_id": replacement_id, "backup": backup_info})
+        return {"ok": True, "memory_id": memory_id, "replacement_id": replacement_id, "backup": backup_info, "item": after, "replacement": replacement}
 
 
     def global_search(self, q: str = "", limit: int = 30) -> dict[str, Any]:

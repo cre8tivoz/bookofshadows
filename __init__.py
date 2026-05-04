@@ -174,7 +174,7 @@ def _stop(args=None, **kw):
 
 def _config(args=None, **kw):
     args = args or {}
-    updates = {k: args.get(k) for k in ("host", "port", "db_path", "auth_enabled", "password", "clear_password") if args.get(k) not in (None, "")}
+    updates = {k: args.get(k) for k in ("host", "port", "db_path", "auth_enabled", "password", "clear_password", "memory_admin_enabled") if args.get(k) not in (None, "")}
     cfg = save_config(**updates) if updates else load_config(create=True)
     return _json({
         "ok": True,
@@ -221,7 +221,7 @@ def register(ctx):
     ctx.register_tool(
         name="mnemosyne_dashboard_config",
         toolset="mnemosyne-dashboard",
-        schema={"name":"mnemosyne_dashboard_config","description":"Read or update default Mnemosyne dashboard config. Restart dashboard after changing host/port/db_path.","parameters":{"type":"object","properties":{"host":{"type":"string","description":"Default bind address, e.g. 127.0.0.1 or 0.0.0.0."},"port":{"type":"integer","description":"Default bind port."},"db_path":{"type":"string","description":"Mnemosyne SQLite DB path."},"auth_enabled":{"type":"boolean","description":"Enable optional password auth."},"password":{"type":"string","description":"Set/change dashboard password."},"clear_password":{"type":"boolean","description":"Disable auth and clear password."}}}},
+        schema={"name":"mnemosyne_dashboard_config","description":"Read or update default Mnemosyne dashboard config. Restart dashboard after changing host/port/db_path.","parameters":{"type":"object","properties":{"host":{"type":"string","description":"Default bind address, e.g. 127.0.0.1 or 0.0.0.0."},"port":{"type":"integer","description":"Default bind port."},"db_path":{"type":"string","description":"Mnemosyne SQLite DB path."},"auth_enabled":{"type":"boolean","description":"Enable optional password auth."},"password":{"type":"string","description":"Set/change dashboard password."},"clear_password":{"type":"boolean","description":"Disable auth and clear password."},"memory_admin_enabled":{"type":"boolean","description":"Enable password-gated memory maintenance mode."}}}},
         handler=_config,
         check_fn=lambda: True,
         requires_env=[],
