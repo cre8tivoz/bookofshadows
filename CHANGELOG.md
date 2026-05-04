@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Remove the Local only sidebar badge from desktop and mobile navigation to keep the sidebar/menu focused on product navigation.
+
 ## 0.4.0
 
 - Simplify top-level navigation from nine tabs to five product sections: Overview, Explore, Activity, Graph, and Settings.
