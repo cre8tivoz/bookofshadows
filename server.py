@@ -1,0 +1,233 @@
+from __future__ import annotations
+
+import argparse
+import json
+import mimetypes
+import urllib.parse
+from http import cookies
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+from config import auth_cookie_value, effective_config, public_config, save_config, verify_password
+from dashboard_core import DashboardStore, default_db_path
+
+ROOT = Path(__file__).parent
+STATIC = ROOT / "static"
+MAX_JSON_BODY_BYTES = 64 * 1024
+
+
+def _safe_int(value: str | None, default: int, minimum: int = 1, maximum: int = 1000) -> int:
+    try:
+        parsed = int(value or default)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(parsed, maximum))
+AUTH_COOKIE = "mnemo_auth"
+
+
+def _json_bytes(obj: Any) -> bytes:
+    return json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "MnemosyneDashboard/0.3"
+
+    def log_message(self, fmt, *args):
+        return
+
+    @property
+    def store(self) -> DashboardStore:
+        return DashboardStore(getattr(self.server, "db_path", default_db_path()))
+
+    @property
+    def cfg(self):
+        return effective_config({
+            "host": getattr(self.server, "bind_host", None),
+            "port": getattr(self.server, "bind_port", None),
+            "db_path": str(getattr(self.server, "db_path", default_db_path())),
+        })
+
+    def _send(self, status: int, body: bytes, ctype: str = "application/json; charset=utf-8", headers: dict[str, str] | None = None):
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+        )
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_json(self, obj: Any, status: int = 200, headers: dict[str, str] | None = None):
+        self._send(status, _json_bytes(obj), headers=headers)
+
+    def _send_file(self, path: Path):
+        try:
+            resolved = path.resolve(strict=True)
+            static_root = STATIC.resolve(strict=True)
+            resolved.relative_to(static_root)
+        except Exception:
+            self._send_json({"error": "not found"}, 404)
+            return
+        if not resolved.is_file():
+            self._send_json({"error": "not found"}, 404)
+            return
+        ctype = mimetypes.guess_type(str(resolved))[0] or "application/octet-stream"
+        self._send(200, resolved.read_bytes(), ctype)
+
+    def _params(self) -> dict[str, str]:
+        parsed = urllib.parse.urlparse(self.path)
+        return {k: v[-1] for k, v in urllib.parse.parse_qs(parsed.query).items()}
+
+    def _json_body(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length") or 0)
+        if not length:
+            return {}
+        if length > MAX_JSON_BODY_BYTES:
+            raise ValueError("request body too large")
+        return json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+
+    def _authenticated(self) -> bool:
+        cfg = self.cfg
+        if not cfg.auth_enabled:
+            return True
+        raw = self.headers.get("Cookie", "")
+        jar = cookies.SimpleCookie(raw)
+        morsel = jar.get(AUTH_COOKIE)
+        return bool(morsel and morsel.value == auth_cookie_value(cfg))
+
+    def _auth_status(self) -> dict[str, Any]:
+        cfg = self.cfg
+        return {
+            "auth_enabled": cfg.auth_enabled,
+            "has_password": cfg.has_password,
+            "authenticated": self._authenticated(),
+            "config": public_config(cfg),
+        }
+
+    def _require_auth(self, path: str) -> bool:
+        public_paths = {"/api/auth/status", "/api/auth/login"}
+        if path in public_paths or path == "/" or path.startswith("/static/"):
+            return True
+        if self._authenticated():
+            return True
+        self._send_json({"error": "auth required", **self._auth_status()}, 401)
+        return False
+
+    def do_HEAD(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/" or parsed.path.startswith("/static/") or parsed.path.startswith("/api/"):
+            self.send_response(200)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        q = self._params()
+        try:
+            if path == "/":
+                return self._send_file(STATIC / "index.html")
+            if path.startswith("/static/"):
+                rel = urllib.parse.unquote(path.removeprefix("/static/"))
+                if rel.startswith(("/", "\\")):
+                    return self._send_json({"error": "bad path"}, 400)
+                return self._send_file(STATIC / rel)
+            if not self._require_auth(path):
+                return
+            if path == "/api/auth/status":
+                return self._send_json(self._auth_status())
+            if path == "/api/health":
+                return self._send_json({"ok": True, "service": "mnemosyne-dashboard", "read_only": True, "config": public_config(self.cfg)})
+            if path == "/api/config":
+                return self._send_json({"ok": True, "config": public_config(self.cfg)})
+            if path == "/api/stats":
+                return self._send_json(self.store.stats())
+            if path == "/api/search":
+                return self._send_json(self.store.global_search(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 30, maximum=100)))
+            if path == "/api/recall-debug":
+                return self._send_json(self.store.recall_debug(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 20, maximum=100)))
+            if path == "/api/timeline":
+                return self._send_json(self.store.timeline(q=q.get("q", ""), group=q.get("group", "day"), limit=_safe_int(q.get("limit"), 300, maximum=1000)))
+            if path == "/api/memories":
+                return self._send_json({"items": self.store.list_memories(
+                    kind=q.get("kind", "all"), q=q.get("q", ""), source=q.get("source", ""),
+                    scope=q.get("scope", ""), session_id=q.get("session_id", ""), sort=q.get("sort", "recent"),
+                    limit=_safe_int(q.get("limit"), 100, maximum=500), offset=_safe_int(q.get("offset"), 0, minimum=0, maximum=100000),
+                )})
+            if path == "/api/memory":
+                mid = q.get("id", "")
+                item = self.store.get_memory(mid) if mid else None
+                return self._send_json({"item": item}, 200 if item else 404)
+            if path == "/api/triples":
+                return self._send_json({"items": self.store.triples(
+                    q=q.get("q", ""), subject=q.get("subject", ""), predicate=q.get("predicate", ""), object_=q.get("object", ""),
+                    limit=_safe_int(q.get("limit"), 200, maximum=1000),
+                )})
+            if path == "/api/graph":
+                return self._send_json(self.store.graph(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 300, maximum=1000)))
+            if path == "/api/consolidations":
+                return self._send_json({"items": self.store.consolidations(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 100, maximum=500))})
+            return self._send_json({"error": "not found"}, 404)
+        except Exception as e:
+            return self._send_json({"error": str(e)}, 500)
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        try:
+            body = self._json_body()
+            if path == "/api/auth/login":
+                cfg = self.cfg
+                if not cfg.auth_enabled:
+                    return self._send_json({"ok": True, "auth_enabled": False})
+                if verify_password(str(body.get("password") or ""), cfg):
+                    return self._send_json(
+                        {"ok": True, **self._auth_status()},
+                        headers={"Set-Cookie": f"{AUTH_COOKIE}={auth_cookie_value(cfg)}; Path=/; SameSite=Lax; HttpOnly"},
+                    )
+                return self._send_json({"ok": False, "error": "invalid password"}, 403)
+            if not self._require_auth(path):
+                return
+            if path == "/api/auth/logout":
+                return self._send_json({"ok": True}, headers={"Set-Cookie": f"{AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"})
+            if path == "/api/config":
+                allowed = {"auth_enabled", "password", "clear_password"}
+                updates = {k: body.get(k) for k in allowed if k in body}
+                cfg = save_config(**updates)
+                return self._send_json({"ok": True, "config": public_config(cfg), "message": "Saved. Auth changes take effect immediately; host/port/db changes require restart."})
+            return self._send_json({"error": "not found"}, 404)
+        except Exception as e:
+            return self._send_json({"ok": False, "error": str(e)}, 500)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Local-only Mnemosyne memory dashboard")
+    ap.add_argument("--host", default=None, help="Bind address, e.g. 127.0.0.1 or 0.0.0.0. Defaults to plugin config.")
+    ap.add_argument("--port", type=int, default=None, help="Bind port. Defaults to plugin config.")
+    ap.add_argument("--db", default=None, help="Mnemosyne SQLite DB path. Defaults to plugin config.")
+    args = ap.parse_args()
+    cfg = effective_config({"host": args.host, "port": args.port, "db_path": args.db})
+    httpd = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
+    httpd.db_path = Path(cfg.db_path)
+    httpd.bind_host = cfg.host
+    httpd.bind_port = cfg.port
+    print(f"Mnemosyne dashboard listening on {cfg.bind_url}", flush=True)
+    if cfg.host in {"0.0.0.0", "::"}:
+        print(f"Local probe URL: {cfg.local_url}", flush=True)
+    httpd.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
