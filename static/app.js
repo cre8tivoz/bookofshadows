@@ -332,7 +332,7 @@ function bindMemoryClicks(root){
   root.querySelectorAll('.session-link').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
   root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = (e) => { if(e.target.closest('.session-link,button,a,label,input')) return; openMemoryDetail(el.dataset.id); });
 }
-function canAdmin(){ const cfg = authState.config || {}; const localOnly = ['127.0.0.1','localhost','::1'].includes(cfg.host || '127.0.0.1'); return !!(cfg.memory_admin_enabled && (localOnly || (authState.auth_enabled && authState.authenticated))); }
+function canAdmin(){ const cfg = authState.config || {}; const localOnly = ['127.0.0.1','localhost','::1'].includes(cfg.host || '0.0.0.0'); return !!(cfg.memory_admin_enabled && (localOnly || (authState.auth_enabled && authState.authenticated))); }
 function isMutableMemory(item){ return String(item?.status || 'active').toLowerCase() === 'active'; }
 function whyMemoryHtml(item){
   const reasons = [];
@@ -536,7 +536,7 @@ async function loadAuthStatus(){
   $('#authEnabled').checked = !!data.auth_enabled;
   $('#authStatus').textContent = data.has_password ? 'Password is set.' : 'No password set.';
   $('#memoryAdminEnabled').checked = !!cfg.memory_admin_enabled;
-  $('#memoryAdminStatus').textContent = cfg.memory_admin_enabled ? (['127.0.0.1','localhost','::1'].includes(cfg.host || '127.0.0.1') ? 'Local-only admin mode is enabled. Mutations are audited; password is only required for LAN/non-local hosts.' : 'Admin maintenance mode is enabled. LAN/non-local mutations require password auth and are audited.') : 'Admin maintenance mode is disabled; dashboard is read-only.';
+  $('#memoryAdminStatus').textContent = cfg.memory_admin_enabled ? (['127.0.0.1','localhost','::1'].includes(cfg.host || '0.0.0.0') ? 'Local-only admin mode is enabled. Mutations are audited; password is only required for LAN/non-local hosts.' : 'Admin maintenance mode is enabled. LAN/non-local mutations require password auth and are audited.') : 'Admin maintenance mode is disabled; dashboard is read-only.';
 }
 
 function graphInspectorDefault(){

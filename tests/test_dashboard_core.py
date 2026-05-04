@@ -181,11 +181,12 @@ def test_config_file_env_and_runtime_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
     monkeypatch.delenv('MNEMOSYNE_DASHBOARD_CONFIG', raising=False)
     cfg = load_config(create=True)
-    assert cfg.host == '127.0.0.1'
+    assert cfg.host == '0.0.0.0'
     assert cfg.port == 8765
+    assert cfg.memory_admin_enabled is False
     assert Path(tmp_path / 'hermes' / 'plugin-data' / 'mnemosyne-dashboard' / 'config.json').exists()
 
-    cfg = save_config(host='0.0.0.0', port=9876, db_path=str(tmp_path / 'test.db'))
+    cfg = save_config(port=9876, db_path=str(tmp_path / 'test.db'))
     assert cfg.host == '0.0.0.0'
     assert cfg.port == 9876
     assert cfg.local_url == 'http://127.0.0.1:9876/'

@@ -151,10 +151,12 @@ def test_admin_memory_mutation_endpoints_allow_localhost_admin_without_auth_and_
         status, _headers, body = _request(
             f"{server.base}/api/config",
             method="POST",
-            body={"memory_admin_enabled": True},
+            body={"host": "127.0.0.1", "memory_admin_enabled": True},
         )
         assert status == 200
-        assert json.loads(body)["config"]["memory_admin_enabled"] is True
+        payload = json.loads(body)
+        assert payload["config"]["host"] == "127.0.0.1"
+        assert payload["config"]["memory_admin_enabled"] is True
 
         status, _headers, body = _request(
             f"{server.base}/api/admin/memory/supersede",

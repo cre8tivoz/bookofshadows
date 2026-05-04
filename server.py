@@ -257,7 +257,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Local-only Mnemosyne memory dashboard")
+    ap = argparse.ArgumentParser(description="LAN-friendly Mnemosyne memory dashboard with read-only browsing by default")
     ap.add_argument("--host", default=None, help="Bind address, e.g. 127.0.0.1 or 0.0.0.0. Defaults to plugin config.")
     ap.add_argument("--port", type=int, default=None, help="Bind port. Defaults to plugin config.")
     ap.add_argument("--db", default=None, help="Mnemosyne SQLite DB path. Defaults to plugin config.")

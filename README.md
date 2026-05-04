@@ -61,8 +61,8 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 
 ## Safety model
 
-- Binds to `127.0.0.1` by default
-- Can bind to `0.0.0.0` only when explicitly configured
+- Binds to `0.0.0.0` by default so the dashboard is reachable on your LAN
+- Reports a localhost URL for same-machine access and a LAN URL when one is detectable
 - Browsing opens the Mnemosyne SQLite database with `mode=ro`
 - Localhost-only memory admin can be enabled without password for developer convenience; LAN/non-local admin mode requires password auth before mutation endpoints work
 - Admin actions are limited to Mnemosyne-aligned supersede, expire/invalidate, and importance updates
@@ -74,7 +74,7 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 - Static assets are resolved under `static/` before serving; path escapes are rejected
 - Browser responses include CSP, no-sniff, frame-deny, and no-referrer headers
 
-If you bind to `0.0.0.0`, the dashboard is reachable from your LAN. Treat that as exposing local memory metadata to your network. Put it behind a firewall/VPN/reverse proxy auth if needed.
+By default, the dashboard is reachable from your LAN. Treat that as exposing local memory metadata to your network. Memory admin/editing remains disabled by default; if you expose admin mode on LAN/non-local hosts, password auth is required before mutation endpoints work. Put the dashboard behind a firewall/VPN/reverse proxy auth if needed.
 
 ## Installation as a Hermes directory plugin
 
@@ -125,7 +125,7 @@ Default config:
 
 ```json
 {
-  "host": "127.0.0.1",
+  "host": "0.0.0.0",
   "port": 8765,
   "db_path": "~/.hermes/mnemosyne/data/mnemosyne.db",
   "auth_enabled": false,
@@ -157,13 +157,13 @@ Environment overrides are also supported:
 ## Manual run
 
 ```bash
-python server.py --host 127.0.0.1 --port 8765
+python server.py --host 0.0.0.0 --port 8765
 ```
 
-Bind to LAN explicitly:
+Bind to localhost only:
 
 ```bash
-python server.py --host 0.0.0.0 --port 9876
+python server.py --host 127.0.0.1 --port 8765
 ```
 
 Open locally:
@@ -175,7 +175,7 @@ http://127.0.0.1:8765/
 If bound to `0.0.0.0`, use your machine’s LAN IP from another device, e.g.:
 
 ```text
-http://192.168.1.10:9876/
+http://192.168.1.10:8765/
 ```
 
 ## Development

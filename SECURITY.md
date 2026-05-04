@@ -7,10 +7,10 @@ Mnemosyne Dashboard is designed as a local read-only dashboard.
 Default bind address:
 
 ```text
-127.0.0.1
+0.0.0.0
 ```
 
-Binding to `0.0.0.0` is supported for LAN access, but it is an explicit opt-in. If you expose it beyond localhost, protect it with network controls, VPN, SSH tunnel, or reverse-proxy authentication.
+The dashboard is LAN-reachable by default for convenience. Memory admin/editing remains disabled by default; LAN/non-local admin mode requires password auth before mutation endpoints work. If you expose it beyond a trusted LAN, protect it with network controls, VPN, SSH tunnel, or reverse-proxy authentication.
 
 ## Data access
 
@@ -20,7 +20,7 @@ The dashboard opens the SQLite database using read-only URI mode:
 file:<db_path>?mode=ro
 ```
 
-The HTTP API intentionally does not expose mutation endpoints.
+Memory browsing opens SQLite in read-only mode. Optional maintenance endpoints are disabled by default, limited to audited Mnemosyne-style supersede/expire/importance updates, and require password auth before LAN/non-local use.
 
 ## Reporting issues
 

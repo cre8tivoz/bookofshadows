@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 PLUGIN_NAME = "mnemosyne-dashboard"
-DEFAULT_HOST = "127.0.0.1"
+DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
 
 

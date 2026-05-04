@@ -18,12 +18,12 @@ node --check static/app.js
 
 Please keep these invariants unless a change explicitly documents and tests a different security model:
 
-- The dashboard binds to `127.0.0.1` by default.
+- The dashboard binds to `0.0.0.0` by default for easy LAN access.
 - SQLite is opened through a read-only URI (`mode=ro`).
-- No memory edit/delete/write endpoints are exposed.
+- Memory admin/editing is disabled by default; LAN/non-local admin mode must stay password-gated.
 - Static assets are served only from `static/`.
 - External JavaScript/CSS/CDN dependencies are avoided.
-- LAN exposure (`0.0.0.0`) is opt-in and should be documented with auth/firewall guidance.
+- LAN exposure is the default and should be documented with auth/firewall guidance.
 
 ## Pull request checklist
 
