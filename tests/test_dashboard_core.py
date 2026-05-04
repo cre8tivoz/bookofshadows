@@ -113,6 +113,22 @@ def test_graph_returns_nodes_edges_and_filterable_metadata(tmp_path):
     assert graph['edges'][0]['object'] == 'local-only memory'
 
 
+def test_timeline_search_matches_session_id(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    timeline = DashboardStore(db).timeline(q='s2', group='session', limit=20)
+    groups = {g['key']: g for g in timeline['groups']}
+    assert 's2' in groups
+    assert {e['type'] for e in groups['s2']['events']} == {'memory', 'consolidation'}
+
+
+def test_triple_search_matches_terms_across_subject_predicate_object(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    rows = DashboardStore(db).triples(q='YC knows Diana', limit=10)
+    assert [(r['subject'], r['predicate'], r['object']) for r in rows] == [('YC', 'knows', 'Diana')]
+
+
 def test_diagnostics_reports_database_health(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)

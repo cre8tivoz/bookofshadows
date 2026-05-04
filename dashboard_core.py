@@ -225,8 +225,9 @@ class DashboardStore:
                 where = []
                 params: list[Any] = []
                 if q:
-                    where.append("content REGEXP ?")
-                    params.append(self._prefix_pattern(q))
+                    where.append("(content REGEXP ? OR id REGEXP ? OR session_id REGEXP ? OR source REGEXP ? OR scope REGEXP ?)")
+                    pattern = self._prefix_pattern(q)
+                    params += [pattern, pattern, pattern, pattern, pattern]
                 if source:
                     where.append("source = ?")
                     params.append(source)
@@ -283,8 +284,8 @@ class DashboardStore:
         params: list[Any] = []
         if q:
             pattern = self._prefix_pattern(q)
-            where.append("(subject REGEXP ? OR predicate REGEXP ? OR object REGEXP ?)")
-            params += [pattern, pattern, pattern]
+            where.append("(COALESCE(subject, '') || ' ' || COALESCE(predicate, '') || ' ' || COALESCE(object, '') || ' ' || COALESCE(source, '')) REGEXP ?")
+            params.append(pattern)
         for col, value in [("subject", subject), ("predicate", predicate), ("object", object_)]:
             if value:
                 where.append(f"{col} REGEXP ?")
