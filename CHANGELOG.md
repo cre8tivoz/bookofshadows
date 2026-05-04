@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- Polish the public dashboard UI for GitHub release quality: balanced mobile brand lockup, larger sidebar nav icons, softer theme switch styling, and refined hero headline spacing.
+- Keep the hero headline to two desktop lines while disabling display ligatures so “finally” remains readable.
+- Default the dashboard bind host to `0.0.0.0` for easier LAN access while keeping memory admin/editing disabled by default.
+- Keep LAN/non-local memory admin mutations password-gated and audited.
+
 ## 0.6.0
 
 - Add password-gated memory maintenance mode for safe Mnemosyne-aligned mutations.
