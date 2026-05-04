@@ -250,6 +250,7 @@ function memoryDetailHtml(item){
     </div>`;
 }
 async function openMemoryDetail(memoryId){
+  await refreshAuthState();
   const item = (await api('/api/memory?id=' + encodeURIComponent(memoryId))).item;
   showHtmlDetail(memoryDetailHtml(item), 'Memory detail');
   const sessionLink = $('#memorySessionLink');
@@ -388,8 +389,12 @@ async function copyDiagnostics(){
   await navigator.clipboard?.writeText(JSON.stringify(window.lastDiagnostics, null, 2));
   $('#diagnosticsStatus').textContent = 'Diagnostics copied.';
 }
+async function refreshAuthState(){
+  authState = await api('/api/auth/status');
+  return authState;
+}
 async function loadAuthStatus(){
-  const data = await api('/api/auth/status');
+  const data = await refreshAuthState();
   const cfg = data.config || {};
   $('#configHost').value = cfg.host || '';
   $('#configPort').value = cfg.port || '';
@@ -498,7 +503,7 @@ $('#consolidationQuery').oninput = renderConsolidations;
 $('#consolidationClear').onclick = () => { $('#consolidationQuery').value = ''; renderConsolidations(); };
 $('#closeDetail').onclick = () => $('#detail').classList.add('hidden');
 $('#loginButton').onclick = async () => {
-  try { await postJson('/api/auth/login', {password: $('#loginPassword').value}); hideLogin(); $('#loginError').textContent=''; loadStats(); }
+  try { await postJson('/api/auth/login', {password: $('#loginPassword').value}); hideLogin(); $('#loginError').textContent=''; await refreshAuthState(); loadStats(); }
   catch(e){ $('#loginError').textContent = e.message; }
 };
 $('#loginPassword').onkeydown = e => { if(e.key==='Enter') $('#loginButton').click(); };
@@ -539,4 +544,4 @@ function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'lig
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
 initTheme();
-api('/api/auth/status').then(s => { if(s.auth_enabled && !s.authenticated) showLogin(); else loadStats(); }).catch(() => showLogin());
+refreshAuthState().then(s => { if(s.auth_enabled && !s.authenticated) showLogin(); else loadStats(); }).catch(() => showLogin());
