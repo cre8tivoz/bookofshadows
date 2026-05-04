@@ -4,6 +4,26 @@ A local, read-only web dashboard for browsing and visualising a Mnemosyne memory
 
 It is intentionally small: Python standard library server, static HTML/CSS/JS frontend, no external JS runtime, no cloud calls, and SQLite opened in read-only mode.
 
+## Screenshots
+
+The screenshots below are generated from a synthetic mock Mnemosyne database. They do not contain private memory data.
+
+| Desktop | Mobile |
+| --- | --- |
+| ![Desktop dark overview](docs/screenshots/desktop-dark-overview.png) | ![Mobile dark overview](docs/screenshots/mobile-dark-overview.png) |
+| ![Desktop light overview](docs/screenshots/desktop-light-overview.png) | ![Mobile light search](docs/screenshots/mobile-light-search.png) |
+| ![Desktop dark global search](docs/screenshots/desktop-dark-search.png) | ![Mobile dark timeline](docs/screenshots/mobile-dark-timeline.png) |
+| ![Desktop light graph](docs/screenshots/desktop-light-graph.png) | ![Mobile light graph](docs/screenshots/mobile-light-graph.png) |
+| ![Desktop dark timeline](docs/screenshots/desktop-dark-timeline.png) | ![Mobile dark settings](docs/screenshots/mobile-dark-settings.png) |
+
+Regenerate the gallery locally with:
+
+```bash
+python3 scripts/generate_mock_screenshots.py
+```
+
+The generator creates a temporary mock SQLite database, starts the dashboard on a random localhost port, captures desktop/mobile viewports in dark and light themes, and writes the images to `docs/screenshots/`.
+
 ## Features
 
 - Overview counts for working memory, episodic memory, triples, and consolidations

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.11
+
+- Add a GitHub README screenshot gallery generated from synthetic mock Mnemosyne data across desktop, mobile, dark, and light theme views.
+- Add a local screenshot generator script for refreshing the mock-data gallery without reading private memory data.
+
 ## 0.3.10
 
 - Keep mobile timeline group event-count badges inside the card by letting long session headings wrap within the available width.
