@@ -4,6 +4,8 @@ const THEME_KEY = 'mnemosyne-dashboard-theme';
 let graphState = { nodes: [], edges: [], byId: {} };
 let consolidationState = [];
 let authState = { config: {}, auth_enabled: false, authenticated: true };
+let currentRoute = { tab: 'overview' };
+let applyingHistory = false;
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -47,12 +49,49 @@ function meta(item, opts={}){
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
 function memoryItem(item){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; return `<div class="item ${role ? 'has-role' : ''}" data-id="${esc(item.id)}">${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
-function showDetail(obj, title='Detail'){
+function routeTabState(tab=currentRoute.tab || 'overview'){ return { tab }; }
+function pushRoute(state, replace=false){
+  if(applyingHistory) return;
+  currentRoute = { ...state };
+  const fn = replace ? 'replaceState' : 'pushState';
+  history[fn](currentRoute, '', location.pathname + location.search);
+}
+function closeDetail(opts={}){
+  $('#detail').classList.add('hidden');
+  if(opts.push !== false) pushRoute(routeTabState());
+}
+async function applyRoute(state){
+  applyingHistory = true;
+  try {
+    const route = state || { tab: 'overview' };
+    switchTab(route.tab || 'overview', { push:false });
+    if(route.drawer?.type === 'memory') await openMemoryDetail(route.drawer.id, { push:false });
+    else if(route.drawer?.type === 'session') await openSessionDetail(route.drawer.id, { push:false });
+    else if(route.drawer?.type === 'json') showDetail(route.drawer.value, route.drawer.title || 'Detail', { push:false });
+    else closeDetail({ push:false });
+    currentRoute = route;
+  } finally {
+    applyingHistory = false;
+  }
+}
+function showSelectableCopy(label, value){
+  openActionModal({
+    title: label,
+    description: 'Select the text below and press Cmd/Ctrl+C to copy. This works on non-HTTPS local dashboards.',
+    kicker: 'Copy',
+    confirmText: 'Done',
+    bodyHtml: `<label class="modal-field"><span>${esc(label)}</span><textarea id="manualCopyValue" class="copy-value" rows="4" readonly>${esc(value || '')}</textarea></label>`,
+    readValue: () => true
+  });
+  setTimeout(() => { const el = $('#manualCopyValue'); el?.focus(); el?.select(); }, 60);
+}
+function showDetail(obj, title='Detail', opts={}){
   const titleEl = document.querySelector('.drawer-title');
   if(titleEl) titleEl.textContent = title;
   $('#detailBody').classList.remove('html-detail');
   $('#detailBody').textContent = JSON.stringify(obj, null, 2);
   $('#detail').classList.remove('hidden');
+  if(opts.push !== false) pushRoute({ ...routeTabState(), drawer:{ type:'json', title, value:obj } });
 }
 function showHtmlDetail(html, title='Detail'){
   const titleEl = document.querySelector('.drawer-title');
@@ -176,7 +215,7 @@ function defaultPanelFor(section){
 function panelFor(name){
   return ({ search:'exploreSearch', memories:'exploreMemories', recall:'exploreRecall', timelineView:'activityTimeline', consolidations:'activityConsolidations', graph:'graphGraph', triples:'graphTriples' })[name] || defaultPanelFor(name);
 }
-function switchTab(name){
+function switchTab(name, opts={}){
   const section = sectionFor(name);
   document.body.classList.toggle('compact-page', section !== 'overview');
   $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
@@ -184,7 +223,10 @@ function switchTab(name){
   const nav = document.querySelector(`nav button[data-tab="${section}"]`);
   if(nav) nav.classList.add('active');
   showPanel(section, panelFor(name));
+  closeDetail({ push:false });
   closeMobileMenu();
+  currentRoute = routeTabState(name);
+  if(opts.push !== false) pushRoute(currentRoute);
   if(name==='graph' || section==='graph') loadGraph();
   if(name==='triples') loadTriples();
   if(name==='consolidations') loadConsolidations();
@@ -262,13 +304,14 @@ function memoryDetailHtml(item){
       <p id="memoryActionStatus" class="muted"></p>
     </div>`;
 }
-async function openMemoryDetail(memoryId){
+async function openMemoryDetail(memoryId, opts={}){
   await refreshAuthState();
   const item = (await api('/api/memory?id=' + encodeURIComponent(memoryId))).item;
   showHtmlDetail(memoryDetailHtml(item), 'Memory detail');
+  if(opts.push !== false) pushRoute({ ...routeTabState(), drawer:{ type:'memory', id:memoryId } });
   const sessionLink = $('#memorySessionLink');
   if(sessionLink) sessionLink.onclick = () => openSessionDetail(item.session_id || '');
-  $('#copyMemoryId').onclick = async () => { await navigator.clipboard?.writeText(item.id); $('#memoryActionStatus').textContent = 'Memory ID copied.'; };
+  $('#copyMemoryId').onclick = () => showSelectableCopy('Memory ID', item.id);
   if(!canAdmin() || !isMutableMemory(item)) return;
   const backup = () => $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
   $('#expireMemory').onclick = async () => {
@@ -296,7 +339,7 @@ async function openMemoryDetail(memoryId){
   };
 }
 function sessionEvent(e){ return `<div class="session-event" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><span>${esc(e.timestamp || '')}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview || '')}</div></div>`; }
-async function openSessionDetail(sessionId){
+async function openSessionDetail(sessionId, opts={}){
   if(!sessionId || sessionId === 'unknown') return;
   const data = await api(`/api/session?id=${encodeURIComponent(sessionId)}&limit=200`);
   const c = data.counts || {};
@@ -309,9 +352,10 @@ async function openSessionDetail(sessionId){
     <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
     <div class="result-section"><h3>Timeline <span>${esc(c.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join('') || '<p class="muted">No events for this session.</p>'}</div></div>
   `, `Session ${sessionId}`);
-  $('#sessionBrowseMemories').onclick = () => { $('#memorySession').value = sessionId; $('#memoryKind').value = 'all'; $('#memoryQuery').value = ''; switchTab('memories'); $('#detail').classList.add('hidden'); };
-  $('#sessionTimeline').onclick = () => { $('#timelineGroup').value = 'session'; $('#timelineQuery').value = sessionId; switchTab('timelineView'); $('#detail').classList.add('hidden'); };
-  $('#sessionCopy').onclick = async () => { await navigator.clipboard?.writeText(sessionId); $('#sessionCopy').textContent = 'Copied'; setTimeout(() => $('#sessionCopy').textContent = 'Copy session ID', 900); };
+  if(opts.push !== false) pushRoute({ ...routeTabState(), drawer:{ type:'session', id:sessionId } });
+  $('#sessionBrowseMemories').onclick = () => { $('#memorySession').value = sessionId; $('#memoryKind').value = 'all'; $('#memoryQuery').value = ''; switchTab('memories'); closeDetail({ push:false }); };
+  $('#sessionTimeline').onclick = () => { $('#timelineGroup').value = 'session'; $('#timelineQuery').value = sessionId; switchTab('timelineView'); closeDetail({ push:false }); };
+  $('#sessionCopy').onclick = () => showSelectableCopy('Session ID', sessionId);
   $$('#detailBody .session-event').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Session event detail'));
 }
 async function loadTriples(){
@@ -399,8 +443,7 @@ async function loadDiagnostics(){
 }
 async function copyDiagnostics(){
   if(!window.lastDiagnostics) await loadDiagnostics();
-  await navigator.clipboard?.writeText(JSON.stringify(window.lastDiagnostics, null, 2));
-  $('#diagnosticsStatus').textContent = 'Diagnostics copied.';
+  showSelectableCopy('Diagnostics JSON', JSON.stringify(window.lastDiagnostics, null, 2));
 }
 async function refreshAuthState(){
   authState = await api('/api/auth/status');
@@ -489,10 +532,10 @@ async function loadGraph(){
 
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 $$('.section-tabs button').forEach(b => b.onclick = () => {
+  const panelRoute = ({ exploreSearch:'search', exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples' })[b.dataset.panel];
+  if(panelRoute) { switchTab(panelRoute); return; }
   const section = b.closest('.tab')?.id;
   showPanel(section, b.dataset.panel);
-  const panelLoads = { exploreSearch: loadGlobalSearch, exploreMemories: loadMemories, exploreRecall: loadRecallDebug, activityTimeline: loadTimeline, activityConsolidations: loadConsolidations, graphGraph: loadGraph, graphTriples: loadTriples };
-  panelLoads[b.dataset.panel]?.();
 });
 $$('[data-jump]').forEach(b => b.onclick = () => switchTab(b.dataset.jump));
 $('#mobileMenuToggle').onclick = () => {
@@ -514,7 +557,7 @@ $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };
 $('#consolidationQuery').oninput = renderConsolidations;
 $('#consolidationClear').onclick = () => { $('#consolidationQuery').value = ''; renderConsolidations(); };
-$('#closeDetail').onclick = () => $('#detail').classList.add('hidden');
+$('#closeDetail').onclick = () => closeDetail();
 $('#loginButton').onclick = async () => {
   try { await postJson('/api/auth/login', {password: $('#loginPassword').value}); hideLogin(); $('#loginError').textContent=''; await refreshAuthState(); loadStats(); }
   catch(e){ $('#loginError').textContent = e.message; }
@@ -556,5 +599,7 @@ $('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {});
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
+window.addEventListener('popstate', e => applyRoute(e.state));
 initTheme();
+pushRoute(routeTabState('overview'), true);
 refreshAuthState().then(s => { if(s.auth_enabled && !s.authenticated) showLogin(); else loadStats(); }).catch(() => showLogin());

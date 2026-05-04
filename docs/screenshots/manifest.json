@@ -4,7 +4,7 @@
     "theme": "dark",
     "tab": "overview",
     "viewport": "1440x1000",
-    "scrollWidth": 1472,
+    "scrollWidth": 1440,
     "clientWidth": 1440,
     "title": "Mnemosyne Dashboard"
   },
@@ -13,7 +13,7 @@
     "theme": "light",
     "tab": "overview",
     "viewport": "1440x1000",
-    "scrollWidth": 1472,
+    "scrollWidth": 1440,
     "clientWidth": 1440,
     "title": "Mnemosyne Dashboard"
   },
