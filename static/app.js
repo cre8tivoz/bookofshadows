@@ -690,7 +690,18 @@ $('#saveAuth').onclick = async () => {
   try { const body = {auth_enabled: $('#authEnabled').checked}; if($('#authPassword').value) body.password = $('#authPassword').value; const r = await postJson('/api/config', body); $('#authPassword').value=''; $('#authStatus').textContent = r.message || 'Saved'; }
   catch(e){ $('#authStatus').textContent = e.message; }
 };
-$('#clearAuth').onclick = async () => { const r = await postJson('/api/config', {clear_password:true}); $('#authEnabled').checked=false; $('#authPassword').value=''; $('#memoryAdminEnabled').checked=false; $('#authStatus').textContent = r.message || 'Auth disabled'; await loadAuthStatus(); };
+$('#clearAuth').onclick = async () => {
+  try {
+    const r = await postJson('/api/config', {clear_password:true});
+    $('#authEnabled').checked=false;
+    $('#authPassword').value='';
+    $('#memoryAdminEnabled').checked=!!(r.config && r.config.memory_admin_enabled);
+    $('#authStatus').textContent = r.message || 'Auth disabled';
+    await loadAuthStatus();
+  } catch(e){
+    $('#authStatus').textContent = e.message;
+  }
+};
 $('#saveMemoryAdmin').onclick = async () => {
   try { const r = await postJson('/api/config', {memory_admin_enabled: $('#memoryAdminEnabled').checked}); authState.config = r.config || {}; $('#memoryAdminStatus').textContent = r.message || 'Saved'; await loadAuthStatus(); }
   catch(e){ $('#memoryAdminStatus').textContent = e.message; }

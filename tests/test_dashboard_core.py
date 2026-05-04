@@ -230,7 +230,7 @@ def test_admin_mode_allows_localhost_without_password_but_rejects_lan_without_au
     assert public_config(cfg)['memory_admin_enabled'] is True
 
     try:
-        save_config(host='0.0.0.0', auth_enabled=False, clear_password=True, memory_admin_enabled=True)
+        save_config(host='0.0.0.0', auth_enabled=False, memory_admin_enabled=True)
     except ValueError as exc:
         assert 'LAN/non-local' in str(exc)
     else:
@@ -238,3 +238,26 @@ def test_admin_mode_allows_localhost_without_password_but_rejects_lan_without_au
 
     cfg = save_config(host='0.0.0.0', password='secret', auth_enabled=True, memory_admin_enabled=True)
     assert public_config(cfg)['memory_admin_enabled'] is True
+
+
+def test_clear_password_disables_lan_admin_mode_instead_of_throwing(tmp_path, monkeypatch):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    cfg = save_config(host='0.0.0.0', password='secret', auth_enabled=True, memory_admin_enabled=True)
+    assert cfg.memory_admin_enabled is True
+    assert cfg.has_password is True
+
+    cfg = save_config(clear_password=True)
+    assert cfg.auth_enabled is False
+    assert cfg.has_password is False
+    assert cfg.memory_admin_enabled is False
+
+
+def test_clear_password_keeps_localhost_admin_mode_allowed(tmp_path, monkeypatch):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    cfg = save_config(host='127.0.0.1', password='secret', auth_enabled=True, memory_admin_enabled=True)
+    assert cfg.memory_admin_enabled is True
+
+    cfg = save_config(clear_password=True)
+    assert cfg.auth_enabled is False
+    assert cfg.has_password is False
+    assert cfg.memory_admin_enabled is True

@@ -56,6 +56,7 @@ def test_health_endpoint_and_security_headers(tmp_path, monkeypatch):
         assert payload["read_only"] is True
         assert headers["X-Content-Type-Options"] == "nosniff"
         assert headers["X-Frame-Options"] == "DENY"
+        assert "font-src 'self' data:" in headers["Content-Security-Policy"]
         assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
     finally:
         server.close()
@@ -78,6 +79,17 @@ def test_static_path_escape_is_blocked(tmp_path, monkeypatch):
         status, _headers, body = _request(f"{server.base}/static/%2e%2e/server.py")
         assert status == 404
         assert b"not found" in body
+    finally:
+        server.close()
+
+
+def test_favicon_route_serves_icon_without_404(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        status, headers, body = _request(f"{server.base}/favicon.ico")
+        assert status == 200
+        assert headers["Content-Type"].startswith("image/svg+xml")
+        assert b"<svg" in body
     finally:
         server.close()
 

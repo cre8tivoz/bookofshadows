@@ -61,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; "
             "script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
         )
         for k, v in (headers or {}).items():
@@ -140,7 +140,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/" or parsed.path.startswith("/static/") or parsed.path.startswith("/api/"):
+        if parsed.path == "/" or parsed.path == "/favicon.ico" or parsed.path.startswith("/static/") or parsed.path.startswith("/api/"):
             self.send_response(200)
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -155,6 +155,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/":
                 return self._send_file(STATIC / "index.html")
+            if path == "/favicon.ico":
+                return self._send_file(STATIC / "favicon.svg")
             if path.startswith("/static/"):
                 rel = urllib.parse.unquote(path.removeprefix("/static/"))
                 if rel.startswith(("/", "\\")):

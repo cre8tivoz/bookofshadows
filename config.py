@@ -189,6 +189,9 @@ def save_config(**updates: Any) -> DashboardConfig:
         current["password_hash"] = ""
         current["password_salt"] = ""
         current["auth_enabled"] = False
+        host = str(current.get("host") or DEFAULT_HOST).strip()
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            current["memory_admin_enabled"] = False
     cfg = _validate(current)
     if cfg.auth_enabled and not cfg.has_password:
         raise ValueError("set a password before enabling auth")
