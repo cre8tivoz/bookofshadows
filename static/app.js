@@ -33,7 +33,7 @@ function meta(item){
   const scope = String(item.scope || '').trim();
   const session = String(item.session_id || '').trim();
   const scopeBadge = scope && scope !== 'session' ? `<span class="badge" title="scope: ${esc(scope)}">${esc(scope)}</span>` : '';
-  const sessionBadge = session && session !== 'default' ? `<span class="badge" title="session_id: ${esc(session)}">session ${esc(shortId(session))}</span>` : '';
+  const sessionBadge = session && session !== 'default' ? `<button type="button" class="badge session-link" data-session="${esc(session)}" title="Open session: ${esc(session)}">session ${esc(shortId(session))}</button>` : '';
   return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge status-${esc(status)}">${esc(status)}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span>${scopeBadge}${sessionBadge}<span>${esc(item.timestamp || item.created_at || '')}</span></div>`;
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
@@ -225,7 +225,8 @@ async function loadMemories(){
   bindMemoryClicks($('#memoryList'));
 }
 function bindMemoryClicks(root){
-  root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = async () => openMemoryDetail(el.dataset.id));
+  root.querySelectorAll('.session-link').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
+  root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = (e) => { if(e.target.closest('.session-link,button,a')) return; openMemoryDetail(el.dataset.id); });
 }
 function canAdmin(){ return !!(authState.config && authState.config.memory_admin_enabled && authState.auth_enabled && authState.authenticated); }
 function memoryDetailHtml(item){
@@ -236,7 +237,7 @@ function memoryDetailHtml(item){
       <div class="content detail-content">${esc(item.content)}</div>
       <div class="diag-grid compact">
         <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
-        <div class="diag-row"><span>Session</span><strong>${esc(item.session_id || 'default')}</strong></div>
+        <div class="diag-row"><span>Session</span>${item.session_id && item.session_id !== 'default' ? `<button id="memorySessionLink" class="diag-link" title="Open session: ${esc(item.session_id)}">${esc(item.session_id)}</button>` : `<strong>${esc(item.session_id || 'default')}</strong>`}</div>
         <div class="diag-row"><span>Source</span><strong>${esc(item.source || 'unknown')}</strong></div>
         <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || 'none')}</strong></div>
         <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || 'none')}</strong></div>
@@ -251,6 +252,8 @@ function memoryDetailHtml(item){
 async function openMemoryDetail(memoryId){
   const item = (await api('/api/memory?id=' + encodeURIComponent(memoryId))).item;
   showHtmlDetail(memoryDetailHtml(item), 'Memory detail');
+  const sessionLink = $('#memorySessionLink');
+  if(sessionLink) sessionLink.onclick = () => openSessionDetail(item.session_id || '');
   $('#copyMemoryId').onclick = async () => { await navigator.clipboard?.writeText(item.id); $('#memoryActionStatus').textContent = 'Memory ID copied.'; };
   if(!canAdmin()) return;
   const backup = () => $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
