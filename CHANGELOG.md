@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4
+
+- Fix mobile stat-card number descenders being clipped in light theme by giving Playfair numerals extra line-height and bottom breathing room.
+
 ## 0.3.3
 
 - Fix mobile overview stat labels being partially obscured by the stat-card glow layer and add extra label vertical breathing room.
