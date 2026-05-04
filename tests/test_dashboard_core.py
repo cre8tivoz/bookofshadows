@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config import effective_config, load_config, save_config
+from config import default_db_path, effective_config, load_config, public_config, save_config
 from dashboard_core import DashboardStore
 
 
@@ -129,6 +129,23 @@ def test_config_file_env_and_runtime_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv('MNEMOSYNE_DASHBOARD_PORT', '9999')
     assert load_config().port == 9999
     assert effective_config({'port': 7777}).port == 7777
+
+
+def test_default_db_path_detects_existing_mnemosyne_database(tmp_path, monkeypatch):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    db = tmp_path / 'hermes' / 'mnemosyne' / 'data' / 'mnemosyne.db'
+    db.parent.mkdir(parents=True)
+    db.write_text('sqlite placeholder')
+    assert default_db_path() == db
+    assert load_config(create=True).db_path == str(db)
+
+
+def test_public_config_reports_lan_url_for_wildcard_bind(tmp_path, monkeypatch):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    monkeypatch.setattr('config.lan_host', lambda: '192.168.1.160')
+    cfg = save_config(host='0.0.0.0', port=8765)
+    assert public_config(cfg)['local_url'] == 'http://127.0.0.1:8765/'
+    assert public_config(cfg)['lan_url'] == 'http://192.168.1.160:8765/'
 
 
 def test_config_validates_port(tmp_path, monkeypatch):

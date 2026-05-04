@@ -207,7 +207,9 @@ async function loadAuthStatus(){
   $('#configHost').value = cfg.host || '';
   $('#configPort').value = cfg.port || '';
   $('#configDbPath').value = cfg.db_path || '';
-  $('#configStatus').textContent = `Current local URL: ${cfg.local_url || ''}`;
+  const urls = [`This Mac: ${cfg.local_url || ''}`];
+  if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
+  $('#configStatus').textContent = `Current access URLs — ${urls.join(' · ')}`;
   $('#authEnabled').checked = !!data.auth_enabled;
   $('#authStatus').textContent = data.has_password ? 'Password is set.' : 'No password set.';
 }
@@ -318,7 +320,9 @@ $('#saveRuntimeConfig').onclick = async () => {
     $('#configHost').value = cfg.host || '';
     $('#configPort').value = cfg.port || '';
     $('#configDbPath').value = cfg.db_path || '';
-    $('#configStatus').textContent = r.message || 'Saved. Restart the dashboard to apply server/database changes.';
+    const urls = [`This Mac: ${cfg.local_url || ''}`];
+    if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
+    $('#configStatus').textContent = `${r.message || 'Saved. Restart the dashboard to apply server/database changes.'} ${urls.join(' · ')}`;
   } catch(e) { $('#configStatus').textContent = e.message; }
 };
 $('#saveAuth').onclick = async () => {

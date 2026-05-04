@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4
+
+- Auto-detect the standard Mnemosyne SQLite database path on first config creation, including common Mnemosyne environment variables.
+- Show clearer Settings access URLs: `This Mac` for loopback access and `LAN` when binding to `0.0.0.0`.
+
 ## 0.4.3
 
 - Add editable Settings fields for dashboard address/host, port, and Mnemosyne database location.

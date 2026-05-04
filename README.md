@@ -125,6 +125,8 @@ Default config:
 }
 ```
 
+On first config creation, the dashboard auto-detects the Mnemosyne SQLite database path by checking `MNEMOSYNE_DASHBOARD_DB`, `MNEMOSYNE_DB_PATH`, `MNEMOSYNE_DB`, then the standard Hermes path `~/.hermes/mnemosyne/data/mnemosyne.db`.
+
 You can update it through the Hermes tool:
 
 ```json
@@ -142,6 +144,7 @@ Environment overrides are also supported:
 - `MNEMOSYNE_DASHBOARD_HOST` — bind address
 - `MNEMOSYNE_DASHBOARD_PORT` — bind port
 - `MNEMOSYNE_DASHBOARD_DB` — SQLite DB path
+- `MNEMOSYNE_DB_PATH` / `MNEMOSYNE_DB` — also considered during first-run DB auto-detection
 
 ## Manual run
 

@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import secrets
+import socket
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,29 @@ def hermes_home() -> Path:
 
 
 def default_db_path() -> Path:
-    return hermes_home() / "mnemosyne" / "data" / "mnemosyne.db"
+    candidates = [
+        os.environ.get("MNEMOSYNE_DASHBOARD_DB"),
+        os.environ.get("MNEMOSYNE_DB_PATH"),
+        os.environ.get("MNEMOSYNE_DB"),
+        hermes_home() / "mnemosyne" / "data" / "mnemosyne.db",
+        hermes_home() / "mnemosyne.db",
+        Path.home() / ".mnemosyne" / "mnemosyne.db",
+    ]
+    expanded = [Path(c).expanduser() for c in candidates if c]
+    for path in expanded:
+        if path.exists():
+            return path
+    return expanded[3] if len(expanded) > 3 else hermes_home() / "mnemosyne" / "data" / "mnemosyne.db"
+
+
+def lan_host() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            host = s.getsockname()[0]
+        return "" if host.startswith("127.") else host
+    except OSError:
+        return ""
 
 
 def data_dir() -> Path:
@@ -172,6 +195,7 @@ def save_config(**updates: Any) -> DashboardConfig:
 
 def public_config(cfg: DashboardConfig | None = None) -> dict[str, Any]:
     cfg = cfg or load_config(create=True)
+    lan = lan_host() if cfg.host in {"0.0.0.0", "::"} else ""
     return {
         "host": cfg.host,
         "port": cfg.port,
@@ -180,6 +204,7 @@ def public_config(cfg: DashboardConfig | None = None) -> dict[str, Any]:
         "has_password": cfg.has_password,
         "bind_url": cfg.bind_url,
         "local_url": cfg.local_url,
+        "lan_url": f"http://{lan}:{cfg.port}/" if lan else "",
     }
 
 
