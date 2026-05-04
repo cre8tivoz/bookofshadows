@@ -31,7 +31,7 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 
 - Read-only Memory Intelligence views:
   - Today — daily digest of memories added/recalled, triples, consolidations, entities, sources, and sessions
-  - Profile — inferred “What Hammy knows” sections derived from active memories and triples without writing back
+  - Profile — inferred “What Hermes knows” sections derived from active memories and triples without writing back
   - Constellation — entity stars and orbiting memory traces with a click-through read-only inspector
 - Eight-section product navigation instead of raw database tabs:
   - Overview — counts, breakdowns, quick actions, and recent memories
