@@ -56,21 +56,38 @@ function closeMobileMenu(){
     menuToggle.textContent = '☰';
   }
 }
+function showPanel(sectionId, panelId){
+  const section = $(`#${sectionId}`);
+  if(!section || !panelId) return;
+  section.querySelectorAll('.subpanel').forEach(panel => panel.classList.toggle('active', panel.id === panelId));
+  section.querySelectorAll('.section-tabs button').forEach(button => button.classList.toggle('active', button.dataset.panel === panelId));
+}
+function sectionFor(name){
+  return ({ search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph' })[name] || name;
+}
+function defaultPanelFor(section){
+  return ({ explore:'exploreSearch', activity:'activityTimeline', graph:'graphGraph' })[section];
+}
+function panelFor(name){
+  return ({ search:'exploreSearch', memories:'exploreMemories', recall:'exploreRecall', timelineView:'activityTimeline', consolidations:'activityConsolidations', graph:'graphGraph', triples:'graphTriples' })[name] || defaultPanelFor(name);
+}
 function switchTab(name){
-  document.body.classList.toggle('compact-page', name !== 'overview');
+  const section = sectionFor(name);
+  document.body.classList.toggle('compact-page', section !== 'overview');
   $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
-  $(`#${name}`).classList.add('active');
-  const nav = document.querySelector(`nav button[data-tab="${name}"]`);
+  $(`#${section}`).classList.add('active');
+  const nav = document.querySelector(`nav button[data-tab="${section}"]`);
   if(nav) nav.classList.add('active');
+  showPanel(section, panelFor(name));
   closeMobileMenu();
-  if(name==='graph') loadGraph();
+  if(name==='graph' || section==='graph') loadGraph();
   if(name==='triples') loadTriples();
   if(name==='consolidations') loadConsolidations();
   if(name==='memories') loadMemories();
-  if(name==='search') loadGlobalSearch();
+  if(name==='search' || section==='explore') loadGlobalSearch();
   if(name==='recall') loadRecallDebug();
-  if(name==='timelineView') loadTimeline();
-  if(name==='settings') loadAuthStatus();
+  if(name==='timelineView' || section==='activity') loadTimeline();
+  if(section==='settings') loadAuthStatus();
 }
 
 async function loadStats(){
@@ -256,6 +273,13 @@ async function loadGraph(){
 }
 
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+$$('.section-tabs button').forEach(b => b.onclick = () => {
+  const section = b.closest('.tab')?.id;
+  showPanel(section, b.dataset.panel);
+  const panelLoads = { exploreSearch: loadGlobalSearch, exploreMemories: loadMemories, exploreRecall: loadRecallDebug, activityTimeline: loadTimeline, activityConsolidations: loadConsolidations, graphGraph: loadGraph, graphTriples: loadTriples };
+  panelLoads[b.dataset.panel]?.();
+});
+$$('[data-jump]').forEach(b => b.onclick = () => switchTab(b.dataset.jump));
 $('#mobileMenuToggle').onclick = () => {
   document.body.classList.toggle('mobile-menu-open');
   const isOpen = document.body.classList.contains('mobile-menu-open');

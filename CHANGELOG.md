@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Simplify top-level navigation from nine tabs to five product sections: Overview, Explore, Activity, Graph, and Settings.
+- Fold Search, Memories, and Recall Debugger into Explore with internal segmented tabs.
+- Fold Timeline and Consolidations into Activity, and Triples into Graph.
+- Add Overview quick actions so users can jump directly into common workflows without exposing every raw view in the sidebar.
+
 ## 0.3.12
 
 - Hide the duplicate sidebar theme switch from the mobile hamburger menu now that theme control is available directly in the mobile top bar.

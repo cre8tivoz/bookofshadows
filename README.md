@@ -26,24 +26,29 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 
 ## Features
 
+- Five-section product navigation instead of raw database tabs:
+  - Overview — counts, breakdowns, quick actions, and recent memories
+  - Explore — global search, memory browser, and recall debugger
+  - Activity — timeline and consolidation history
+  - Graph — relationship graph and triples table
+  - Settings — optional password authentication
 - Overview counts for working memory, episodic memory, triples, and consolidations
 - Recent memory cards with raw JSON detail drawer
-- Memory browser with query, tier/source/scope/session filters, and sorting
-- Triples table with clickable row details
-- Interactive relationship graph:
-  - query filter
-  - clickable nodes
-  - clickable edges
-  - inspector panel with jumps into Triples and Memories
-- Consolidation history:
-  - filter by session/summary
-  - inspect consolidation JSON
-  - jump to memories from the same session
-- Global search across memories, triples, and consolidations
-- Recall debugger with approximate ranking explanations
-- Mini timeline grouped by day or session
-- Clickable overview breakdown rows that jump into filtered Memories
+- Clickable overview breakdown rows and quick actions that jump into filtered workflows
+- Explore section:
+  - Global search across memories, triples, and consolidations
+  - Memory browser with query, tier/source/scope/session filters, and sorting
+  - Recall debugger with approximate ranking explanations
+- Activity section:
+  - Mini timeline grouped by day or session
+  - Consolidation history with filtering, JSON inspection, and jump-to-session memories
+- Graph section:
+  - Interactive relationship graph with query filtering
+  - Clickable nodes and edges
+  - Inspector panel with jumps into Triples and Memories
+  - Triples table with clickable row details
 - Optional password authentication, configurable from the Settings tab
+- Desktop and mobile responsive layouts
 - Dark and light themes
 - Mnemosyne-inspired light theme with self-hosted fonts/assets
 - `/api/health` endpoint for smoke checks and uptime probes
