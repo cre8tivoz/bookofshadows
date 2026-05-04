@@ -2,7 +2,7 @@
 
 ## 0.3.3
 
-- Fix mobile overview stat labels being slightly clipped at the bottom by increasing label line-height and allowing visible overflow.
+- Fix mobile overview stat labels being partially obscured by the stat-card glow layer and add extra label vertical breathing room.
 
 ## 0.3.2
 
