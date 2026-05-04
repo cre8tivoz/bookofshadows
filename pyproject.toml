@@ -1,6 +1,6 @@
 [project]
 name = "mnemosyne-dashboard"
-version = "0.3.8"
+version = "0.3.9"
 description = "Local-only read-only web dashboard for Mnemosyne memory stores."
 readme = "README.md"
 requires-python = ">=3.11"

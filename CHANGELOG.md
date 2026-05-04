@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9
+
+- Add extra mobile header spacing around the Great Vibes “M” mark so its glyph overhang does not overlap the Mnemosyne wordmark.
+
 ## 0.3.8
 
 - Add a compact theme toggle directly to the mobile top bar so light/dark mode is available without opening the hamburger menu.
