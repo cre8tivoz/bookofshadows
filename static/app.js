@@ -32,8 +32,24 @@ function memoryItem(item){ const role = roleOf(item.content); const roleBadge = 
 function showDetail(obj, title='Detail'){
   const titleEl = document.querySelector('.drawer-title');
   if(titleEl) titleEl.textContent = title;
+  $('#detailBody').classList.remove('html-detail');
   $('#detailBody').textContent = JSON.stringify(obj, null, 2);
   $('#detail').classList.remove('hidden');
+}
+function showHtmlDetail(html, title='Detail'){
+  const titleEl = document.querySelector('.drawer-title');
+  if(titleEl) titleEl.textContent = title;
+  $('#detailBody').classList.add('html-detail');
+  $('#detailBody').innerHTML = html;
+  $('#detail').classList.remove('hidden');
+}
+function fmtBytes(n){
+  n = Number(n || 0);
+  if(!n) return '0 B';
+  const units = ['B','KB','MB','GB'];
+  let i = 0;
+  while(n >= 1024 && i < units.length - 1){ n /= 1024; i++; }
+  return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
 }
 function optionsFrom(rows, key, labelKey=key){
   const seen = new Set();
@@ -87,7 +103,7 @@ function switchTab(name){
   if(name==='search' || section==='explore') loadGlobalSearch();
   if(name==='recall') loadRecallDebug();
   if(name==='timelineView' || section==='activity') loadTimeline();
-  if(section==='settings') loadAuthStatus();
+  if(section==='settings') { loadAuthStatus(); loadDiagnostics(); }
 }
 
 async function loadStats(){
@@ -111,7 +127,7 @@ async function loadStats(){
 function bindBreakdownClicks(){
   $$('#sourceBreakdown .break-row').forEach(row => row.onclick = () => { $('#memorySource').value = row.dataset.filter || ''; switchTab('memories'); });
   $$('#scopeBreakdown .break-row').forEach(row => row.onclick = () => { $('#memoryScope').value = row.dataset.filter || ''; switchTab('memories'); });
-  $$('#sessionBreakdown .break-row').forEach(row => row.onclick = () => { $('#memorySession').value = row.dataset.filter || ''; switchTab('memories'); });
+  $$('#sessionBreakdown .break-row').forEach(row => row.onclick = () => openSessionDetail(row.dataset.filter || ''));
 }
 async function loadMemories(){
   const params = new URLSearchParams({
@@ -129,6 +145,25 @@ async function loadMemories(){
 }
 function bindMemoryClicks(root){
   root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = async () => showDetail((await api('/api/memory?id=' + encodeURIComponent(el.dataset.id))).item, 'Memory detail'));
+}
+function sessionEvent(e){ return `<div class="session-event" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><span>${esc(e.timestamp || '')}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview || '')}</div></div>`; }
+async function openSessionDetail(sessionId){
+  if(!sessionId || sessionId === 'unknown') return;
+  const data = await api(`/api/session?id=${encodeURIComponent(sessionId)}&limit=200`);
+  const c = data.counts || {};
+  showHtmlDetail(`
+    <div class="session-summary">
+      <div class="diag-pill"><strong>${esc(c.memories || 0)}</strong><span>memories</span></div>
+      <div class="diag-pill"><strong>${esc(c.triples || 0)}</strong><span>triples</span></div>
+      <div class="diag-pill"><strong>${esc(c.consolidations || 0)}</strong><span>consolidations</span></div>
+    </div>
+    <div class="item-actions session-actions"><button id="sessionBrowseMemories" class="primary tiny">Browse memories</button><button id="sessionTimeline" class="tiny">Timeline by session</button><button id="sessionCopy" class="tiny">Copy session ID</button></div>
+    <div class="result-section"><h3>Timeline <span>${esc(c.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join('') || '<p class="muted">No events for this session.</p>'}</div></div>
+  `, `Session ${sessionId}`);
+  $('#sessionBrowseMemories').onclick = () => { $('#memorySession').value = sessionId; $('#memoryKind').value = 'all'; $('#memoryQuery').value = ''; switchTab('memories'); $('#detail').classList.add('hidden'); };
+  $('#sessionTimeline').onclick = () => { $('#timelineGroup').value = 'session'; $('#timelineQuery').value = sessionId; switchTab('timelineView'); $('#detail').classList.add('hidden'); };
+  $('#sessionCopy').onclick = async () => { await navigator.clipboard?.writeText(sessionId); };
+  $$('#detailBody .session-event').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Session event detail'));
 }
 async function loadTriples(){
   const q = encodeURIComponent($('#tripleQuery').value.trim());
@@ -152,12 +187,7 @@ function renderConsolidations(){
     const data = JSON.parse(el.dataset.consolidation);
     el.onclick = (e) => { if(e.target.closest('button')) return; showDetail(data, 'Consolidation detail'); };
     el.querySelector('.inspect-consolidation').onclick = () => showDetail(data, 'Consolidation detail');
-    el.querySelector('.view-session').onclick = () => {
-      $('#memorySession').value = data.session_id || '';
-      $('#memoryKind').value = 'all';
-      $('#memoryQuery').value = '';
-      switchTab('memories');
-    };
+    el.querySelector('.view-session').onclick = () => openSessionDetail(data.session_id || '');
   });
 }
 async function loadConsolidations(){
@@ -193,13 +223,35 @@ async function loadRecallDebug(){
   $('#recallResults').innerHTML = data.items.map(recallItem).join('') || '<p class="muted">No matching memories.</p>';
   bindMemoryClicks($('#recallResults'));
 }
-function timelineEvent(e){ return `<div class="timeline-event item" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><span class="badge">${esc(e.session_id || 'no session')}</span><span>${esc(e.timestamp)}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview)}</div></div>`; }
+function timelineEvent(e){ return `<div class="timeline-event item" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><button class="session-chip" data-session="${esc(e.session_id || '')}">${esc(e.session_id || 'no session')}</button><span>${esc(e.timestamp)}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview)}</div></div>`; }
 async function loadTimeline(){
   const q = $('#timelineQuery')?.value.trim() || '';
   const group = $('#timelineGroup')?.value || 'day';
   const data = await api(`/api/timeline?q=${encodeURIComponent(q)}&group=${encodeURIComponent(group)}&limit=300`);
-  $('#timelineResults').innerHTML = data.groups.map(g => `<div class="timeline-group"><div class="section-head mini"><h2>${esc(g.key)}</h2><span>${g.count} events</span></div><div class="timeline">${g.events.map(timelineEvent).join('')}</div></div>`).join('') || '<p class="muted">No timeline events.</p>';
+  $('#timelineResults').innerHTML = data.groups.map(g => `<div class="timeline-group"><div class="section-head mini"><h2>${esc(g.key)}</h2><span>${g.count} events</span>${group === 'session' && g.key !== 'no session' ? `<button class="tiny open-session" data-session="${esc(g.key)}">Open session</button>` : ''}</div><div class="timeline">${g.events.map(timelineEvent).join('')}</div></div>`).join('') || '<p class="muted">No timeline events.</p>';
   bindJsonCards($('#timelineResults'), 'Timeline event detail');
+  $$('#timelineResults .session-chip').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
+  $$('#timelineResults .open-session').forEach(btn => btn.onclick = () => openSessionDetail(btn.dataset.session || ''));
+}
+async function loadDiagnostics(){
+  const diag = await api('/api/diagnostics');
+  const counts = diag.table_counts || {};
+  const core = ['working_memory','episodic_memory','triples','consolidation_log'].filter(t => t in counts);
+  $('#diagnosticsSummary').innerHTML = `
+    <div class="diag-row"><span>Status</span><strong>${diag.ok ? 'OK' : 'Needs attention'}</strong></div>
+    <div class="diag-row"><span>DB path</span><strong title="${esc(diag.db_path)}">${esc(diag.db_path)}</strong></div>
+    <div class="diag-row"><span>Readable</span><strong>${diag.readable ? 'yes' : 'no'}</strong></div>
+    <div class="diag-row"><span>Size</span><strong>${fmtBytes(diag.size_bytes)}</strong></div>
+    <div class="diag-row"><span>Last modified</span><strong>${esc(diag.modified_at || 'n/a')}</strong></div>
+    <div class="diag-row"><span>Tables</span><strong>${esc((diag.tables || []).length)}</strong></div>
+    <div class="diag-row wide"><span>Core rows</span><strong>${core.map(t => `${t}: ${Number(counts[t] || 0).toLocaleString()}`).join(' · ') || 'none'}</strong></div>`;
+  $('#diagnosticsStatus').textContent = diag.error || ((diag.missing_expected_tables || []).length ? `Missing expected tables: ${diag.missing_expected_tables.join(', ')}` : 'Database looks healthy.');
+  window.lastDiagnostics = diag;
+}
+async function copyDiagnostics(){
+  if(!window.lastDiagnostics) await loadDiagnostics();
+  await navigator.clipboard?.writeText(JSON.stringify(window.lastDiagnostics, null, 2));
+  $('#diagnosticsStatus').textContent = 'Diagnostics copied.';
 }
 async function loadAuthStatus(){
   const data = await api('/api/auth/status');
@@ -312,6 +364,8 @@ $('#loginButton').onclick = async () => {
   catch(e){ $('#loginError').textContent = e.message; }
 };
 $('#loginPassword').onkeydown = e => { if(e.key==='Enter') $('#loginButton').click(); };
+$('#refreshDiagnostics').onclick = loadDiagnostics;
+$('#copyDiagnostics').onclick = copyDiagnostics;
 $('#saveRuntimeConfig').onclick = async () => {
   try {
     const body = {host: $('#configHost').value.trim(), port: $('#configPort').value.trim(), db_path: $('#configDbPath').value.trim()};

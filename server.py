@@ -155,6 +155,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": True, "service": "mnemosyne-dashboard", "read_only": True, "config": public_config(self.cfg)})
             if path == "/api/config":
                 return self._send_json({"ok": True, "config": public_config(self.cfg)})
+            if path == "/api/diagnostics":
+                return self._send_json(self.store.diagnostics())
             if path == "/api/stats":
                 return self._send_json(self.store.stats())
             if path == "/api/search":
@@ -173,6 +175,8 @@ class Handler(BaseHTTPRequestHandler):
                 mid = q.get("id", "")
                 item = self.store.get_memory(mid) if mid else None
                 return self._send_json({"item": item}, 200 if item else 404)
+            if path == "/api/session":
+                return self._send_json(self.store.session_detail(q.get("id", ""), limit=_safe_int(q.get("limit"), 200, maximum=500)))
             if path == "/api/triples":
                 return self._send_json({"items": self.store.triples(
                     q=q.get("q", ""), subject=q.get("subject", ""), predicate=q.get("predicate", ""), object_=q.get("object", ""),

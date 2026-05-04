@@ -49,6 +49,8 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
   - Triples table with clickable row details
 - Optional password authentication, configurable from the Settings tab
 - Editable Settings fields for bind address, port, and Mnemosyne database path
+- Database diagnostics for install health: path, readability, file size, modified time, tables, row counts, and copyable diagnostics
+- Unified session detail drawer from top sessions, consolidation entries, and timeline session chips
 - Desktop and mobile responsive layouts
 - Dark and light themes
 - Mnemosyne-inspired light theme with self-hosted fonts/assets

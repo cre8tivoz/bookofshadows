@@ -60,6 +60,40 @@ class DashboardStore:
         lookaheads = "".join(rf"(?=.*(?:^|[^\w]){re.escape(term)})" for term in terms)
         return lookaheads + r".*"
 
+    def diagnostics(self) -> dict[str, Any]:
+        path = self.db_path.expanduser()
+        info: dict[str, Any] = {
+            "db_path": str(path),
+            "exists": path.exists(),
+            "readable": os.access(path, os.R_OK) if path.exists() else False,
+            "read_only": True,
+            "size_bytes": 0,
+            "modified_at": "",
+            "tables": [],
+            "table_counts": {},
+            "ok": False,
+            "error": "",
+        }
+        if not path.exists():
+            info["error"] = "Mnemosyne DB not found at configured path."
+            return info
+        try:
+            stat = path.stat()
+            info["size_bytes"] = stat.st_size
+            info["modified_at"] = __import__("datetime").datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds")
+            with self.connect() as con:
+                tables = sorted(self._tables(con))
+                info["tables"] = tables
+                for table in tables:
+                    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", table):
+                        info["table_counts"][table] = int(con.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+                required = {"working_memory", "episodic_memory", "triples", "consolidation_log"}
+                info["missing_expected_tables"] = sorted(required - set(tables))
+                info["ok"] = True
+        except Exception as exc:
+            info["error"] = str(exc)
+        return info
+
     def stats(self) -> dict[str, Any]:
         with self.connect() as con:
             tables = self._tables(con)
@@ -261,6 +295,48 @@ class DashboardStore:
                 f"SELECT id, session_id, items_consolidated, summary_preview, created_at FROM consolidation_log {where} ORDER BY created_at DESC LIMIT ?",
                 [*params, limit],
             )]
+    def session_detail(self, session_id: str, limit: int = 200) -> dict[str, Any]:
+        session_id = (session_id or "").strip()
+        if not session_id:
+            raise ValueError("session_id is required")
+        limit = max(1, min(int(limit or 200), 500))
+        memories = self.list_memories(kind="all", session_id=session_id, sort="recent", limit=limit)
+        consolidations = self.consolidations(q=session_id, limit=limit)
+        triples: list[dict[str, Any]] = []
+        with self.connect() as con:
+            tables = self._tables(con)
+            if "triples" in tables:
+                cols = {r[1] for r in con.execute("PRAGMA table_info(triples)")}
+                where = []
+                params: list[Any] = []
+                if "session_id" in cols:
+                    where.append("session_id = ?")
+                    params.append(session_id)
+                if "source" in cols:
+                    where.append("source = ?")
+                    params.append(session_id)
+                if where:
+                    triples = [dict(r) for r in con.execute(
+                        f"SELECT * FROM triples WHERE {' OR '.join(where)} ORDER BY COALESCE(created_at, valid_from) DESC LIMIT ?",
+                        [*params, limit],
+                    )]
+        events: list[dict[str, Any]] = []
+        for m in memories:
+            events.append({"type": "memory", "timestamp": m.get("timestamp") or m.get("created_at") or "", "title": m.get("tier") or "memory", "preview": str(m.get("content") or "")[:240], "item": m})
+        for t in triples:
+            events.append({"type": "triple", "timestamp": t.get("created_at") or t.get("valid_from") or "", "title": t.get("predicate") or "triple", "preview": f"{t.get('subject')} → {t.get('object')}", "item": t})
+        for c in consolidations:
+            if c.get("session_id") == session_id:
+                events.append({"type": "consolidation", "timestamp": c.get("created_at") or "", "title": f"{c.get('items_consolidated')} items", "preview": c.get("summary_preview") or "", "item": c})
+        events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
+        return {
+            "session_id": session_id,
+            "counts": {"memories": len(memories), "triples": len(triples), "consolidations": len([c for c in consolidations if c.get("session_id") == session_id]), "events": len(events)},
+            "memories": memories,
+            "triples": triples,
+            "consolidations": [c for c in consolidations if c.get("session_id") == session_id],
+            "events": events[:limit],
+        }
 
 
     def global_search(self, q: str = "", limit: int = 30) -> dict[str, Any]:

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Add database diagnostics in Settings with DB path, readability, file size, modified time, table count, and core table row counts.
+- Add `/api/diagnostics` for install health checks and copyable diagnostics.
+- Add unified session detail drawer showing related memories, triples, consolidations, and session timeline actions.
+- Make top sessions, consolidation session actions, and timeline session chips open the unified session detail drawer.
+
 ## 0.4.4
 
 - Auto-detect the standard Mnemosyne SQLite database path on first config creation, including common Mnemosyne environment variables.

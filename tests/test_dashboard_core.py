@@ -113,6 +113,27 @@ def test_graph_returns_nodes_edges_and_filterable_metadata(tmp_path):
     assert graph['edges'][0]['object'] == 'local-only memory'
 
 
+def test_diagnostics_reports_database_health(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    diag = DashboardStore(db).diagnostics()
+    assert diag['ok'] is True
+    assert diag['exists'] is True
+    assert diag['read_only'] is True
+    assert diag['table_counts']['working_memory'] == 3
+    assert diag['table_counts']['triples'] == 3
+
+
+def test_session_detail_unifies_related_items(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    detail = DashboardStore(db).session_detail('s2')
+    assert detail['session_id'] == 's2'
+    assert detail['counts']['memories'] == 1
+    assert detail['counts']['consolidations'] == 1
+    assert {e['type'] for e in detail['events']} == {'memory', 'consolidation'}
+
+
 def test_config_file_env_and_runtime_overrides(tmp_path, monkeypatch):
     monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
     monkeypatch.delenv('MNEMOSYNE_DASHBOARD_CONFIG', raising=False)

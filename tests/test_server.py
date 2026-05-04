@@ -81,6 +81,24 @@ def test_static_path_escape_is_blocked(tmp_path, monkeypatch):
         server.close()
 
 
+def test_diagnostics_and_session_endpoints(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        status, _headers, body = _request(f"{server.base}/api/diagnostics")
+        payload = json.loads(body)
+        assert status == 200
+        assert payload["ok"] is True
+        assert payload["table_counts"]["working_memory"] == 3
+
+        status, _headers, body = _request(f"{server.base}/api/session?id=s2")
+        payload = json.loads(body)
+        assert status == 200
+        assert payload["counts"]["memories"] == 1
+        assert payload["counts"]["consolidations"] == 1
+    finally:
+        server.close()
+
+
 def test_config_post_updates_server_and_database_settings(tmp_path, monkeypatch):
     server = ServerHarness(tmp_path, monkeypatch)
     try:

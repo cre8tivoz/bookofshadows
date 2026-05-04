@@ -185,6 +185,13 @@
               <p id="configStatus" class="muted"></p>
             </div>
             <div class="glass settings-card">
+              <div class="breakdown-title">Database diagnostics</div>
+              <p class="muted">Install health check for the configured Mnemosyne SQLite database.</p>
+              <div id="diagnosticsSummary" class="diag-grid"></div>
+              <div class="item-actions"><button id="refreshDiagnostics" class="primary">Refresh diagnostics</button><button id="copyDiagnostics">Copy diagnostics</button></div>
+              <p id="diagnosticsStatus" class="muted"></p>
+            </div>
+            <div class="glass settings-card">
               <div class="breakdown-title">Password auth</div>
               <p class="muted">Optional. If enabled, users must enter the password before API data loads. Good idea on LAN, but not forced.</p>
               <label class="check-row"><input id="authEnabled" type="checkbox" /> Enable password</label>
