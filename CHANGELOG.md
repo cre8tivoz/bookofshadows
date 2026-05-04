@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.10
+
+- Keep mobile timeline group event-count badges inside the card by letting long session headings wrap within the available width.
+
 ## 0.3.9
 
 - Add extra mobile header spacing around the Great Vibes “M” mark so its glyph overhang does not overlap the Mnemosyne wordmark.
