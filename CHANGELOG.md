@@ -2,7 +2,7 @@
 
 ## 0.3.5
 
-- Rename the brand subtitle from "Memory OS" to "Local Memory".
+- Rename the brand subtitle from "Memory OS" to "Memory for Hermes".
 
 ## 0.3.4
 
