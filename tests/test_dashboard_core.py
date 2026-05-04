@@ -223,15 +223,18 @@ def test_config_validates_port(tmp_path, monkeypatch):
         raise AssertionError('invalid port should fail')
 
 
-def test_admin_mode_requires_password_auth(tmp_path, monkeypatch):
+def test_admin_mode_allows_localhost_without_password_but_rejects_lan_without_auth(tmp_path, monkeypatch):
     monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
-    save_config(auth_enabled=False, clear_password=True)
-    try:
-        save_config(memory_admin_enabled=True)
-    except ValueError as exc:
-        assert 'password auth' in str(exc)
-    else:
-        raise AssertionError('admin mode should require password auth')
+    save_config(auth_enabled=False, clear_password=True, host='127.0.0.1')
+    cfg = save_config(memory_admin_enabled=True)
+    assert public_config(cfg)['memory_admin_enabled'] is True
 
-    cfg = save_config(password='secret', auth_enabled=True, memory_admin_enabled=True)
+    try:
+        save_config(host='0.0.0.0', auth_enabled=False, clear_password=True, memory_admin_enabled=True)
+    except ValueError as exc:
+        assert 'LAN/non-local' in str(exc)
+    else:
+        raise AssertionError('LAN admin mode should require password auth')
+
+    cfg = save_config(host='0.0.0.0', password='secret', auth_enabled=True, memory_admin_enabled=True)
     assert public_config(cfg)['memory_admin_enabled'] is True

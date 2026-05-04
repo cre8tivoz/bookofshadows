@@ -192,8 +192,9 @@ def save_config(**updates: Any) -> DashboardConfig:
     cfg = _validate(current)
     if cfg.auth_enabled and not cfg.has_password:
         raise ValueError("set a password before enabling auth")
-    if cfg.memory_admin_enabled and (not cfg.auth_enabled or not cfg.has_password):
-        raise ValueError("enable password auth before enabling memory admin mode")
+    local_only = cfg.host in {"127.0.0.1", "localhost", "::1"}
+    if cfg.memory_admin_enabled and not local_only and (not cfg.auth_enabled or not cfg.has_password):
+        raise ValueError("enable password auth before enabling memory admin mode on LAN/non-local hosts")
     _write_config(cfg)
     return cfg
 

@@ -103,6 +103,13 @@
               <button id="memorySearch" class="primary">Search</button>
               <button id="memoryClear">Clear</button>
             </div>
+            <div id="bulkMemoryBar" class="bulk-bar glass hidden">
+              <label class="check-row"><input id="bulkSelectAll" type="checkbox" /> Select visible</label>
+              <span id="bulkSelectionStatus" class="muted">0 selected</span>
+              <button id="bulkExpire" class="drawer-action warn">Expire selected</button>
+              <button id="bulkImportance" class="drawer-action">Set importance</button>
+              <button id="bulkClear" class="drawer-action">Clear selection</button>
+            </div>
             <div id="memoryList" class="list memory-grid"></div>
           </div>
           <div id="exploreRecall" class="subpanel">
@@ -151,7 +158,8 @@
               <input id="graphQuery" placeholder="Filter graph by subject / predicate / object…" />
               <button id="graphRefresh" class="primary">Refresh graph</button>
               <button id="graphClear">Clear</button>
-              <span class="muted" id="graphHint">Click a node to see connected facts. Click an edge to inspect the triple.</span>
+              <button id="graphResetView">Reset view</button>
+              <span class="muted" id="graphHint">Scroll to zoom, drag to pan. Click nodes / edges to inspect.</span>
             </div>
             <div class="graph-layout">
               <div class="graph-wrap"><svg id="graphSvg" viewBox="0 0 1000 650"></svg></div>
@@ -194,7 +202,7 @@
             </div>
             <div class="glass settings-card">
               <div class="breakdown-title">Password auth</div>
-              <p class="muted">Optional. If enabled, users must enter the password before API data loads. Required before memory admin mode can be enabled.</p>
+              <p class="muted">Optional. If enabled, users must enter the password before API data loads. Required for memory admin mode when the dashboard is exposed on LAN/non-local hosts.</p>
               <label class="check-row"><input id="authEnabled" type="checkbox" /> Enable password</label>
               <input id="authPassword" type="password" placeholder="Set / change password" />
               <div class="item-actions"><button id="saveAuth" class="primary">Save auth settings</button><button id="clearAuth">Disable + clear password</button><button id="logoutAuth">Logout</button></div>

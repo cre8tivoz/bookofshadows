@@ -37,13 +37,13 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 - Clickable overview breakdown rows and quick actions that jump into filtered workflows
 - Explore section:
   - Global search across memories, triples, and consolidations
-  - Memory browser with query, tier/source/scope/session/status filters, and sorting
+  - Memory browser with query, tier/source/scope/session/status filters, sorting, URL deep links, bulk selection, and safe bulk maintenance
   - Recall debugger with approximate ranking explanations
 - Activity section:
   - Mini timeline grouped by day or session
   - Consolidation history with filtering, JSON inspection, and jump-to-session memories
 - Graph section:
-  - Interactive relationship graph with query filtering
+  - Interactive relationship graph with query filtering, mouse-wheel zoom, drag-to-pan, and reset view
   - Clickable nodes and edges
   - Inspector panel with jumps into Triples and Memories
   - Triples table with clickable row details
@@ -64,7 +64,7 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 - Binds to `127.0.0.1` by default
 - Can bind to `0.0.0.0` only when explicitly configured
 - Browsing opens the Mnemosyne SQLite database with `mode=ro`
-- Memory admin mode is disabled by default and requires password auth before any mutation endpoint works
+- Localhost-only memory admin can be enabled without password for developer convenience; LAN/non-local admin mode requires password auth before mutation endpoints work
 - Admin actions are limited to Mnemosyne-aligned supersede, expire/invalidate, and importance updates
 - Raw memory content overwrite and hard delete endpoints are intentionally not exposed
 - Admin mutations create a SQLite backup by default and append to `audit.jsonl`

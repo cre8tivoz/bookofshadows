@@ -6,6 +6,9 @@ let consolidationState = [];
 let authState = { config: {}, auth_enabled: false, authenticated: true };
 let currentRoute = { tab: 'overview' };
 let applyingHistory = false;
+let bulkSelection = new Set();
+let latestMemoryItems = [];
+let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -48,13 +51,30 @@ function meta(item, opts={}){
   return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge status-${esc(status)}">${esc(status)}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span>${scopeBadge}${sessionBadge}${timeBadge}</div>`;
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
-function memoryItem(item){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; return `<div class="item ${role ? 'has-role' : ''}" data-id="${esc(item.id)}">${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
+function memoryItem(item, opts={}){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="memory-check" data-id="${esc(item.id)}" ${bulkSelection.has(item.id) ? 'checked' : ''} /></label>` : ''; return `<div class="item ${role ? 'has-role' : ''} ${opts.selectable ? 'selectable' : ''}" data-id="${esc(item.id)}">${selectable}${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
 function routeTabState(tab=currentRoute.tab || 'overview'){ return { tab }; }
+function routeToUrl(state){
+  const params = new URLSearchParams(location.search);
+  ['tab','memory','session'].forEach(k => params.delete(k));
+  params.set('tab', state.tab || 'overview');
+  if(state.drawer?.type === 'memory') params.set('memory', state.drawer.id);
+  if(state.drawer?.type === 'session') params.set('session', state.drawer.id);
+  const qs = params.toString();
+  return location.pathname + (qs ? `?${qs}` : '');
+}
+function urlToRoute(){
+  const params = new URLSearchParams(location.search);
+  const route = { tab: params.get('tab') || 'overview' };
+  if(params.get('memory')) route.drawer = { type:'memory', id:params.get('memory') };
+  else if(params.get('session')) route.drawer = { type:'session', id:params.get('session') };
+  if(route.drawer && (!params.get('tab') || route.tab === 'overview')) route.tab = route.drawer.type === 'memory' ? 'memories' : 'timelineView';
+  return route;
+}
 function pushRoute(state, replace=false){
   if(applyingHistory) return;
   currentRoute = { ...state };
   const fn = replace ? 'replaceState' : 'pushState';
-  history[fn](currentRoute, '', location.pathname + location.search);
+  history[fn](currentRoute, '', routeToUrl(currentRoute));
 }
 function closeDetail(opts={}){
   $('#detail').classList.add('hidden');
@@ -63,11 +83,10 @@ function closeDetail(opts={}){
 async function applyRoute(state){
   applyingHistory = true;
   try {
-    const route = state || { tab: 'overview' };
+    const route = state || urlToRoute();
     switchTab(route.tab || 'overview', { push:false });
     if(route.drawer?.type === 'memory') await openMemoryDetail(route.drawer.id, { push:false });
     else if(route.drawer?.type === 'session') await openSessionDetail(route.drawer.id, { push:false });
-    else if(route.drawer?.type === 'json') showDetail(route.drawer.value, route.drawer.title || 'Detail', { push:false });
     else closeDetail({ push:false });
     currentRoute = route;
   } finally {
@@ -272,15 +291,69 @@ async function loadMemories(){
     limit: '150'
   });
   const data = await api(`/api/memories?${params.toString()}`);
-  $('#memoryList').innerHTML = data.items.map(memoryItem).join('') || '<p class="muted">No memories found.</p>';
+  latestMemoryItems = data.items || [];
+  $('#memoryList').innerHTML = latestMemoryItems.map(item => memoryItem(item, {selectable:true})).join('') || '<p class="muted">No memories found.</p>';
   bindMemoryClicks($('#memoryList'));
+  bindBulkMemoryControls();
+  updateBulkBar();
+}
+function updateBulkBar(){
+  const bar = $('#bulkMemoryBar');
+  if(!bar) return;
+  const admin = canAdmin();
+  bar.classList.toggle('hidden', !latestMemoryItems.length);
+  const actionable = latestMemoryItems.filter(x => bulkSelection.has(x.id) && isMutableMemory(x)).length;
+  $('#bulkSelectionStatus').textContent = `${bulkSelection.size} selected · ${actionable} active`;
+  $('#bulkExpire').disabled = !admin || !actionable;
+  $('#bulkImportance').disabled = !admin || !actionable;
+  $('#bulkSelectAll').checked = latestMemoryItems.length > 0 && latestMemoryItems.every(x => bulkSelection.has(x.id));
+  $('#bulkSelectAll').disabled = !latestMemoryItems.length;
+}
+function bindBulkMemoryControls(){
+  $$('#memoryList .memory-check').forEach(chk => chk.onchange = e => { e.stopPropagation(); chk.checked ? bulkSelection.add(chk.dataset.id) : bulkSelection.delete(chk.dataset.id); updateBulkBar(); });
+}
+async function expireSelectedMemories(){
+  const ids = latestMemoryItems.filter(x => bulkSelection.has(x.id) && isMutableMemory(x)).map(x => x.id);
+  if(!ids.length) return;
+  const ok = await confirmAction({title:'Expire selected memories?', description:`Expire ${ids.length} selected active memories. Backups and audit entries will be created.`, confirmText:'Expire selected', tone:'warn'});
+  if(!ok) return;
+  for(const id of ids) await postJson('/api/admin/memory/invalidate', {memory_id:id, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
+  bulkSelection.clear(); await loadStats(); await loadMemories();
+}
+async function setSelectedImportance(){
+  const ids = latestMemoryItems.filter(x => bulkSelection.has(x.id) && isMutableMemory(x)).map(x => x.id);
+  if(!ids.length) return;
+  const v = await askImportance(0.5);
+  if(v === null) return;
+  for(const id of ids) await postJson('/api/admin/memory/importance', {memory_id:id, importance:Number(v), backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
+  bulkSelection.clear(); await loadStats(); await loadMemories();
 }
 function bindMemoryClicks(root){
   root.querySelectorAll('.session-link').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
-  root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = (e) => { if(e.target.closest('.session-link,button,a')) return; openMemoryDetail(el.dataset.id); });
+  root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = (e) => { if(e.target.closest('.session-link,button,a,label,input')) return; openMemoryDetail(el.dataset.id); });
 }
-function canAdmin(){ return !!(authState.config && authState.config.memory_admin_enabled && authState.auth_enabled && authState.authenticated); }
+function canAdmin(){ const cfg = authState.config || {}; const localOnly = ['127.0.0.1','localhost','::1'].includes(cfg.host || '127.0.0.1'); return !!(cfg.memory_admin_enabled && (localOnly || (authState.auth_enabled && authState.authenticated))); }
 function isMutableMemory(item){ return String(item?.status || 'active').toLowerCase() === 'active'; }
+function whyMemoryHtml(item){
+  const reasons = [];
+  const q = $('#memoryQuery')?.value.trim();
+  const source = $('#memorySource')?.value;
+  const scope = $('#memoryScope')?.value;
+  const session = $('#memorySession')?.value;
+  const status = $('#memoryStatus')?.value;
+  const sort = $('#memorySort')?.value;
+  if(q) reasons.push(`matches browser query “${q}” across content, id, session, source, or scope`);
+  if(source && item.source === source) reasons.push(`source filter matched ${source}`);
+  if(scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
+  if(session && item.session_id === session) reasons.push(`session filter matched ${session}`);
+  if(!reasons.length) reasons.push('shown from the current list/search context');
+  return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || 'active')}</span></h3><div class="diag-grid compact">
+    <div class="diag-row"><span>Reason</span><strong>${esc(reasons.join(' · '))}</strong></div>
+    <div class="diag-row"><span>Ranking</span><strong>${esc(sort || 'recent')} · importance ${Number(item.importance ?? 0).toFixed(2)} · recalled ${Number(item.recall_count || 0).toLocaleString()}×</strong></div>
+    <div class="diag-row"><span>Freshness</span><strong>created ${esc(prettyTime(item.created_at) || item.created_at || 'unknown')} · last recalled ${esc(prettyTime(item.last_recalled) || item.last_recalled || 'never')}</strong></div>
+    <div class="diag-row"><span>Origin</span><strong>${esc(item.tier || 'memory')} · ${esc(item.source || 'unknown source')} · ${esc(item.scope || 'unknown scope')}</strong></div>
+  </div></div>`;
+}
 function memoryDetailHtml(item){
   const admin = canAdmin();
   const mutable = isMutableMemory(item);
@@ -290,6 +363,7 @@ function memoryDetailHtml(item){
     <div class="memory-detail">
       ${meta(item, {sessionLink:false})}
       <div class="content detail-content">${esc(item.content)}</div>
+      ${whyMemoryHtml(item)}
       <div class="diag-grid compact">
         <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
         <div class="diag-row"><span>Session</span>${item.session_id && item.session_id !== 'default' ? `<button id="memorySessionLink" class="diag-link" title="Open session: ${esc(item.session_id)}">${esc(item.session_id)}</button>` : `<strong>${esc(item.session_id || 'default')}</strong>`}</div>
@@ -462,7 +536,7 @@ async function loadAuthStatus(){
   $('#authEnabled').checked = !!data.auth_enabled;
   $('#authStatus').textContent = data.has_password ? 'Password is set.' : 'No password set.';
   $('#memoryAdminEnabled').checked = !!cfg.memory_admin_enabled;
-  $('#memoryAdminStatus').textContent = cfg.memory_admin_enabled ? 'Admin maintenance mode is enabled. Mutations require password auth and are audited.' : 'Admin maintenance mode is disabled; dashboard is read-only.';
+  $('#memoryAdminStatus').textContent = cfg.memory_admin_enabled ? (['127.0.0.1','localhost','::1'].includes(cfg.host || '127.0.0.1') ? 'Local-only admin mode is enabled. Mutations are audited; password is only required for LAN/non-local hosts.' : 'Admin maintenance mode is enabled. LAN/non-local mutations require password auth and are audited.') : 'Admin maintenance mode is disabled; dashboard is read-only.';
 }
 
 function graphInspectorDefault(){
@@ -496,25 +570,54 @@ function inspectEdge(edge){
   $('#edgeDetail').onclick = () => showDetail(edge, 'Triple edge detail');
   $('#edgeTriples').onclick = () => { $('#tripleQuery').value = `${edge.subject} ${edge.predicate} ${edge.object}`; switchTab('triples'); };
 }
+function applyGraphView(){
+  const vp = $('#graphViewport');
+  if(vp) vp.setAttribute('transform', `translate(${graphView.x} ${graphView.y}) scale(${graphView.scale})`);
+}
+function resetGraphView(){ graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 }; applyGraphView(); }
+function bindGraphPanZoom(){
+  const svg = $('#graphSvg');
+  if(!svg || svg.dataset.panzoomBound) return;
+  svg.dataset.panzoomBound = '1';
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width * 1000;
+    const py = (e.clientY - rect.top) / rect.height * 650;
+    const old = graphView.scale;
+    const next = Math.max(0.35, Math.min(4, old * (e.deltaY < 0 ? 1.12 : 0.88)));
+    graphView.x = px - (px - graphView.x) * (next / old);
+    graphView.y = py - (py - graphView.y) * (next / old);
+    graphView.scale = next;
+    applyGraphView();
+  }, { passive:false });
+  svg.addEventListener('pointerdown', e => { if(e.target.closest('.node,.edge,.edgeLabel')) return; graphView.dragging = true; graphView.sx = e.clientX; graphView.sy = e.clientY; graphView.ox = graphView.x; graphView.oy = graphView.y; svg.setPointerCapture(e.pointerId); svg.classList.add('panning'); });
+  svg.addEventListener('pointermove', e => { if(!graphView.dragging) return; graphView.x = graphView.ox + (e.clientX - graphView.sx); graphView.y = graphView.oy + (e.clientY - graphView.sy); applyGraphView(); });
+  svg.addEventListener('pointerup', e => { graphView.dragging = false; svg.classList.remove('panning'); try{ svg.releasePointerCapture(e.pointerId); }catch{} });
+  svg.addEventListener('pointerleave', () => { graphView.dragging = false; svg.classList.remove('panning'); });
+}
 function drawGraph(g){
   const svg = $('#graphSvg'); svg.innerHTML = '';
   graphState = { ...g, byId: Object.fromEntries(g.nodes.map(n => [n.id, n])) };
-  svg.insertAdjacentHTML('afterbegin', `<defs><linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#65d6ff" stop-opacity=".25"/><stop offset="55%" stop-color="#7c7cff" stop-opacity=".78"/><stop offset="100%" stop-color="#ffd166" stop-opacity=".35"/></linearGradient></defs>`);
+  svg.insertAdjacentHTML('afterbegin', `<defs><linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#65d6ff" stop-opacity=".25"/><stop offset="55%" stop-color="#7c7cff" stop-opacity=".78"/><stop offset="100%" stop-color="#ffd166" stop-opacity=".35"/></linearGradient></defs><g id="graphViewport"></g>`);
+  const vp = $('#graphViewport');
   const w=1000,h=650,cx=w/2,cy=h/2,r=260;
   const nodes = g.nodes.slice(0,160).map((n,i,a)=>({...n,x:cx+Math.cos(i/a.length*Math.PI*2)*r*(.65+((i%5)/10)),y:cy+Math.sin(i/a.length*Math.PI*2)*r*(.65+((i%7)/14))}));
   const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
   graphState.nodes = nodes; graphState.byId = byId;
   const edges = g.edges.filter(e=>byId[e.source]&&byId[e.target]).slice(0,300);
   graphState.edges = edges;
-  if(!nodes.length){ svg.insertAdjacentHTML('beforeend', '<text x="500" y="325" text-anchor="middle" class="nodeText">No triples match this graph filter.</text>'); graphInspectorDefault(); return; }
+  if(!nodes.length){ svg.insertAdjacentHTML('beforeend', '<text x="500" y="325" text-anchor="middle" class="nodeText">No triples match this graph filter.</text>'); graphInspectorDefault(); bindGraphPanZoom(); return; }
   for(const e of edges){ const s=byId[e.source], t=byId[e.target];
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line'); line.setAttribute('x1',s.x);line.setAttribute('y1',s.y);line.setAttribute('x2',t.x);line.setAttribute('y2',t.y);line.setAttribute('class','edge'); line.dataset.id = e.id; line.onclick = () => inspectEdge(e); svg.appendChild(line);
-    const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.textContent=e.predicate; label.setAttribute('x',(s.x+t.x)/2);label.setAttribute('y',(s.y+t.y)/2);label.setAttribute('class','edgeLabel'); label.dataset.id = e.id; label.onclick = () => inspectEdge(e); svg.appendChild(label);
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line'); line.setAttribute('x1',s.x);line.setAttribute('y1',s.y);line.setAttribute('x2',t.x);line.setAttribute('y2',t.y);line.setAttribute('class','edge'); line.dataset.id = e.id; line.onclick = () => inspectEdge(e); vp.appendChild(line);
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text'); label.textContent=e.predicate; label.setAttribute('x',(s.x+t.x)/2);label.setAttribute('y',(s.y+t.y)/2);label.setAttribute('class','edgeLabel'); label.dataset.id = e.id; label.onclick = () => inspectEdge(e); vp.appendChild(label);
   }
   for(const n of nodes){
-    const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',n.x);c.setAttribute('cy',n.y);c.setAttribute('r',Math.min(14, 6 + Math.sqrt(n.count || 1)));c.setAttribute('class','node'); c.dataset.id = n.id; c.onclick = () => inspectNode(n); svg.appendChild(c);
-    const text=document.createElementNS('http://www.w3.org/2000/svg','text'); text.textContent=n.label.length>38?n.label.slice(0,35)+'…':n.label; text.setAttribute('x',n.x+12);text.setAttribute('y',n.y+4);text.setAttribute('class','nodeText'); text.dataset.id = n.id; text.onclick = () => inspectNode(n); svg.appendChild(text);
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',n.x);c.setAttribute('cy',n.y);c.setAttribute('r',Math.min(14, 6 + Math.sqrt(n.count || 1)));c.setAttribute('class','node'); c.dataset.id = n.id; c.onclick = () => inspectNode(n); vp.appendChild(c);
+    const text=document.createElementNS('http://www.w3.org/2000/svg','text'); text.textContent=n.label.length>38?n.label.slice(0,35)+'…':n.label; text.setAttribute('x',n.x+12);text.setAttribute('y',n.y+4);text.setAttribute('class','nodeText'); text.dataset.id = n.id; text.onclick = () => inspectNode(n); vp.appendChild(text);
   }
+  resetGraphView();
+  bindGraphPanZoom();
   graphInspectorDefault();
   centerGraphOnMobile();
 }
@@ -546,7 +649,11 @@ $('#mobileMenuToggle').onclick = () => {
 };
 window.addEventListener('resize', closeMobileMenu, { passive: true });
 window.addEventListener('orientationchange', closeMobileMenu, { passive: true });
-$('#memorySearch').onclick = loadMemories; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') loadMemories(); };
+$('#memorySearch').onclick = loadMemories;
+$('#bulkSelectAll').onchange = () => { latestMemoryItems.forEach(x => $('#bulkSelectAll').checked ? bulkSelection.add(x.id) : bulkSelection.delete(x.id)); loadMemories(); };
+$('#bulkClear').onclick = () => { bulkSelection.clear(); loadMemories(); };
+$('#bulkExpire').onclick = expireSelectedMemories;
+$('#bulkImportance').onclick = setSelectedImportance; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') loadMemories(); };
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
 $('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
@@ -555,6 +662,7 @@ $('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope',
 $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { if(e.key==='Enter') loadTriples(); };
 $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e.key==='Enter') loadGraph(); };
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };
+$('#graphResetView').onclick = resetGraphView;
 $('#consolidationQuery').oninput = renderConsolidations;
 $('#consolidationClear').onclick = () => { $('#consolidationQuery').value = ''; renderConsolidations(); };
 $('#closeDetail').onclick = () => closeDetail();
@@ -599,7 +707,14 @@ $('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {});
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
-window.addEventListener('popstate', e => applyRoute(e.state));
+window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 initTheme();
-pushRoute(routeTabState('overview'), true);
-refreshAuthState().then(s => { if(s.auth_enabled && !s.authenticated) showLogin(); else loadStats(); }).catch(() => showLogin());
+const initialRoute = urlToRoute();
+pushRoute(initialRoute, true);
+refreshAuthState().then(async s => {
+  if(s.auth_enabled && !s.authenticated) showLogin();
+  else {
+    await loadStats();
+    if(initialRoute.tab !== 'overview' || initialRoute.drawer) await applyRoute(initialRoute);
+  }
+}).catch(() => showLogin());

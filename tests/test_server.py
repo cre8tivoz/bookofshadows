@@ -125,7 +125,7 @@ def test_config_post_updates_server_and_database_settings(tmp_path, monkeypatch)
 
 
 
-def test_admin_memory_mutation_endpoints_require_auth_and_audit(tmp_path, monkeypatch):
+def test_admin_memory_mutation_endpoints_allow_localhost_admin_without_auth_and_audit(tmp_path, monkeypatch):
     server = ServerHarness(tmp_path, monkeypatch)
     try:
         status, _headers, body = _request(
@@ -139,47 +139,25 @@ def test_admin_memory_mutation_endpoints_require_auth_and_audit(tmp_path, monkey
         status, _headers, body = _request(
             f"{server.base}/api/config",
             method="POST",
-            body={"auth_enabled": True, "password": "secret", "memory_admin_enabled": True},
+            body={"memory_admin_enabled": True},
         )
         assert status == 200
         assert json.loads(body)["config"]["memory_admin_enabled"] is True
 
         status, _headers, body = _request(
-            f"{server.base}/api/admin/memory/invalidate",
-            method="POST",
-            body={"memory_id": "w1"},
-        )
-        assert status == 401
-
-        status, headers, body = _request(
-            f"{server.base}/api/auth/login",
-            method="POST",
-            body={"password": "secret"},
-        )
-        assert status == 200
-        cookie = headers["Set-Cookie"].split(";", 1)[0]
-
-        status, _headers, body = _request(
             f"{server.base}/api/admin/memory/supersede",
             method="POST",
             body={"memory_id": "w1", "content": "YC prefers private local memory", "importance": 0.91},
-            headers={"Cookie": cookie},
         )
         payload = json.loads(body)
         assert status == 200
         assert payload["replacement_id"].startswith("dash_")
         assert Path(payload["backup"]["path"]).exists()
 
-        status, _headers, body = _request(
-            f"{server.base}/api/memory?id=w1",
-            headers={"Cookie": cookie},
-        )
+        status, _headers, body = _request(f"{server.base}/api/memory?id=w1")
         assert json.loads(body)["item"]["status"] == "superseded"
 
-        status, _headers, body = _request(
-            f"{server.base}/api/admin/audit",
-            headers={"Cookie": cookie},
-        )
+        status, _headers, body = _request(f"{server.base}/api/admin/audit")
         audit = json.loads(body)["items"]
         assert status == 200
         assert audit[0]["action"] == "supersede"

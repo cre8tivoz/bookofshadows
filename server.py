@@ -130,8 +130,11 @@ class Handler(BaseHTTPRequestHandler):
         if not cfg.memory_admin_enabled:
             self._send_json({"error": "memory admin mode is disabled", "config": public_config(cfg)}, 403)
             return False
+        local_request = cfg.host in {"127.0.0.1", "localhost", "::1"} and self.client_address[0] in {"127.0.0.1", "::1"}
+        if local_request:
+            return True
         if not cfg.auth_enabled or not cfg.has_password or not self._authenticated():
-            self._send_json({"error": "password auth is required for memory admin mode", **self._auth_status()}, 401)
+            self._send_json({"error": "password auth is required for memory admin mode on LAN/non-local hosts", **self._auth_status()}, 401)
             return False
         return True
 
