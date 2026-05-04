@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8
+
+- Add a compact theme toggle directly to the mobile top bar so light/dark mode is available without opening the hamburger menu.
+
 ## 0.3.7
 
 - Treat short phone-landscape viewports as compact mobile layout so the menu stays collapsed and desktop hero/sidebar content does not dominate the screen.

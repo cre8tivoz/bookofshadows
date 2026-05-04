@@ -7,9 +7,8 @@ let consolidationState = [];
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
   localStorage.setItem(THEME_KEY, theme);
-  const icon = $('#themeIcon'), label = $('#themeLabel');
-  if(icon) icon.textContent = theme === 'light' ? '☀' : '☾';
-  if(label) label.textContent = theme === 'light' ? 'Light' : 'Dark';
+  $$('.theme-icon').forEach(icon => { icon.textContent = theme === 'light' ? '☀' : '☾'; });
+  $$('.theme-label').forEach(label => { label.textContent = theme === 'light' ? 'Light' : 'Dark'; });
 }
 function initTheme(){
   const saved = localStorage.getItem(THEME_KEY);
@@ -288,6 +287,8 @@ $('#saveAuth').onclick = async () => {
 };
 $('#clearAuth').onclick = async () => { const r = await postJson('/api/config', {clear_password:true}); $('#authEnabled').checked=false; $('#authPassword').value=''; $('#authStatus').textContent = r.message || 'Auth disabled'; };
 $('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {}); showLogin(); };
-$('#themeToggle').onclick = () => setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
+$('#themeToggle').onclick = toggleTheme;
+$('#mobileThemeToggle').onclick = toggleTheme;
 initTheme();
 api('/api/auth/status').then(s => { if(s.auth_enabled && !s.authenticated) showLogin(); else loadStats(); }).catch(() => showLogin());
