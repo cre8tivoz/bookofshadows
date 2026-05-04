@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5
+
+- Rename the brand subtitle from "Memory OS" to "Local Memory".
+
 ## 0.3.4
 
 - Fix mobile stat-card number descenders being clipped in light theme by giving Playfair numerals extra line-height and bottom breathing room.
