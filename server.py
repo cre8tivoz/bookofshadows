@@ -42,6 +42,9 @@ class Handler(BaseHTTPRequestHandler):
 
     @property
     def cfg(self):
+        saved_cfg = getattr(self.server, "saved_config", None)
+        if saved_cfg is not None:
+            return saved_cfg
         return effective_config({
             "host": getattr(self.server, "bind_host", None),
             "port": getattr(self.server, "bind_port", None),
@@ -203,9 +206,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/auth/logout":
                 return self._send_json({"ok": True}, headers={"Set-Cookie": f"{AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"})
             if path == "/api/config":
-                allowed = {"auth_enabled", "password", "clear_password"}
+                allowed = {"host", "port", "db_path", "auth_enabled", "password", "clear_password"}
                 updates = {k: body.get(k) for k in allowed if k in body}
                 cfg = save_config(**updates)
+                self.server.saved_config = cfg
                 return self._send_json({"ok": True, "config": public_config(cfg), "message": "Saved. Auth changes take effect immediately; host/port/db changes require restart."})
             return self._send_json({"error": "not found"}, 404)
         except Exception as e:

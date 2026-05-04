@@ -31,7 +31,7 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
   - Explore — global search, memory browser, and recall debugger
   - Activity — timeline and consolidation history
   - Graph — relationship graph and triples table
-  - Settings — optional password authentication
+  - Settings — optional password authentication and server/database config
 - Overview counts for working memory, episodic memory, triples, and consolidations
 - Recent memory cards with raw JSON detail drawer
 - Clickable overview breakdown rows and quick actions that jump into filtered workflows
@@ -48,6 +48,7 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
   - Inspector panel with jumps into Triples and Memories
   - Triples table with clickable row details
 - Optional password authentication, configurable from the Settings tab
+- Editable Settings fields for bind address, port, and Mnemosyne database path
 - Desktop and mobile responsive layouts
 - Dark and light themes
 - Mnemosyne-inspired light theme with self-hosted fonts/assets

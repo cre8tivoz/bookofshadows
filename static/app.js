@@ -203,6 +203,11 @@ async function loadTimeline(){
 }
 async function loadAuthStatus(){
   const data = await api('/api/auth/status');
+  const cfg = data.config || {};
+  $('#configHost').value = cfg.host || '';
+  $('#configPort').value = cfg.port || '';
+  $('#configDbPath').value = cfg.db_path || '';
+  $('#configStatus').textContent = `Current local URL: ${cfg.local_url || ''}`;
   $('#authEnabled').checked = !!data.auth_enabled;
   $('#authStatus').textContent = data.has_password ? 'Password is set.' : 'No password set.';
 }
@@ -305,6 +310,17 @@ $('#loginButton').onclick = async () => {
   catch(e){ $('#loginError').textContent = e.message; }
 };
 $('#loginPassword').onkeydown = e => { if(e.key==='Enter') $('#loginButton').click(); };
+$('#saveRuntimeConfig').onclick = async () => {
+  try {
+    const body = {host: $('#configHost').value.trim(), port: $('#configPort').value.trim(), db_path: $('#configDbPath').value.trim()};
+    const r = await postJson('/api/config', body);
+    const cfg = r.config || {};
+    $('#configHost').value = cfg.host || '';
+    $('#configPort').value = cfg.port || '';
+    $('#configDbPath').value = cfg.db_path || '';
+    $('#configStatus').textContent = r.message || 'Saved. Restart the dashboard to apply server/database changes.';
+  } catch(e) { $('#configStatus').textContent = e.message; }
+};
 $('#saveAuth').onclick = async () => {
   try { const body = {auth_enabled: $('#authEnabled').checked}; if($('#authPassword').value) body.password = $('#authPassword').value; const r = await postJson('/api/config', body); $('#authPassword').value=''; $('#authStatus').textContent = r.message || 'Saved'; }
   catch(e){ $('#authStatus').textContent = e.message; }

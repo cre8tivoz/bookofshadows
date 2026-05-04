@@ -172,6 +172,19 @@
           <div class="section-head"><h2>Settings</h2><span>access control</span></div>
           <div class="settings-grid">
             <div class="glass settings-card">
+              <div class="breakdown-title">Server + database</div>
+              <p class="muted">Controls where the dashboard binds and which Mnemosyne SQLite database it reads. Save here, then restart the dashboard for host, port, or database path changes to take effect.</p>
+              <label class="field-label" for="configHost">Address / host</label>
+              <input id="configHost" placeholder="127.0.0.1" />
+              <p class="helper-text"><strong>127.0.0.1</strong> = localhost only. <strong>0.0.0.0</strong> = LAN access from phones/other machines on your network.</p>
+              <label class="field-label" for="configPort">Port</label>
+              <input id="configPort" inputmode="numeric" placeholder="8765" />
+              <label class="field-label" for="configDbPath">Database location</label>
+              <input id="configDbPath" placeholder="~/.hermes/mnemosyne/data/mnemosyne.db" />
+              <div class="item-actions"><button id="saveRuntimeConfig" class="primary">Save server settings</button></div>
+              <p id="configStatus" class="muted"></p>
+            </div>
+            <div class="glass settings-card">
               <div class="breakdown-title">Password auth</div>
               <p class="muted">Optional. If enabled, users must enter the password before API data loads. Good idea on LAN, but not forced.</p>
               <label class="check-row"><input id="authEnabled" type="checkbox" /> Enable password</label>

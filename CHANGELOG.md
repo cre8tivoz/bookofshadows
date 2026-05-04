@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3
+
+- Add editable Settings fields for dashboard address/host, port, and Mnemosyne database location.
+- Explain localhost (`127.0.0.1`) vs LAN (`0.0.0.0`) binding directly in the Settings UI.
+- Allow the web Settings form to save host, port, and database path to plugin config, with restart guidance for changes to apply.
+
 ## 0.4.2
 
 - Make the Mnemosyne brand mark/wordmark clickable on desktop and mobile so it returns to the Overview dashboard.

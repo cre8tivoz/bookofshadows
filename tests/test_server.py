@@ -79,3 +79,27 @@ def test_static_path_escape_is_blocked(tmp_path, monkeypatch):
         assert b"not found" in body
     finally:
         server.close()
+
+
+def test_config_post_updates_server_and_database_settings(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        new_db = tmp_path / "other-mnemosyne.db"
+        status, _headers, body = _request(
+            f"{server.base}/api/config",
+            method="POST",
+            body={"host": "0.0.0.0", "port": "9876", "db_path": str(new_db)},
+        )
+        payload = json.loads(body)
+        assert status == 200
+        assert payload["config"]["host"] == "0.0.0.0"
+        assert payload["config"]["port"] == 9876
+        assert payload["config"]["db_path"] == str(new_db)
+        assert payload["config"]["local_url"] == "http://127.0.0.1:9876/"
+
+        status, _headers, body = _request(f"{server.base}/api/auth/status")
+        payload = json.loads(body)
+        assert status == 200
+        assert payload["config"]["host"] == "0.0.0.0"
+    finally:
+        server.close()
