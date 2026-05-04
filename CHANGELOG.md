@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+
+- Make the Mnemosyne brand mark/wordmark clickable on desktop and mobile so it returns to the Overview dashboard.
+
 ## 0.4.1
 
 - Remove the Local only sidebar badge from desktop and mobile navigation to keep the sidebar/menu focused on product navigation.
