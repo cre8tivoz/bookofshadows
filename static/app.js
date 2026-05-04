@@ -27,7 +27,15 @@ async function postJson(path, body){ return api(path, {method:'POST', headers:{'
 function showLogin(){ $('#loginOverlay')?.classList.remove('hidden'); }
 function hideLogin(){ $('#loginOverlay')?.classList.add('hidden'); }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function meta(item){ const status = item.status || 'active'; return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge status-${esc(status)}">${esc(status)}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span><span class="badge">${esc(item.scope || '')}</span><span>${esc(item.timestamp || item.created_at || '')}</span></div>`; }
+function shortId(value, head=8, tail=6){ const s = String(value || '').trim(); return s.length > head + tail + 1 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s; }
+function meta(item){
+  const status = item.status || 'active';
+  const scope = String(item.scope || '').trim();
+  const session = String(item.session_id || '').trim();
+  const scopeBadge = scope && scope !== 'session' ? `<span class="badge" title="scope: ${esc(scope)}">${esc(scope)}</span>` : '';
+  const sessionBadge = session && session !== 'default' ? `<span class="badge" title="session_id: ${esc(session)}">session ${esc(shortId(session))}</span>` : '';
+  return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge status-${esc(status)}">${esc(status)}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span>${scopeBadge}${sessionBadge}<span>${esc(item.timestamp || item.created_at || '')}</span></div>`;
+}
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
 function memoryItem(item){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; return `<div class="item ${role ? 'has-role' : ''}" data-id="${esc(item.id)}">${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
 function showDetail(obj, title='Detail'){
