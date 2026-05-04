@@ -44,6 +44,77 @@ function showHtmlDetail(html, title='Detail'){
   $('#detailBody').innerHTML = html;
   $('#detail').classList.remove('hidden');
 }
+
+function modalTemplate(){
+  let modal = $('#actionModal');
+  if(modal) return modal;
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="actionModal" class="action-modal hidden" role="dialog" aria-modal="true">
+      <div class="action-modal-card glass">
+        <button id="actionModalClose" class="modal-close" aria-label="Close dialog">×</button>
+        <div id="actionModalKicker" class="modal-kicker">Memory maintenance</div>
+        <h2 id="actionModalTitle">Confirm action</h2>
+        <p id="actionModalDescription" class="muted"></p>
+        <div id="actionModalBody"></div>
+        <p id="actionModalError" class="modal-error"></p>
+        <div class="modal-actions">
+          <button id="actionModalCancel">Cancel</button>
+          <button id="actionModalConfirm" class="primary">Confirm</button>
+        </div>
+      </div>
+    </div>`);
+  return $('#actionModal');
+}
+function openActionModal({title, description='', kicker='Memory maintenance', confirmText='Confirm', tone='', bodyHtml='', readValue=()=>true, validate=()=>''}){
+  return new Promise(resolve => {
+    const modal = modalTemplate();
+    $('#actionModalKicker').textContent = kicker;
+    $('#actionModalTitle').textContent = title;
+    $('#actionModalDescription').textContent = description;
+    $('#actionModalBody').innerHTML = bodyHtml;
+    $('#actionModalConfirm').textContent = confirmText;
+    $('#actionModalConfirm').className = `primary ${tone}`.trim();
+    $('#actionModalError').textContent = '';
+    const close = (value) => { modal.classList.add('hidden'); document.removeEventListener('keydown', onKey); resolve(value); };
+    const onKey = (e) => { if(e.key === 'Escape') close(null); if(e.key === 'Enter' && !e.target.matches('textarea')) $('#actionModalConfirm').click(); };
+    $('#actionModalClose').onclick = () => close(null);
+    $('#actionModalCancel').onclick = () => close(null);
+    modal.onclick = (e) => { if(e.target === modal) close(null); };
+    $('#actionModalConfirm').onclick = () => {
+      const value = readValue(modal);
+      const error = validate(value);
+      if(error){ $('#actionModalError').textContent = error; return; }
+      close(value);
+    };
+    modal.classList.remove('hidden');
+    document.addEventListener('keydown', onKey);
+    const first = modal.querySelector('textarea,input,button.primary');
+    setTimeout(() => first?.focus(), 30);
+  });
+}
+function confirmAction(opts){ return openActionModal(opts); }
+function askImportance(current){
+  return openActionModal({
+    title: 'Edit importance',
+    description: 'Set a value from 0.00 to 1.00. Higher importance makes this memory more likely to surface.',
+    confirmText: 'Save importance',
+    bodyHtml: `<label class="modal-field"><span>Importance</span><input id="modalImportance" type="number" min="0" max="1" step="0.01" value="${esc(Number(current ?? 0.5).toFixed(2))}" /></label>`,
+    readValue: () => Number($('#modalImportance').value),
+    validate: (v) => Number.isFinite(v) && v >= 0 && v <= 1 ? '' : 'Enter a number between 0.00 and 1.00.'
+  });
+}
+function askReplacement(content){
+  return openActionModal({
+    title: 'Supersede memory',
+    description: 'Create a corrected replacement memory and expire the old one. The original stays in history.',
+    confirmText: 'Create replacement',
+    tone: 'dangerish',
+    bodyHtml: `<label class="modal-field"><span>Replacement memory content</span><textarea id="modalReplacement" rows="9">${esc(content || '')}</textarea></label>`,
+    readValue: () => $('#modalReplacement').value.trim(),
+    validate: (v) => v ? '' : 'Replacement content cannot be empty.'
+  });
+}
+
 function fmtBytes(n){
   n = Number(n || 0);
   if(!n) return '0 B';
@@ -162,9 +233,9 @@ function memoryDetailHtml(item){
         <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || 'none')}</strong></div>
         <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || 'none')}</strong></div>
       </div>
-      <div class="item-actions memory-actions">
-        <button id="copyMemoryId" class="tiny">Copy ID</button>
-        ${admin ? '<button id="expireMemory" class="tiny warn">Expire now</button><button id="editImportance" class="tiny">Edit importance</button><button id="supersedeMemory" class="primary tiny">Supersede</button>' : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>'}
+      <div class="drawer-actions memory-actions">
+        <button id="copyMemoryId" class="drawer-action">Copy ID</button>
+        ${admin ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>'}
       </div>
       <p id="memoryActionStatus" class="muted"></p>
     </div>`;
@@ -176,18 +247,24 @@ async function openMemoryDetail(memoryId){
   if(!canAdmin()) return;
   const backup = () => $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
   $('#expireMemory').onclick = async () => {
-    if(!confirm('Expire this memory now? It will be removed from active recall but kept for history.')) return;
+    const ok = await confirmAction({
+      title: 'Expire this memory?',
+      description: 'It will disappear from active recall, but the original record stays available for history and audit.',
+      confirmText: 'Expire memory',
+      tone: 'warn'
+    });
+    if(!ok) return;
     try { const r = await postJson('/api/admin/memory/invalidate', {memory_id:item.id, backup: backup()}); $('#memoryActionStatus').textContent = `Expired. Backup: ${r.backup?.path || 'not created'}`; await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#editImportance').onclick = async () => {
-    const v = prompt('New importance, 0.0 to 1.0', Number(item.importance ?? 0.5).toFixed(2));
+    const v = await askImportance(item.importance ?? 0.5);
     if(v === null) return;
     try { const r = await postJson('/api/admin/memory/importance', {memory_id:item.id, importance:Number(v), backup: backup()}); $('#memoryActionStatus').textContent = `Importance updated to ${r.importance}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#supersedeMemory').onclick = async () => {
-    const replacement = prompt('Replacement memory content. This creates a new corrected memory and expires the old one.', item.content || '');
+    const replacement = await askReplacement(item.content || '');
     if(replacement === null) return;
     try { const r = await postJson('/api/admin/memory/supersede', {memory_id:item.id, content:replacement, importance:Number(item.importance ?? 0.5), backup: backup()}); $('#memoryActionStatus').textContent = `Superseded by ${r.replacement_id}.`; $('#memoryStatus').value = 'all'; await loadStats(); await loadMemories(); await openMemoryDetail(r.replacement_id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
@@ -204,12 +281,12 @@ async function openSessionDetail(sessionId){
       <div class="diag-pill"><strong>${esc(c.triples || 0)}</strong><span>triples</span></div>
       <div class="diag-pill"><strong>${esc(c.consolidations || 0)}</strong><span>consolidations</span></div>
     </div>
-    <div class="item-actions session-actions"><button id="sessionBrowseMemories" class="primary tiny">Browse memories</button><button id="sessionTimeline" class="tiny">Timeline by session</button><button id="sessionCopy" class="tiny">Copy session ID</button></div>
+    <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
     <div class="result-section"><h3>Timeline <span>${esc(c.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join('') || '<p class="muted">No events for this session.</p>'}</div></div>
   `, `Session ${sessionId}`);
   $('#sessionBrowseMemories').onclick = () => { $('#memorySession').value = sessionId; $('#memoryKind').value = 'all'; $('#memoryQuery').value = ''; switchTab('memories'); $('#detail').classList.add('hidden'); };
   $('#sessionTimeline').onclick = () => { $('#timelineGroup').value = 'session'; $('#timelineQuery').value = sessionId; switchTab('timelineView'); $('#detail').classList.add('hidden'); };
-  $('#sessionCopy').onclick = async () => { await navigator.clipboard?.writeText(sessionId); };
+  $('#sessionCopy').onclick = async () => { await navigator.clipboard?.writeText(sessionId); $('#sessionCopy').textContent = 'Copied'; setTimeout(() => $('#sessionCopy').textContent = 'Copy session ID', 900); };
   $$('#detailBody .session-event').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Session event detail'));
 }
 async function loadTriples(){
