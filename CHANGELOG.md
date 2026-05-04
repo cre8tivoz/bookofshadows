@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6
+
+- Change dashboard searches from broad substring matching to token-prefix matching so terms like "Dian" no longer match inside words such as "Obsidian".
+
 ## 0.3.5
 
 - Rename the brand subtitle from "Memory OS" to "Memory for Hermes".

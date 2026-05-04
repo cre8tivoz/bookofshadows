@@ -66,7 +66,7 @@ def test_invalid_limit_query_falls_back_instead_of_500(tmp_path, monkeypatch):
         status, _headers, body = _request(f"{server.base}/api/memories?limit=not-a-number")
         payload = json.loads(body)
         assert status == 200
-        assert len(payload["items"]) == 2
+        assert len(payload["items"]) == 4
     finally:
         server.close()
 

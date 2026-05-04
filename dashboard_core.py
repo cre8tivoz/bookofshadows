@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ class DashboardStore:
         uri = f"file:{self.db_path}?mode=ro"
         con = sqlite3.connect(uri, uri=True, timeout=10)
         con.row_factory = sqlite3.Row
+        con.create_function("REGEXP", 2, self._regexp)
         return con
 
     @staticmethod
@@ -41,8 +43,22 @@ class DashboardStore:
         return d
 
     @staticmethod
-    def _like(value: str) -> str:
-        return f"%{value.replace('%', '').replace('_', '')}%"
+    def _regexp(pattern: str, value: object) -> int:
+        if value is None:
+            return 0
+        return 1 if re.search(pattern, str(value), flags=re.IGNORECASE) else 0
+
+    @staticmethod
+    def _search_terms(value: str) -> list[str]:
+        return [term for term in re.findall(r"[\w-]+", value or "") if term]
+
+    @classmethod
+    def _prefix_pattern(cls, value: str) -> str:
+        terms = cls._search_terms(value)
+        if not terms:
+            return r"a^"
+        lookaheads = "".join(rf"(?=.*(?:^|[^\w]){re.escape(term)})" for term in terms)
+        return lookaheads + r".*"
 
     def stats(self) -> dict[str, Any]:
         with self.connect() as con:
@@ -130,8 +146,8 @@ class DashboardStore:
                 where = []
                 params: list[Any] = []
                 if q:
-                    where.append("content LIKE ?")
-                    params.append(self._like(q))
+                    where.append("content REGEXP ?")
+                    params.append(self._prefix_pattern(q))
                 if source:
                     where.append("source = ?")
                     params.append(source)
@@ -177,13 +193,13 @@ class DashboardStore:
         where = []
         params: list[Any] = []
         if q:
-            where.append("(subject LIKE ? OR predicate LIKE ? OR object LIKE ?)")
-            like = self._like(q)
-            params += [like, like, like]
+            pattern = self._prefix_pattern(q)
+            where.append("(subject REGEXP ? OR predicate REGEXP ? OR object REGEXP ?)")
+            params += [pattern, pattern, pattern]
         for col, value in [("subject", subject), ("predicate", predicate), ("object", object_)]:
             if value:
-                where.append(f"{col} LIKE ?")
-                params.append(self._like(value))
+                where.append(f"{col} REGEXP ?")
+                params.append(self._prefix_pattern(value))
         clause = "WHERE " + " AND ".join(where) if where else ""
         with self.connect() as con:
             if "triples" not in self._tables(con):
@@ -235,9 +251,9 @@ class DashboardStore:
         where = ""
         params: list[Any] = []
         if q:
-            where = "WHERE session_id LIKE ? OR summary_preview LIKE ? OR created_at LIKE ?"
-            like = self._like(q)
-            params = [like, like, like]
+            where = "WHERE session_id REGEXP ? OR summary_preview REGEXP ? OR created_at REGEXP ?"
+            pattern = self._prefix_pattern(q)
+            params = [pattern, pattern, pattern]
         with self.connect() as con:
             if "consolidation_log" not in self._tables(con):
                 return []

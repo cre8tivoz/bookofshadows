@@ -44,8 +44,16 @@ def make_db(path: Path):
                 ('w1','YC prefers local-only WhatsApp memory','preference','2026-01-01T00:00:00','s1',0.9,'global'))
     con.execute("INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,summary_of) VALUES (?,?,?,?,?,?,?,?)",
                 ('e1','Built a Mnemosyne dashboard visualiser','task','2026-01-02T00:00:00','s2',0.6,'session','w1'))
+    con.execute("INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope) VALUES (?,?,?,?,?,?,?)",
+                ('w2','YC uses Obsidian for notes','preference','2026-01-03T00:00:00','s3',0.4,'global'))
+    con.execute("INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope) VALUES (?,?,?,?,?,?,?)",
+                ('w3','YC knows Diana from school','preference','2026-01-04T00:00:00','s4',0.4,'global'))
     con.execute("INSERT INTO triples(subject,predicate,object,valid_from,source,confidence) VALUES (?,?,?,?,?,?)",
                 ('YC','prefers','local-only memory','2026-01-01','preference',0.95))
+    con.execute("INSERT INTO triples(subject,predicate,object,valid_from,source,confidence) VALUES (?,?,?,?,?,?)",
+                ('YC','uses','Obsidian','2026-01-01','preference',0.95))
+    con.execute("INSERT INTO triples(subject,predicate,object,valid_from,source,confidence) VALUES (?,?,?,?,?,?)",
+                ('YC','knows','Diana','2026-01-01','preference',0.95))
     con.execute("INSERT INTO consolidation_log(session_id,items_consolidated,summary_preview) VALUES (?,?,?)",
                 ('s2',3,'Dashboard work'))
     con.commit()
@@ -56,9 +64,9 @@ def test_stats_counts_memory_tables(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
     stats = DashboardStore(db).stats()
-    assert stats['counts']['working_memory'] == 1
+    assert stats['counts']['working_memory'] == 3
     assert stats['counts']['episodic_memory'] == 1
-    assert stats['counts']['triples'] == 1
+    assert stats['counts']['triples'] == 3
     assert stats['counts']['consolidation_log'] == 1
 
 
@@ -70,10 +78,26 @@ def test_list_memories_searches_both_tiers(tmp_path):
     assert rows[0]['tier'] == 'episodic'
 
 
+def test_search_uses_token_prefix_not_mid_word_substring(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    memory_rows = store.list_memories(kind='all', q='Dian', limit=10)
+    assert [r['id'] for r in memory_rows] == ['w3']
+
+    triple_rows = store.triples(q='Dian', limit=10)
+    assert [r['object'] for r in triple_rows] == ['Diana']
+
+    search = store.global_search(q='Dian', limit=10)
+    assert [r['id'] for r in search['memories']] == ['w3']
+    assert [r['object'] for r in search['triples']] == ['Diana']
+
+
 def test_list_memories_filters_and_sorts_by_importance(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
-    rows = DashboardStore(db).list_memories(kind='all', scope='global', sort='importance', limit=10)
+    rows = DashboardStore(db).list_memories(kind='all', scope='global', session_id='s1', sort='importance', limit=10)
     assert [r['id'] for r in rows] == ['w1']
     assert rows[0]['importance'] == 0.9
 
