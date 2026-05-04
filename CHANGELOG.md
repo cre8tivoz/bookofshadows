@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7
+
+- Treat short phone-landscape viewports as compact mobile layout so the menu stays collapsed and desktop hero/sidebar content does not dominate the screen.
+- Close the mobile menu automatically on resize/orientation changes.
+
 ## 0.3.6
 
 - Change dashboard searches from broad substring matching to token-prefix matching so terms like "Dian" no longer match inside words such as "Obsidian".

@@ -49,18 +49,21 @@ function fillSelect(sel, options, first){
 function breakdown(rows, labelKey, max=8){
   return rows.slice(0,max).map(r => `<div class="break-row" data-filter="${esc(r[labelKey] || '')}"><span>${esc(r[labelKey] || 'unknown')}</span><strong>${Number(r.count).toLocaleString()}</strong></div>`).join('') || '<p class="muted">No data</p>';
 }
-function switchTab(name){
-  document.body.classList.toggle('compact-page', name !== 'overview');
-  $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
-  $(`#${name}`).classList.add('active');
-  const nav = document.querySelector(`nav button[data-tab="${name}"]`);
-  if(nav) nav.classList.add('active');
+function closeMobileMenu(){
   document.body.classList.remove('mobile-menu-open');
   const menuToggle = $('#mobileMenuToggle');
   if(menuToggle) {
     menuToggle.setAttribute('aria-expanded', 'false');
     menuToggle.textContent = '☰';
   }
+}
+function switchTab(name){
+  document.body.classList.toggle('compact-page', name !== 'overview');
+  $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
+  $(`#${name}`).classList.add('active');
+  const nav = document.querySelector(`nav button[data-tab="${name}"]`);
+  if(nav) nav.classList.add('active');
+  closeMobileMenu();
   if(name==='graph') loadGraph();
   if(name==='triples') loadTriples();
   if(name==='consolidations') loadConsolidations();
@@ -260,6 +263,8 @@ $('#mobileMenuToggle').onclick = () => {
   $('#mobileMenuToggle').textContent = isOpen ? '×' : '☰';
   $('#mobileMenuToggle').setAttribute('aria-expanded', String(isOpen));
 };
+window.addEventListener('resize', closeMobileMenu, { passive: true });
+window.addEventListener('orientationchange', closeMobileMenu, { passive: true });
 $('#memorySearch').onclick = loadMemories; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') loadMemories(); };
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
