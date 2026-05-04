@@ -226,13 +226,13 @@ function showPanel(sectionId, panelId){
   section.querySelectorAll('.section-tabs button').forEach(button => button.classList.toggle('active', button.dataset.panel === panelId));
 }
 function sectionFor(name){
-  return ({ search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph' })[name] || name;
+  return ({ search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
 }
 function defaultPanelFor(section){
-  return ({ explore:'exploreSearch', activity:'activityTimeline', graph:'graphGraph' })[section];
+  return ({ explore:'exploreSearch', activity:'activityTimeline', graph:'graphGraph', today:'todayAdded' })[section];
 }
 function panelFor(name){
-  return ({ search:'exploreSearch', memories:'exploreMemories', recall:'exploreRecall', timelineView:'activityTimeline', consolidations:'activityConsolidations', graph:'graphGraph', triples:'graphTriples' })[name] || defaultPanelFor(name);
+  return ({ search:'exploreSearch', memories:'exploreMemories', recall:'exploreRecall', timelineView:'activityTimeline', consolidations:'activityConsolidations', graph:'graphGraph', triples:'graphTriples', today:'todayAdded', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[name] || defaultPanelFor(name);
 }
 function switchTab(name, opts={}){
   const section = sectionFor(name);
@@ -253,6 +253,9 @@ function switchTab(name, opts={}){
   if(name==='search' || section==='explore') loadGlobalSearch();
   if(name==='recall') loadRecallDebug();
   if(name==='timelineView' || section==='activity') loadTimeline();
+  if(section==='today') loadTodayDigest();
+  if(section==='profile') loadProfile();
+  if(section==='constellation') loadConstellation();
   if(section==='settings') { loadAuthStatus(); loadDiagnostics(); }
 }
 
@@ -500,6 +503,57 @@ async function loadTimeline(){
   $$('#timelineResults .session-chip').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
   $$('#timelineResults .open-session').forEach(btn => btn.onclick = () => openSessionDetail(btn.dataset.session || ''));
 }
+function tinyRows(rows, key='label'){ return (rows || []).map(r => `<div class="break-row"><span>${esc(r[key] || r.label || 'unknown')}</span><strong>${Number(r.count || 0).toLocaleString()}</strong></div>`).join('') || '<p class="muted">No data</p>'; }
+function tripleItem(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">triple</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
+async function loadTodayDigest(day=''){
+  const suffix = day ? `&day=${encodeURIComponent(day)}` : '';
+  const data = await api(`/api/digest/today?limit=80${suffix}`);
+  const c = data.counts || {};
+  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Recalled', c.memories_recalled], ['Triples', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
+  $('#todayEntities').innerHTML = tinyRows(data.breakdowns?.entities || []);
+  $('#todaySources').innerHTML = tinyRows(data.breakdowns?.sources || []);
+  $('#todaySessions').innerHTML = tinyRows(data.breakdowns?.sessions || []);
+  $('#todayAdded .memory-grid').innerHTML = (data.memories_added || []).map(memoryItem).join('') || '<p class="muted">No memories added today.</p>';
+  $('#todayRecalled .memory-grid').innerHTML = (data.memories_recalled || []).map(memoryItem).join('') || '<p class="muted">No memories recalled today.</p>';
+  $('#todayTriples .memory-grid').innerHTML = (data.triples_added || []).map(tripleItem).join('') || '<p class="muted">No triples added today.</p>';
+  $('#todayConsolidations .memory-grid').innerHTML = (data.consolidations || []).map(consolidationCard).join('') || '<p class="muted">No consolidations today.</p>';
+  ['todayAdded','todayRecalled'].forEach(id => bindMemoryClicks($(`#${id}`)));
+  bindJsonCards($('#todayTriples'), 'Triple detail');
+  bindJsonCards($('#todayConsolidations'), 'Consolidation detail');
+}
+function profileItem(row){
+  const item = row.item || {};
+  const attrs = row.kind === 'memory' ? `data-id="${esc(item.id || '')}"` : `data-json='${esc(JSON.stringify(item))}'`;
+  return `<div class="profile-item" ${attrs}><span class="badge">${esc(row.kind)}</span><p>${esc(row.label || '')}</p><small>${esc(prettyTime(row.timestamp) || row.timestamp || '')} · score ${Number(row.importance || 0).toFixed(2)}</small></div>`;
+}
+async function loadProfile(){
+  const data = await api('/api/profile/inferred?limit=10');
+  $('#profileGrid').innerHTML = (data.sections || []).map(s => `<section class="profile-section glass"><div class="section-head mini"><h2>${esc(s.name)}</h2><span>${esc(s.count)} signal${Number(s.count) === 1 ? '' : 's'}</span></div>${(s.items || []).map(profileItem).join('')}</section>`).join('') || '<p class="muted">No inferred profile data found.</p>';
+  $$('#profileGrid .profile-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
+  $$('#profileGrid .profile-item[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail'));
+}
+function constellationInspectorDefault(){ $('#constellationInspector').innerHTML = `<div class="inspector-kicker">Constellation inspector</div><h3>Nothing selected</h3><p class="muted">Pick a star, memory, or link to inspect the underlying read-only source.</p>`; }
+function inspectConstellationNode(node){
+  $('#constellationInspector').innerHTML = `<div class="inspector-kicker">${esc(node.kind || 'entity')}</div><h3>${esc(node.label)}</h3><p class="muted">${esc(node.category || 'Other')} · ${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="constellationMemory" class="primary tiny">Open memory</button>' : ''}<button id="constellationSearch" class="tiny">Search memories</button></div>`;
+  if(node.memory_id) $('#constellationMemory').onclick = () => openMemoryDetail(node.memory_id);
+  $('#constellationSearch').onclick = () => { $('#memoryQuery').value = node.label.replace(/^memory:/,''); switchTab('memories'); };
+}
+function drawConstellation(data){
+  const svg = $('#constellationSvg'); svg.innerHTML = '';
+  const nodes = (data.nodes || []).slice(0,180);
+  const edges = (data.edges || []);
+  const w=1000,h=680,cx=w/2,cy=h/2;
+  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
+  nodes.forEach((n,i) => { const ci=catIndex[n.category || 'Other'] || 0; const angle=(i/nodes.length)*Math.PI*2 + ci*.45; const ring=n.kind === 'memory' ? 305 + (i%5)*42 : 165 + ci*48; n.x=cx+Math.cos(angle)*ring; n.y=cy+Math.sin(angle)*ring*.82; });
+  const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  svg.insertAdjacentHTML('afterbegin', `<defs><radialGradient id="starGlow"><stop offset="0%" stop-color="#fff"/><stop offset="45%" stop-color="#65d6ff"/><stop offset="100%" stop-color="#7c7cff" stop-opacity=".25"/></radialGradient><linearGradient id="constellationEdge" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#65d6ff" stop-opacity=".22"/><stop offset="55%" stop-color="#7c7cff" stop-opacity=".72"/><stop offset="100%" stop-color="#ffd166" stop-opacity=".28"/></linearGradient></defs>`);
+  edges.filter(e => byId[e.source] && byId[e.target]).slice(0,360).forEach(e => { const s=byId[e.source], t=byId[e.target]; const line=document.createElementNS('http://www.w3.org/2000/svg','line'); line.setAttribute('x1',s.x); line.setAttribute('y1',s.y); line.setAttribute('x2',t.x); line.setAttribute('y2',t.y); line.setAttribute('class',`constellation-link ${e.kind || ''}`); line.onclick = () => showDetail(e.item || e, 'Constellation link'); svg.appendChild(line); });
+  nodes.forEach(n => { const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('class',`constellation-node ${n.kind || 'entity'}`); g.dataset.id=n.id; g.onclick = () => inspectConstellationNode(n); const r=Math.min(24, 5 + Math.sqrt(Number(n.weight || n.count || 1))*4); const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',n.x); c.setAttribute('cy',n.y); c.setAttribute('r',r); g.appendChild(c); const text=document.createElementNS('http://www.w3.org/2000/svg','text'); text.textContent=(n.label || '').replace(/^memory:/,'mem '); if(text.textContent.length>26) text.textContent=text.textContent.slice(0,23)+'…'; text.setAttribute('x',n.x+r+5); text.setAttribute('y',n.y+4); g.appendChild(text); svg.appendChild(g); });
+  $('#constellationClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
+  constellationInspectorDefault();
+}
+async function loadConstellation(){ drawConstellation(await api('/api/constellation?limit=240')); }
 async function loadDiagnostics(){
   const diag = await api('/api/diagnostics');
   const counts = diag.table_counts || {};
@@ -635,7 +689,7 @@ async function loadGraph(){
 
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 $$('.section-tabs button').forEach(b => b.onclick = () => {
-  const panelRoute = ({ exploreSearch:'search', exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples' })[b.dataset.panel];
+  const panelRoute = ({ exploreSearch:'search', exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[b.dataset.panel];
   if(panelRoute) { switchTab(panelRoute); return; }
   const section = b.closest('.tab')?.id;
   showPanel(section, b.dataset.panel);
@@ -663,6 +717,8 @@ $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { i
 $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e.key==='Enter') loadGraph(); };
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };
 $('#graphResetView').onclick = resetGraphView;
+$('#constellationRefresh').onclick = loadConstellation;
+$('#constellationReset').onclick = loadConstellation;
 $('#consolidationQuery').oninput = renderConsolidations;
 $('#consolidationClear').onclick = () => { $('#consolidationQuery').value = ''; renderConsolidations(); };
 $('#closeDetail').onclick = () => closeDetail();

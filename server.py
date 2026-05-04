@@ -178,6 +178,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"items": self.store.audit_log(limit=_safe_int(q.get("limit"), 100, maximum=1000))})
             if path == "/api/stats":
                 return self._send_json(self.store.stats())
+            if path == "/api/digest/today":
+                return self._send_json(self.store.today_digest(day=q.get("day", ""), limit=_safe_int(q.get("limit"), 80, maximum=300)))
+            if path == "/api/profile/inferred":
+                return self._send_json(self.store.inferred_profile(limit_per_section=_safe_int(q.get("limit"), 10, maximum=30)))
+            if path == "/api/constellation":
+                return self._send_json(self.store.constellation(limit=_safe_int(q.get("limit"), 240, minimum=40, maximum=600)))
             if path == "/api/search":
                 return self._send_json(self.store.global_search(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 30, maximum=100)))
             if path == "/api/recall-debug":

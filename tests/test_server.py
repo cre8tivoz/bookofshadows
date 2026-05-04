@@ -68,7 +68,7 @@ def test_invalid_limit_query_falls_back_instead_of_500(tmp_path, monkeypatch):
         status, _headers, body = _request(f"{server.base}/api/memories?limit=not-a-number")
         payload = json.loads(body)
         assert status == 200
-        assert len(payload["items"]) == 4
+        assert len(payload["items"]) == 6
     finally:
         server.close()
 
@@ -101,13 +101,25 @@ def test_diagnostics_and_session_endpoints(tmp_path, monkeypatch):
         payload = json.loads(body)
         assert status == 200
         assert payload["ok"] is True
-        assert payload["table_counts"]["working_memory"] == 3
+        assert payload["table_counts"]["working_memory"] == 4
 
         status, _headers, body = _request(f"{server.base}/api/session?id=s2")
         payload = json.loads(body)
         assert status == 200
         assert payload["counts"]["memories"] == 1
         assert payload["counts"]["consolidations"] == 1
+    finally:
+        server.close()
+
+
+def test_memory_intelligence_endpoints_are_read_only(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        for path in ("/api/digest/today?day=2026-05-04", "/api/profile/inferred", "/api/constellation?limit=80"):
+            status, _headers, body = _request(f"{server.base}{path}")
+            payload = json.loads(body)
+            assert status == 200
+            assert payload["read_only"] is True
     finally:
         server.close()
 

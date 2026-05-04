@@ -11,6 +11,9 @@ The screenshots below are generated from a synthetic mock Mnemosyne database. Th
 | Desktop | Mobile |
 | --- | --- |
 | ![Desktop dark overview](docs/screenshots/desktop-dark-overview.png) | ![Mobile dark overview](docs/screenshots/mobile-dark-overview.png) |
+| ![Desktop dark Today in memory](docs/screenshots/desktop-dark-today.png) | ![Mobile light Today in memory](docs/screenshots/mobile-light-today.png) |
+| ![Desktop light inferred profile](docs/screenshots/desktop-light-profile.png) | ![Mobile dark inferred profile](docs/screenshots/mobile-dark-profile.png) |
+| ![Desktop dark memory constellation](docs/screenshots/desktop-dark-constellation.png) | ![Mobile light memory constellation](docs/screenshots/mobile-light-constellation.png) |
 | ![Desktop light overview](docs/screenshots/desktop-light-overview.png) | ![Mobile light search](docs/screenshots/mobile-light-search.png) |
 | ![Desktop dark global search](docs/screenshots/desktop-dark-search.png) | ![Mobile dark timeline](docs/screenshots/mobile-dark-timeline.png) |
 | ![Desktop light graph](docs/screenshots/desktop-light-graph.png) | ![Mobile light graph](docs/screenshots/mobile-light-graph.png) |
@@ -26,8 +29,15 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 
 ## Features
 
-- Five-section product navigation instead of raw database tabs:
+- Read-only Memory Intelligence views:
+  - Today — daily digest of memories added/recalled, triples, consolidations, entities, sources, and sessions
+  - Profile — inferred “What Hammy knows” sections derived from active memories and triples without writing back
+  - Constellation — entity stars and orbiting memory traces with a click-through read-only inspector
+- Eight-section product navigation instead of raw database tabs:
   - Overview — counts, breakdowns, quick actions, and recent memories
+  - Today — read-only daily memory digest
+  - Profile — inferred profile from active memory
+  - Constellation — entity/memory relationship constellation
   - Explore — global search, memory browser, and recall debugger
   - Activity — timeline and consolidation history
   - Graph — relationship graph and triples table

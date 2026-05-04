@@ -6,6 +6,7 @@ import re
 import shutil
 import sqlite3
 import uuid
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -558,6 +559,180 @@ class DashboardStore:
         self._audit("supersede", memory_id, before, after, {"replacement_id": replacement_id, "backup": backup_info})
         return {"ok": True, "memory_id": memory_id, "replacement_id": replacement_id, "backup": backup_info, "item": after, "replacement": replacement}
 
+
+    @staticmethod
+    def _today_key() -> str:
+        return datetime.now().astimezone().date().isoformat()
+
+    @staticmethod
+    def _entity_terms(*values: object, limit: int = 20) -> list[str]:
+        stop = {
+            "The", "This", "That", "User", "Assistant", "System", "When", "Involving", "Monday", "Tuesday", "Wednesday",
+            "Thursday", "Friday", "Saturday", "Sunday", "January", "February", "March", "April", "May", "June", "July",
+            "August", "September", "October", "November", "December", "Memory", "Dashboard", "Mnemosyne", "Hermes", "Agent",
+        }
+        counter: Counter[str] = Counter()
+        for value in values:
+            text = str(value or "")
+            for match in re.findall(r"\b(?:[A-Z][A-Za-z0-9_&.-]{2,}|[A-Z]{2,}|[A-Za-z]+(?:-[A-Za-z]+)+)\b", text):
+                label = match.strip(".,:;()[]{}'")
+                if len(label) < 3 or label in stop:
+                    continue
+                counter[label] += 1
+        return [label for label, _ in counter.most_common(limit)]
+
+    @staticmethod
+    def _category_for_text(text: str) -> str:
+        hay = text.lower()
+        buckets = [
+            ("Preferences", ("prefers", "preference", "likes", "wants", "expects", "avoid", "tone", "style")),
+            ("People", ("sheryl", "babu", "hope", "wife", "kid", "baby", "family", "person", "friend")),
+            ("Home setup", ("home", "house", "home assistant", "light", "camera", "sensor", "smart", "whatsapp")),
+            ("Work / business", ("work", "marketing", "business", "promptlybuilt", "linkedin", "github", "release", "office")),
+            ("Health / wearables", ("whoop", "health", "sleep", "recovery", "hrv", "wearable", "strain")),
+            ("Devices", ("mac", "device", "draw things", "gpu", "server", "iphone", "tesla", "zeekr")),
+            ("Projects", ("project", "plugin", "dashboard", "mnemosyne", "draw things", "health connect", "whoop")),
+            ("Privacy rules", ("privacy", "local-only", "local only", "no cloud", "whatsapp history", "access", "cannot")),
+        ]
+        for label, terms in buckets:
+            if any(term in hay for term in terms):
+                return label
+        return "Other"
+
+    def today_digest(self, day: str = "", limit: int = 80) -> dict[str, Any]:
+        day = (day or self._today_key())[:10]
+        limit = max(1, min(int(limit or 80), 300))
+        memories_today: list[dict[str, Any]] = []
+        recalled_today: list[dict[str, Any]] = []
+        with self.connect() as con:
+            tables = self._tables(con)
+            for table, tier in (("working_memory", "working"), ("episodic_memory", "episodic")):
+                if table not in tables:
+                    continue
+                cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+                base_cols = "id, content, source, timestamp, session_id, importance, metadata_json, created_at, recall_count, last_recalled, valid_until, superseded_by, scope, author_id, author_type, channel_id"
+                created_sql = f"SELECT {base_cols} FROM {table} WHERE substr(COALESCE(timestamp, created_at, ''), 1, 10) = ? ORDER BY COALESCE(timestamp, created_at) DESC LIMIT ?"
+                for row in con.execute(created_sql, (day, limit)):
+                    d = self._dict(row)
+                    d["tier"] = tier
+                    memories_today.append(d)
+                if "last_recalled" in cols:
+                    recalled_sql = f"SELECT {base_cols} FROM {table} WHERE substr(COALESCE(last_recalled, ''), 1, 10) = ? ORDER BY last_recalled DESC LIMIT ?"
+                    for row in con.execute(recalled_sql, (day, limit)):
+                        d = self._dict(row)
+                        d["tier"] = tier
+                        recalled_today.append(d)
+
+            triples_today = []
+            if "triples" in tables:
+                triples_today = [dict(r) for r in con.execute(
+                    "SELECT id, subject, predicate, object, valid_from, valid_until, source, confidence, created_at FROM triples WHERE substr(COALESCE(created_at, valid_from, ''), 1, 10) = ? ORDER BY COALESCE(created_at, valid_from) DESC LIMIT ?",
+                    (day, limit),
+                )]
+            consolidations_today = []
+            if "consolidation_log" in tables:
+                consolidations_today = [dict(r) for r in con.execute(
+                    "SELECT id, session_id, items_consolidated, summary_preview, created_at FROM consolidation_log WHERE substr(COALESCE(created_at, ''), 1, 10) = ? ORDER BY created_at DESC LIMIT ?",
+                    (day, limit),
+                )]
+
+        memories_today.sort(key=lambda r: r.get("timestamp") or r.get("created_at") or "", reverse=True)
+        recalled_today.sort(key=lambda r: r.get("last_recalled") or "", reverse=True)
+        source_counts = Counter(str(m.get("source") or "unknown") for m in memories_today)
+        session_counts = Counter(str(m.get("session_id") or "default") for m in memories_today)
+        tier_counts = Counter(str(m.get("tier") or "memory") for m in memories_today)
+        scope_counts = Counter(str(m.get("scope") or "unknown") for m in memories_today)
+        entity_values = [m.get("content") for m in memories_today[:limit]]
+        for t in triples_today:
+            entity_values += [t.get("subject"), t.get("object")]
+        top_entities = [{"label": x, "count": n} for x, n in Counter(self._entity_terms(*entity_values, limit=80)).most_common(16)]
+        return {
+            "day": day,
+            "read_only": True,
+            "counts": {
+                "memories_added": len(memories_today),
+                "memories_recalled": len(recalled_today),
+                "triples_added": len(triples_today),
+                "consolidations": len(consolidations_today),
+            },
+            "breakdowns": {
+                "tiers": [{"label": k, "count": v} for k, v in tier_counts.most_common()],
+                "sources": [{"label": k, "count": v} for k, v in source_counts.most_common(8)],
+                "scopes": [{"label": k, "count": v} for k, v in scope_counts.most_common(8)],
+                "sessions": [{"label": k, "count": v} for k, v in session_counts.most_common(8)],
+                "entities": top_entities,
+            },
+            "memories_added": memories_today[:limit],
+            "memories_recalled": recalled_today[:limit],
+            "triples_added": triples_today[:limit],
+            "consolidations": consolidations_today[:limit],
+        }
+
+    def inferred_profile(self, limit_per_section: int = 10) -> dict[str, Any]:
+        limit_per_section = max(3, min(int(limit_per_section or 10), 30))
+        sections = {name: [] for name in ["Preferences", "People", "Home setup", "Work / business", "Health / wearables", "Devices", "Projects", "Privacy rules", "Other"]}
+        memories = self.list_memories(kind="all", status="active", sort="importance", limit=500)
+        for m in memories:
+            category = self._category_for_text(str(m.get("content") or ""))
+            if len(sections[category]) >= limit_per_section:
+                continue
+            sections[category].append({"kind": "memory", "label": str(m.get("content") or "")[:160], "item": m, "importance": m.get("importance"), "timestamp": m.get("timestamp") or m.get("created_at")})
+        for t in self.triples(limit=500):
+            text = f"{t.get('subject')} {t.get('predicate')} {t.get('object')}"
+            category = self._category_for_text(text)
+            if len(sections[category]) >= limit_per_section:
+                continue
+            sections[category].append({"kind": "triple", "label": text, "item": t, "importance": t.get("confidence"), "timestamp": t.get("created_at") or t.get("valid_from")})
+        ordered = []
+        for name, items in sections.items():
+            if items:
+                ordered.append({"name": name, "count": len(items), "items": items[:limit_per_section]})
+        return {"read_only": True, "generated_at": _utc_now(), "sections": ordered}
+
+    def constellation(self, limit: int = 240) -> dict[str, Any]:
+        limit = max(40, min(int(limit or 240), 600))
+        nodes_by_label: dict[str, dict[str, Any]] = {}
+        edges: list[dict[str, Any]] = []
+
+        def touch(label: str, kind: str = "entity", weight: float = 1.0, category: str = "Other", timestamp: str = "") -> dict[str, Any]:
+            label = str(label or "unknown").strip()[:80]
+            if not label:
+                label = "unknown"
+            node = nodes_by_label.setdefault(label, {"id": f"n{len(nodes_by_label)+1}", "label": label, "kind": kind, "category": category, "weight": 0.0, "count": 0, "last_seen": ""})
+            node["weight"] = round(float(node["weight"]) + weight, 3)
+            node["count"] = int(node["count"]) + 1
+            if timestamp and timestamp > str(node.get("last_seen") or ""):
+                node["last_seen"] = timestamp
+            if node.get("category") == "Other" and category != "Other":
+                node["category"] = category
+            return node
+
+        triples = self.triples(limit=limit)
+        for t in triples:
+            ts = t.get("created_at") or t.get("valid_from") or ""
+            s_label, o_label = str(t.get("subject") or ""), str(t.get("object") or "")
+            category = self._category_for_text(f"{s_label} {t.get('predicate')} {o_label}")
+            s = touch(s_label, weight=float(t.get("confidence") or 0.8), category=category, timestamp=ts)
+            o = touch(o_label, weight=float(t.get("confidence") or 0.8), category=category, timestamp=ts)
+            edges.append({"id": f"e{t.get('id')}", "source": s["id"], "target": o["id"], "label": t.get("predicate"), "kind": "triple", "item": t})
+
+        memories = self.list_memories(kind="all", status="active", sort="importance", limit=120)
+        for m in memories:
+            ts = m.get("timestamp") or m.get("created_at") or ""
+            content = str(m.get("content") or "")
+            category = self._category_for_text(content)
+            m_node = touch(f"memory:{str(m.get('id') or '')[:10]}", kind="memory", weight=float(m.get("importance") or 0.4) * 1.5, category=category, timestamp=ts)
+            m_node["preview"] = content[:180]
+            m_node["memory_id"] = m.get("id")
+            for entity in self._entity_terms(content, limit=3):
+                e_node = touch(entity, category=category, timestamp=ts)
+                edges.append({"id": f"em{m.get('id')}-{e_node['id']}", "source": m_node["id"], "target": e_node["id"], "label": "mentions", "kind": "memory", "item": {"memory_id": m.get("id"), "entity": entity}})
+
+        nodes = sorted(nodes_by_label.values(), key=lambda n: (float(n.get("weight") or 0), str(n.get("last_seen") or "")), reverse=True)[:limit]
+        kept = {n["id"] for n in nodes}
+        edges = [e for e in edges if e["source"] in kept and e["target"] in kept][:limit * 2]
+        clusters = Counter(str(n.get("category") or "Other") for n in nodes)
+        return {"read_only": True, "nodes": nodes, "edges": edges, "clusters": [{"label": k, "count": v} for k, v in clusters.most_common()]}
 
     def global_search(self, q: str = "", limit: int = 30) -> dict[str, Any]:
         q = (q or "").strip()

@@ -48,6 +48,10 @@ def make_db(path: Path):
                 ('w2','YC uses Obsidian for notes','preference','2026-01-03T00:00:00','s3',0.4,'global'))
     con.execute("INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope) VALUES (?,?,?,?,?,?,?)",
                 ('w3','YC knows Diana from school','preference','2026-01-04T00:00:00','s4',0.4,'global'))
+    con.execute("INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,last_recalled) VALUES (?,?,?,?,?,?,?,?)",
+                ('w4','YC uses WHOOP for health and recovery','health','2026-05-04T08:00:00','s5',0.7,'global','2026-05-04T09:00:00'))
+    con.execute("INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,summary_of) VALUES (?,?,?,?,?,?,?,?)",
+                ('e2','Shipped Mnemosyne Dashboard v0.7 planning','task','2026-05-04T10:00:00','s5',0.5,'session','w4'))
     con.execute("INSERT INTO triples(subject,predicate,object,valid_from,source,confidence) VALUES (?,?,?,?,?,?)",
                 ('YC','prefers','local-only memory','2026-01-01','preference',0.95))
     con.execute("INSERT INTO triples(subject,predicate,object,valid_from,source,confidence) VALUES (?,?,?,?,?,?)",
@@ -64,8 +68,8 @@ def test_stats_counts_memory_tables(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
     stats = DashboardStore(db).stats()
-    assert stats['counts']['working_memory'] == 3
-    assert stats['counts']['episodic_memory'] == 1
+    assert stats['counts']['working_memory'] == 4
+    assert stats['counts']['episodic_memory'] == 2
     assert stats['counts']['triples'] == 3
     assert stats['counts']['consolidation_log'] == 1
 
@@ -73,7 +77,7 @@ def test_stats_counts_memory_tables(tmp_path):
 def test_list_memories_searches_both_tiers(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
-    rows = DashboardStore(db).list_memories(kind='all', q='dashboard', limit=10)
+    rows = DashboardStore(db).list_memories(kind='all', q='visualiser', limit=10)
     assert [r['id'] for r in rows] == ['e1']
     assert rows[0]['tier'] == 'episodic'
 
@@ -136,7 +140,7 @@ def test_diagnostics_reports_database_health(tmp_path):
     assert diag['ok'] is True
     assert diag['exists'] is True
     assert diag['read_only'] is True
-    assert diag['table_counts']['working_memory'] == 3
+    assert diag['table_counts']['working_memory'] == 4
     assert diag['table_counts']['triples'] == 3
 
 
@@ -156,7 +160,7 @@ def test_memory_status_filter_and_safe_mutations(tmp_path, monkeypatch):
     make_db(db)
     store = DashboardStore(db)
 
-    assert [r['id'] for r in store.list_memories(kind='all', status='active', limit=10)] == ['w3', 'w2', 'e1', 'w1']
+    assert [r['id'] for r in store.list_memories(kind='all', status='active', limit=10)] == ['e2', 'w4', 'w3', 'w2', 'e1', 'w1']
 
     expired = store.invalidate_memory('w2')
     assert expired['ok'] is True
@@ -203,6 +207,29 @@ def test_default_db_path_detects_existing_mnemosyne_database(tmp_path, monkeypat
     db.write_text('sqlite placeholder')
     assert default_db_path() == db
     assert load_config(create=True).db_path == str(db)
+
+
+def test_memory_intelligence_read_only_views(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    digest = store.today_digest(day='2026-05-04')
+    assert digest['read_only'] is True
+    assert digest['counts']['memories_added'] == 2
+    assert digest['counts']['memories_recalled'] == 1
+    assert {m['id'] for m in digest['memories_added']} == {'w4', 'e2'}
+
+    profile = store.inferred_profile(limit_per_section=5)
+    sections = {s['name']: s for s in profile['sections']}
+    assert 'Health / wearables' in sections
+    assert any('WHOOP' in item['label'] for item in sections['Health / wearables']['items'])
+
+    constellation = store.constellation(limit=80)
+    assert constellation['read_only'] is True
+    labels = {n['label'] for n in constellation['nodes']}
+    assert 'YC' in labels
+    assert constellation['edges']
 
 
 def test_public_config_reports_lan_url_for_wildcard_bind(tmp_path, monkeypatch):

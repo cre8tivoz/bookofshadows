@@ -333,6 +333,15 @@ class ChromeSession:
             document.querySelector('#consolidationQuery').value = 'mobile';
             await loadConsolidations();
           }}
+          if ({json.dumps(tab)} === 'today') {{
+            await loadTodayDigest('2026-05-04');
+          }}
+          if ({json.dumps(tab)} === 'profile') {{
+            await loadProfile();
+          }}
+          if ({json.dumps(tab)} === 'constellation') {{
+            await loadConstellation();
+          }}
           await new Promise(r=>setTimeout(r,1200));
           window.scrollTo(0,0);
           const doc = document.documentElement;
@@ -379,10 +388,16 @@ def run() -> None:
         shots = [
             ("desktop-dark-overview.png", 1440, 1000, False, "dark", "overview"),
             ("desktop-light-overview.png", 1440, 1000, False, "light", "overview"),
+            ("desktop-dark-today.png", 1440, 1000, False, "dark", "today"),
+            ("desktop-light-profile.png", 1440, 1000, False, "light", "profile"),
+            ("desktop-dark-constellation.png", 1440, 1000, False, "dark", "constellation"),
             ("desktop-dark-search.png", 1440, 1000, False, "dark", "search"),
             ("desktop-light-graph.png", 1440, 1000, False, "light", "graph"),
             ("desktop-dark-timeline.png", 1440, 1000, False, "dark", "timelineView"),
             ("mobile-dark-overview.png", 390, 844, True, "dark", "overview"),
+            ("mobile-light-today.png", 390, 844, True, "light", "today"),
+            ("mobile-dark-profile.png", 390, 844, True, "dark", "profile"),
+            ("mobile-light-constellation.png", 390, 844, True, "light", "constellation"),
             ("mobile-light-search.png", 390, 844, True, "light", "search"),
             ("mobile-dark-timeline.png", 390, 844, True, "dark", "timelineView"),
             ("mobile-light-graph.png", 390, 844, True, "light", "graph"),
