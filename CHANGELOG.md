@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+
+- Fix mobile overview stat labels being slightly clipped at the bottom by increasing label line-height and allowing visible overflow.
+
 ## 0.3.2
 
 - Refine mobile layouts for search, timeline, graph, consolidations, settings, overview cards, and memory cards.

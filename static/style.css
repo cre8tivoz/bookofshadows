@@ -62,7 +62,7 @@
   .section-head.mini h2{white-space:normal;font-size:20px;line-height:1.08;overflow-wrap:anywhere}
   .section-head.mini span{flex:0 0 auto;white-space:nowrap}
   .cards{grid-template-columns:1fr 1fr;width:100%}
-  .card{min-width:0}.card .label{font-size:10px;letter-spacing:.10em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card{min-width:0;padding-bottom:18px}.card .label{font-size:10px;letter-spacing:.10em;line-height:1.45;min-height:15px;white-space:nowrap;overflow:visible;text-overflow:clip;padding-bottom:1px}
   .toolbar{width:100%;max-width:100%;align-items:stretch}
   .toolbar input,.toolbar select{min-width:0;width:100%;max-width:100%;flex:1 1 100%}
   .toolbar button{flex:1 1 auto;justify-content:center;min-width:0}
