@@ -238,8 +238,12 @@ function bindMemoryClicks(root){
   root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = (e) => { if(e.target.closest('.session-link,button,a')) return; openMemoryDetail(el.dataset.id); });
 }
 function canAdmin(){ return !!(authState.config && authState.config.memory_admin_enabled && authState.auth_enabled && authState.authenticated); }
+function isMutableMemory(item){ return String(item?.status || 'active').toLowerCase() === 'active'; }
 function memoryDetailHtml(item){
   const admin = canAdmin();
+  const mutable = isMutableMemory(item);
+  const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : '';
+  const actionNote = admin ? (mutable ? '' : `<span class="muted">This memory is ${esc(item.status || 'not active')}; mutation actions are disabled.</span>`) : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>';
   return `
     <div class="memory-detail">
       ${meta(item, {sessionLink:false})}
@@ -253,7 +257,7 @@ function memoryDetailHtml(item){
       </div>
       <div class="drawer-actions memory-actions">
         <button id="copyMemoryId" class="drawer-action">Copy ID</button>
-        ${admin ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>'}
+        ${adminActions}${actionNote}
       </div>
       <p id="memoryActionStatus" class="muted"></p>
     </div>`;
@@ -265,7 +269,7 @@ async function openMemoryDetail(memoryId){
   const sessionLink = $('#memorySessionLink');
   if(sessionLink) sessionLink.onclick = () => openSessionDetail(item.session_id || '');
   $('#copyMemoryId').onclick = async () => { await navigator.clipboard?.writeText(item.id); $('#memoryActionStatus').textContent = 'Memory ID copied.'; };
-  if(!canAdmin()) return;
+  if(!canAdmin() || !isMutableMemory(item)) return;
   const backup = () => $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
   $('#expireMemory').onclick = async () => {
     const ok = await confirmAction({
