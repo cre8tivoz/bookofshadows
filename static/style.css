@@ -144,6 +144,11 @@ button.badge.session-link:hover{background:rgba(101,214,255,.15);border-color:rg
 .drawer .drawer-action,.html-detail .drawer-action,[data-theme="light"] .drawer .drawer-action,[data-theme="light"] .html-detail .drawer-action{box-shadow:none!important}
 button{font-weight:720;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
 button:active{transform:translateY(0) scale(.99)}
+.sidebar .brand-home,.sidebar nav button,.mobile-topbar .brand-home{box-shadow:none!important}
+.sidebar .brand-home{font-weight:400!important}
+.sidebar nav button:not(.active){border-color:transparent!important;background:transparent!important;box-shadow:none!important}
+.sidebar nav button.active{box-shadow:none!important}
+.mobile-topbar,.compact-brand{box-shadow:none!important;border-top:0!important;background:transparent!important}
 button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 .bulk-bar{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;margin:0 0 14px;padding:14px 16px;border-radius:18px}
 .bulk-select-control{display:inline-flex;align-items:center;gap:10px;min-width:max-content;margin:0;color:var(--soft);font-weight:760;line-height:1;white-space:nowrap;cursor:pointer}
