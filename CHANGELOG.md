@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.12
+
+- Hide the duplicate sidebar theme switch from the mobile hamburger menu now that theme control is available directly in the mobile top bar.
+
 ## 0.3.11
 
 - Add a GitHub README screenshot gallery generated from synthetic mock Mnemosyne data across desktop, mobile, dark, and light theme views.
