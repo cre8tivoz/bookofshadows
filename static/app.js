@@ -239,6 +239,14 @@ function drawGraph(g){
     const text=document.createElementNS('http://www.w3.org/2000/svg','text'); text.textContent=n.label.length>38?n.label.slice(0,35)+'…':n.label; text.setAttribute('x',n.x+12);text.setAttribute('y',n.y+4);text.setAttribute('class','nodeText'); text.dataset.id = n.id; text.onclick = () => inspectNode(n); svg.appendChild(text);
   }
   graphInspectorDefault();
+  centerGraphOnMobile();
+}
+function centerGraphOnMobile(){
+  const wrap = document.querySelector('.graph-wrap');
+  if(!wrap || !window.matchMedia('(max-width: 760px)').matches) return;
+  requestAnimationFrame(() => {
+    wrap.scrollLeft = Math.max(0, (wrap.scrollWidth - wrap.clientWidth) / 2);
+  });
 }
 async function loadGraph(){
   const q = encodeURIComponent($('#graphQuery')?.value.trim() || '');

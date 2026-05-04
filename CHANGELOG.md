@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+- Refine mobile layouts for search, timeline, graph, consolidations, settings, overview cards, and memory cards.
+- Keep mobile section headings and right-aligned helper labels within the viewport.
+- Normalize mobile toolbar, result panel, and card widths to prevent horizontal overflow.
+- Center the relationship graph canvas on mobile after rendering.
+- Fix mobile password-auth checkbox sizing and spacing.
+
 ## 0.3.1
 
 - Add `/api/health` smoke-test endpoint.

@@ -50,3 +50,30 @@
 .result-section{margin-bottom:26px}.result-section h3{font-family:var(--font-brand-serif);font-size:28px;margin:0 0 12px}.result-section h3 span{font-family:Inter,sans-serif;font-size:13px;color:var(--muted);font-weight:600}.reasons{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.reasons span{border:1px solid var(--line);border-radius:999px;padding:4px 8px;color:var(--muted);font-size:11px;background:var(--glass-bg)}.timeline-groups{display:grid;gap:22px}.timeline-group{border:1px solid var(--line);border-radius:22px;padding:16px;background:var(--glass-bg)}.section-head.mini{margin-bottom:10px}.section-head.mini h2{font-size:24px}.timeline-event{margin-left:14px}.settings-grid{display:grid;grid-template-columns:minmax(280px,680px);gap:16px}.settings-card{padding:18px;border-radius:22px;border:1px solid var(--line)}.settings-card input[type="password"]{width:100%;margin-top:12px}.check-row{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--soft);font-weight:650}.check-row input{width:18px;height:18px}.login-overlay{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:rgba(0,0,0,.56);backdrop-filter:blur(18px);padding:18px}.login-card{width:min(420px,100%);padding:24px;border:1px solid var(--line2);border-radius:26px;background:var(--panel);box-shadow:0 30px 120px rgba(0,0,0,.55)}.login-card .brand{margin-bottom:18px}.login-card h2{font-family:var(--font-brand-serif);font-size:34px;line-height:1;margin:0 0 8px}.login-card input{width:100%;margin:14px 0}.login-card button{width:100%;justify-content:center}
 [data-theme="light"] .login-overlay{background:rgba(85,65,45,.28)}[data-theme="light"] .login-card{background:#fff;border-color:#d5cec6;box-shadow:0 30px 120px rgba(85,65,45,.24)}
 @media(max-width:760px){.result-section h3{font-size:24px}.timeline-group{padding:12px;border-radius:18px}.settings-grid{grid-template-columns:1fr}.settings-card{padding:14px;border-radius:18px}.login-card h2{font-size:30px}}
+
+/* Mobile layout refinement: keep section headers and result panels aligned */
+@media(max-width:760px){
+  main{padding-left:14px;padding-right:14px;overflow-x:hidden}
+  .tab,.toolbar,.search-results,.result-section,.timeline-groups,.timeline-group,.timeline,.list,.memory-grid,.graph-layout,.graph-wrap,.graph-inspector,.settings-grid,.settings-card{width:100%;max-width:100%;min-width:0}
+  .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;width:100%;min-width:0}
+  .section-head h2{flex:0 0 auto;white-space:nowrap;font-size:24px;line-height:1.02;letter-spacing:-.04em;margin:0}
+  .section-head span{flex:1 1 auto;min-width:0;text-align:right;line-height:1.2;overflow-wrap:normal;word-break:normal}
+  .section-head.mini{gap:8px;align-items:flex-start}
+  .section-head.mini h2{white-space:normal;font-size:20px;line-height:1.08;overflow-wrap:anywhere}
+  .section-head.mini span{flex:0 0 auto;white-space:nowrap}
+  .cards{grid-template-columns:1fr 1fr;width:100%}
+  .card{min-width:0}.card .label{font-size:10px;letter-spacing:.10em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .toolbar{width:100%;max-width:100%;align-items:stretch}
+  .toolbar input,.toolbar select{min-width:0;width:100%;max-width:100%;flex:1 1 100%}
+  .toolbar button{flex:1 1 auto;justify-content:center;min-width:0}
+  .toolbar .muted{display:block;width:100%;text-align:left}
+  .result-section{margin-bottom:18px}.result-section h3{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:23px;line-height:1.05;white-space:nowrap}.result-section h3 span{margin-left:auto;white-space:nowrap}
+  .memory-grid{grid-template-columns:minmax(0,1fr)}
+  .item{width:100%;max-width:100%;min-width:0}.meta span{min-width:0;max-width:100%;overflow-wrap:anywhere}.meta .badge{overflow-wrap:normal}.content{overflow-wrap:anywhere;word-break:break-word}
+  .timeline-group{box-shadow:none}.timeline .item,.timeline-event{margin-left:0}.timeline .item:after{display:none}
+  .graph-wrap{overflow-x:auto;overflow-y:hidden}#graphSvg{min-width:680px}
+  .settings-grid{display:block}.settings-card input[type="password"]{max-width:100%}.settings-card .item-actions{display:grid;grid-template-columns:1fr;gap:8px}.settings-card .item-actions button{width:100%;justify-content:center}.check-row{align-items:center;line-height:1.35;margin:12px 0}.check-row input[type="checkbox"]{width:18px;min-width:18px;height:18px;flex:0 0 18px;padding:0;margin:0}
+}
+@media(max-width:380px){
+  .section-head h2{font-size:22px}.section-head span{font-size:9px}.cards{grid-template-columns:1fr}.result-section h3{font-size:21px}
+}
