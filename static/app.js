@@ -1464,15 +1464,18 @@ function buildThreeNeuralPositions(data){
   const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
   const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
   const regionCount = Math.max(1, categories.length);
-  const slots = [
-    {x:-190,y:-86,z:-34,s:112,a:-.48}, {x:48,y:-108,z:26,s:126,a:.18}, {x:202,y:-42,z:-18,s:118,a:.36},
-    {x:-122,y:52,z:18,s:104,a:.22}, {x:88,y:50,z:-30,s:116,a:-.28}, {x:-18,y:144,z:20,s:102,a:.52},
-    {x:238,y:110,z:16,s:92,a:-.42}, {x:-248,y:112,z:-8,s:88,a:.12}, {x:0,y:-8,z:0,s:132,a:0}
-  ];
   const regions = Object.fromEntries(categories.map((cat, i) => {
-    const slot = slots[i % slots.length];
-    const lap = Math.floor(i / slots.length);
-    return [cat, { label:cat, angle:slot.a, cx:slot.x + lap * 28, cy:slot.y + lap * 18, cz:slot.z + (i % 3 - 1) * 16, spread:slot.s + (i % 4) * 8 }];
+    const angle = -Math.PI / 2 + (i / regionCount) * Math.PI * 2;
+    const radius = regionCount <= 2 ? 86 : (i === regionCount - 1 && regionCount > 5 ? 70 : 142 + (i % 2) * 18);
+    const lap = Math.floor(i / Math.max(1, regionCount));
+    return [cat, {
+      label:cat,
+      angle,
+      cx:Math.cos(angle) * radius + lap * 18,
+      cy:Math.sin(angle) * radius * .96,
+      cz:((i * 41) % 89 - 44) * .72,
+      spread:94 + (i % 4) * 10
+    }];
   }));
   const degree = new Map();
   edges.forEach(e => { degree.set(e.source, (degree.get(e.source) || 0) + 1); degree.set(e.target, (degree.get(e.target) || 0) + 1); });
@@ -1635,7 +1638,7 @@ async function renderThreeVisualiser(data){
   const pulseEdges = threeVis.mode === 'neural' ? edges.slice(0, 90) : [];
   const pulseGeom = new THREE.BufferGeometry(); const pulsePositions = new Float32Array(pulseEdges.length*3); pulseGeom.setAttribute('position', new THREE.BufferAttribute(pulsePositions,3));
   const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:5.2, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
-  const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 28 : 22);
+  const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 18 : 22);
   $('#threeLabels').innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
   $('#threeClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
@@ -1673,13 +1676,26 @@ function updateThreeLabels(){
   if(!threeVis.camera || !threeVis.group) return;
   const viewport = $('#threeViewport'); const rect = viewport.getBoundingClientRect(); const v = new threeVis.THREE.Vector3();
   updateThreeAuras(rect, v);
+  const labelBoxes = [];
+  const maxLabels = threeVis.mode === 'neural' ? (rect.width < 520 ? 7 : 11) : 22;
+  let shown = 0;
   $$('#threeLabels .three-label').forEach((el,i)=>{
     const n = threeVis.labels[i]; if(!n) return;
     v.set(n.x,n.y,n.z).applyMatrix4(threeVis.group.matrixWorld).project(threeVis.camera);
-    const visible = v.z < 1 && v.z > -1;
-    el.style.display = visible ? '' : 'none';
-    el.style.left = `${(v.x*.5+.5)*rect.width}px`; el.style.top = `${(-v.y*.5+.5)*rect.height}px`;
-    el.style.opacity = String(Math.max(.35, Math.min(.9, 1 - Math.abs(v.z)*.35)));
+    const sx = (v.x*.5+.5)*rect.width, sy = (-v.y*.5+.5)*rect.height;
+    const visible = v.z < 1 && v.z > -1 && sx > 8 && sx < rect.width - 8 && sy > 8 && sy < rect.height - 8;
+    const pulse = threeVis.mode === 'neural' && i > 3 ? Math.sin((threeVis.lastT || 0) * .00032 + i * 1.73) : 1;
+    const box = {x:sx-54,y:sy-13,w:108,h:24};
+    const collides = labelBoxes.some(b => !(box.x+box.w<b.x || b.x+b.w<box.x || box.y+box.h<b.y || b.y+b.h<box.y));
+    const show = visible && shown < maxLabels && !collides && (threeVis.mode !== 'neural' || i <= 3 || pulse > .08);
+    el.style.display = show ? '' : 'none';
+    if(show){
+      shown++; labelBoxes.push(box);
+      el.style.left = `${sx}px`; el.style.top = `${sy}px`;
+      const depthAlpha = Math.max(.32, Math.min(.86, 1 - Math.abs(v.z)*.35));
+      const pulseAlpha = threeVis.mode === 'neural' && i > 3 ? Math.min(.78, .38 + pulse * .36) : depthAlpha;
+      el.style.opacity = String(Math.min(depthAlpha, pulseAlpha));
+    }
   });
 }
 function animateThree(t=0){
