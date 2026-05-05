@@ -1419,8 +1419,8 @@ function makePointTexture(THREE, kind){
       if(i%3===0){ ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(cx+Math.cos(a-.34)*len*.60,cy+Math.sin(a-.34)*len*.60); ctx.stroke(); }
       ctx.globalAlpha=1;
     }
-    ctx.fillStyle='rgba(255,255,255,.98)'; ctx.beginPath(); ctx.arc(cx,cy,25,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='rgba(255,255,255,.52)'; ctx.beginPath(); ctx.arc(cx-6,cy-7,7,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.98)'; ctx.beginPath(); ctx.arc(cx,cy,34,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.54)'; ctx.beginPath(); ctx.arc(cx-8,cy-9,8,0,Math.PI*2); ctx.fill();
   } else if(kind === 'soma') {
     const g=ctx.createRadialGradient(cx,cy,0,cx,cy,62);
     g.addColorStop(0,'rgba(255,255,255,1)');
@@ -1433,8 +1433,8 @@ function makePointTexture(THREE, kind){
       const a=(i/5)*Math.PI*2+.22, len=21+(i%2)*4;
       ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*18,cy+Math.sin(a)*18); ctx.lineTo(cx+Math.cos(a)*len,cy+Math.sin(a)*len); ctx.stroke();
     }
-    ctx.lineWidth=3.0; ctx.beginPath(); ctx.arc(cx,cy,32,0,Math.PI*2); ctx.stroke();
-    ctx.fillStyle='rgba(255,255,255,1)'; ctx.beginPath(); ctx.arc(cx,cy,27,0,Math.PI*2); ctx.fill();
+    ctx.lineWidth=3.4; ctx.beginPath(); ctx.arc(cx,cy,40,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,1)'; ctx.beginPath(); ctx.arc(cx,cy,35,0,Math.PI*2); ctx.fill();
   } else {
     const g=ctx.createRadialGradient(cx,cy,0,cx,cy,60);
     g.addColorStop(0,'rgba(255,255,255,1)');
@@ -1670,12 +1670,12 @@ async function renderThreeVisualiser(data){
   const linkGeom = buildThreeLinkSegments(THREE, edges);
   group.add(new THREE.LineSegments(linkGeom, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity: threeVis.mode === 'neural' ? .40 : .22, blending:THREE.AdditiveBlending, depthWrite:false })));
   if(threeVis.mode === 'neural'){
-    addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 34);
-    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 36);
+    addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 50);
+    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 48);
     addNeuralDendrites(THREE, group, nodes, colors);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 15.2 : 7));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 11.4 : 5.8));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 7));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 5.8));
   const starCount = threeVis.mode === 'neural' ? 360 : 520;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
