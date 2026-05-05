@@ -1384,55 +1384,64 @@ function colorForTheme(){
 }
 function makePointTexture(THREE, kind){
   const canvas = document.createElement('canvas');
-  canvas.width = 64; canvas.height = 64;
+  canvas.width = 128; canvas.height = 128;
   const ctx = canvas.getContext('2d');
-  const cx=32, cy=32;
+  const cx=64, cy=64;
   if(kind === 'star'){
-    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,30);
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,60);
     g.addColorStop(0,'rgba(255,255,255,1)');
     g.addColorStop(.28,'rgba(255,255,255,.92)');
     g.addColorStop(.58,'rgba(255,255,255,.38)');
     g.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,60,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,.72)'; ctx.lineWidth=1.3;
-    ctx.beginPath(); ctx.moveTo(32,7); ctx.lineTo(32,57); ctx.moveTo(7,32); ctx.lineTo(57,32); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx,14); ctx.lineTo(cx,114); ctx.moveTo(14,cy); ctx.lineTo(114,cy); ctx.stroke();
   } else if(kind === 'neuron') {
-    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,31);
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,62);
     g.addColorStop(0,'rgba(255,255,255,1)');
-    g.addColorStop(.18,'rgba(255,255,255,.90)');
-    g.addColorStop(.52,'rgba(255,255,255,.34)');
+    g.addColorStop(.13,'rgba(255,255,255,.94)');
+    g.addColorStop(.42,'rgba(255,255,255,.28)');
     g.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,.58)'; ctx.lineCap='round';
-    for(let i=0;i<10;i++){
-      const a=(i/10)*Math.PI*2 + .17;
-      const len=21 + (i%3)*7;
-      const sx=cx+Math.cos(a)*8, sy=cy+Math.sin(a)*8;
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,61,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.70)'; ctx.lineCap='round'; ctx.lineJoin='round';
+    for(let i=0;i<12;i++){
+      const a=(i/12)*Math.PI*2 + .13;
+      const len=38 + (i%4)*8;
+      const fork=len*.70;
+      const sx=cx+Math.cos(a)*14, sy=cy+Math.sin(a)*14;
+      const mx=cx+Math.cos(a+.10*Math.sin(i))*fork, my=cy+Math.sin(a+.10*Math.sin(i))*fork;
       const ex=cx+Math.cos(a)*len, ey=cy+Math.sin(a)*len;
-      ctx.lineWidth=i%3===0?1.6:1.05;
-      ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
-      if(i%2===0){
-        ctx.lineWidth=.8;
-        ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*len*.70,cy+Math.sin(a)*len*.70); ctx.lineTo(cx+Math.cos(a+.34)*len*.93,cy+Math.sin(a+.34)*len*.93); ctx.stroke();
-      }
+      ctx.lineWidth=i%3===0?3.0:1.8;
+      ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(mx,my,ex,ey); ctx.stroke();
+      ctx.lineWidth=1.15;
+      ctx.globalAlpha=.72;
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(cx+Math.cos(a+.38)*len*.98,cy+Math.sin(a+.38)*len*.98); ctx.stroke();
+      if(i%3!==1){ ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(cx+Math.cos(a-.34)*len*.90,cy+Math.sin(a-.34)*len*.90); ctx.stroke(); }
+      ctx.globalAlpha=1;
     }
-    ctx.fillStyle='rgba(255,255,255,.95)'; ctx.beginPath(); ctx.arc(cx,cy,9,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.98)'; ctx.beginPath(); ctx.arc(cx,cy,16,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.46)'; ctx.beginPath(); ctx.arc(cx-4,cy-5,5,0,Math.PI*2); ctx.fill();
   } else if(kind === 'soma') {
-    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,31);
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,62);
     g.addColorStop(0,'rgba(255,255,255,1)');
-    g.addColorStop(.20,'rgba(255,255,255,.96)');
-    g.addColorStop(.48,'rgba(255,255,255,.42)');
+    g.addColorStop(.18,'rgba(255,255,255,.96)');
+    g.addColorStop(.42,'rgba(255,255,255,.34)');
     g.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,31,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,.64)'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(cx,cy,15,0,Math.PI*2); ctx.stroke();
-    ctx.fillStyle='rgba(255,255,255,1)'; ctx.beginPath(); ctx.arc(cx,cy,11,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,62,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.68)'; ctx.lineCap='round'; ctx.lineWidth=2.1;
+    for(let i=0;i<5;i++){
+      const a=(i/5)*Math.PI*2+.22, len=34+(i%2)*8;
+      ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*18,cy+Math.sin(a)*18); ctx.lineTo(cx+Math.cos(a)*len,cy+Math.sin(a)*len); ctx.stroke();
+    }
+    ctx.lineWidth=2.4; ctx.beginPath(); ctx.arc(cx,cy,25,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,1)'; ctx.beginPath(); ctx.arc(cx,cy,18,0,Math.PI*2); ctx.fill();
   } else {
-    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,30);
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,60);
     g.addColorStop(0,'rgba(255,255,255,1)');
     g.addColorStop(.44,'rgba(255,255,255,.82)');
     g.addColorStop(.78,'rgba(255,255,255,.22)');
     g.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,60,0,Math.PI*2); ctx.fill();
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.needsUpdate = true;
@@ -1572,20 +1581,31 @@ function addHaloPoints(THREE, scene, nodes, kind, color, size){
   const points = new THREE.Points(geometry, material); scene.add(points); return points;
 }
 function addNeuralDendrites(THREE, group, nodes, colors){
-  const segs=[];
+  const trunks=[]; const twigs=[]; const tips=[];
   nodes.slice(0,150).forEach((n,i)=>{
-    const arms = n.kind === 'memory' ? 3 : 6;
-    const base = n.kind === 'memory' ? 18 : 28;
+    const arms = n.kind === 'memory' ? 4 : 8;
+    const base = n.kind === 'memory' ? 20 : 34;
     for(let a=0;a<arms;a++){
       const theta=(a/arms)*Math.PI*2 + (i%11)*.19;
-      const phi=Math.sin(i*.37+a)*.65;
-      const len=base + ((i+a*13)%17);
-      const dx=Math.cos(theta)*Math.cos(phi)*len, dy=Math.sin(phi)*len*.72, dz=Math.sin(theta)*Math.cos(phi)*len;
-      segs.push(n.x,n.y,n.z,n.x+dx,n.y+dy,n.z+dz);
+      const phi=Math.sin(i*.37+a)*.58;
+      const len=base + ((i+a*13)%19);
+      const mid=[n.x+Math.cos(theta+.16)*Math.cos(phi)*len*.55, n.y+Math.sin(phi)*len*.44, n.z+Math.sin(theta+.16)*Math.cos(phi)*len*.55];
+      const end=[n.x+Math.cos(theta)*Math.cos(phi)*len, n.y+Math.sin(phi)*len*.72, n.z+Math.sin(theta)*Math.cos(phi)*len];
+      trunks.push(n.x,n.y,n.z, mid[0],mid[1],mid[2], mid[0],mid[1],mid[2], end[0],end[1],end[2]);
+      if(n.kind !== 'memory' || a%2===0){
+        const side=theta+(a%2?.44:-.40);
+        const fork=[mid[0]+Math.cos(side)*len*.36, mid[1]+Math.sin(phi+.25)*len*.24, mid[2]+Math.sin(side)*len*.36];
+        twigs.push(mid[0],mid[1],mid[2], fork[0],fork[1],fork[2]);
+      }
+      if(i%3===0 && a%2===0) tips.push(end[0],end[1],end[2]);
     }
   });
-  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segs),3));
-  group.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity:colors.light ? .16 : .22, blending:THREE.AdditiveBlending, depthWrite:false })));
+  const trunkGeom = new THREE.BufferGeometry(); trunkGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(trunks),3));
+  group.add(new THREE.LineSegments(trunkGeom, new THREE.LineBasicMaterial({ color:colors.entity, transparent:true, opacity:colors.light ? .24 : .36, blending:THREE.AdditiveBlending, depthWrite:false })));
+  const twigGeom = new THREE.BufferGeometry(); twigGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(twigs),3));
+  group.add(new THREE.LineSegments(twigGeom, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity:colors.light ? .16 : .24, blending:THREE.AdditiveBlending, depthWrite:false })));
+  const tipGeom = new THREE.BufferGeometry(); tipGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(tips),3));
+  group.add(new THREE.Points(tipGeom, new THREE.PointsMaterial({ color:colors.entity, map:makePointTexture(THREE, 'orb'), alphaTest:.03, size:3.8, transparent:true, opacity:.72, depthWrite:false, blending:THREE.AdditiveBlending })));
 }
 function addPoints(THREE, scene, nodes, kind, color, size){
   const selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
@@ -1595,6 +1615,34 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
   const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, threeVis.mode === 'neural' ? (kind === 'memory' ? 'soma' : 'neuron') : (kind === 'memory' ? 'orb' : 'star')), alphaTest:.04, size, sizeAttenuation:true, transparent:true, opacity: threeVis.mode === 'neural' ? (kind === 'memory' ? .98 : .86) : .96, depthWrite:false, blending:THREE.AdditiveBlending });
   const points = new THREE.Points(geometry, material); points.userData.nodes = selected; scene.add(points); return points;
+}
+function buildThreeLinkSegments(THREE, edges){
+  const positions = [];
+  edges.forEach((e,i)=>{
+    if(threeVis.mode === 'neural'){
+      const ax=e.a.x, ay=e.a.y, az=e.a.z, bx=e.b.x, by=e.b.y, bz=e.b.z;
+      const dx=bx-ax, dy=by-ay, dz=bz-az;
+      const len=Math.max(1, Math.hypot(dx,dy,dz));
+      const bend=(i%2?1:-1) * Math.min(58, 18 + len*.12);
+      const cx=(ax+bx)/2 + (-dy/len)*bend;
+      const cy=(ay+by)/2 + (dx/len)*bend*.55 + Math.sin(i*.71)*18;
+      const cz=(az+bz)/2 + Math.cos(i*.53)*bend*.72;
+      e._curve={cx,cy,cz};
+      let px=ax, py=ay, pz=az;
+      for(let step=1; step<=7; step++){
+        const t=step/7, inv=1-t;
+        const x=inv*inv*ax+2*inv*t*cx+t*t*bx;
+        const y=inv*inv*ay+2*inv*t*cy+t*t*by;
+        const z=inv*inv*az+2*inv*t*cz+t*t*bz;
+        positions.push(px,py,pz,x,y,z); px=x; py=y; pz=z;
+      }
+    } else {
+      positions.push(e.a.x,e.a.y,e.a.z,e.b.x,e.b.y,e.b.z);
+    }
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions),3));
+  return geometry;
 }
 async function renderThreeVisualiser(data){
   const THREE = await loadThreeModule();
@@ -1619,17 +1667,15 @@ async function renderThreeVisualiser(data){
   const ambient = new THREE.AmbientLight(0xffffff, .55); scene.add(ambient);
   const light = new THREE.PointLight(colors.entity, 1.2, 1200); light.position.set(180,220,260); scene.add(light);
   const nodes = buildThreePositions(data); const byId = new Map(nodes.map(n=>[n.id,n])); const edges = limitedThreeEdges(data, byId);
-  const linkPositions = new Float32Array(edges.length * 6);
-  edges.forEach((e,i)=>{ linkPositions.set([e.a.x,e.a.y,e.a.z,e.b.x,e.b.y,e.b.z], i*6); });
-  const linkGeom = new THREE.BufferGeometry(); linkGeom.setAttribute('position', new THREE.BufferAttribute(linkPositions,3));
-  group.add(new THREE.LineSegments(linkGeom, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity: threeVis.mode === 'neural' ? .30 : .22, blending:THREE.AdditiveBlending })));
+  const linkGeom = buildThreeLinkSegments(THREE, edges);
+  group.add(new THREE.LineSegments(linkGeom, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity: threeVis.mode === 'neural' ? .40 : .22, blending:THREE.AdditiveBlending, depthWrite:false })));
   if(threeVis.mode === 'neural'){
     addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 34);
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 36);
     addNeuralDendrites(THREE, group, nodes, colors);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 11.5 : 7));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 8.8 : 5.8));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 15.5 : 7));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 11.2 : 5.8));
   const starCount = threeVis.mode === 'neural' ? 360 : 520;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
@@ -1637,7 +1683,7 @@ async function renderThreeVisualiser(data){
   scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:1.6, transparent:true, opacity:.38, depthWrite:false })));
   const pulseEdges = threeVis.mode === 'neural' ? edges.slice(0, 90) : [];
   const pulseGeom = new THREE.BufferGeometry(); const pulsePositions = new Float32Array(pulseEdges.length*3); pulseGeom.setAttribute('position', new THREE.BufferAttribute(pulsePositions,3));
-  const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:5.2, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
+  const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'star'), alphaTest:.03, size:threeVis.mode === 'neural' ? 10.5 : 5.2, transparent:true, opacity:threeVis.mode === 'neural' ? .98 : .85, depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
   const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 18 : 22);
   $('#threeLabels').innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
@@ -1703,11 +1749,12 @@ function animateThree(t=0){
   resizeThree();
   const delta = threeVis.lastT ? Math.min(48, t - threeVis.lastT) : 16; threeVis.lastT = t;
   if(!threeVis.paused && !threeVis.drag) threeVis.yaw += delta * (threeVis.mode === 'neural' ? .00009 : .000055);
+  clampThreeCamera();
   threeVis.group.rotation.y = threeVis.yaw; threeVis.group.rotation.x = threeVis.pitch;
   threeVis.camera.position.set(threeVis.panX, threeVis.panY, threeVis.cameraZ); threeVis.camera.lookAt(threeVis.panX, threeVis.panY, 0);
   if(threeVis.pulsePoints){
     const attr = threeVis.pulsePoints.geometry.attributes.position; const arr = attr.array;
-    threeVis.pulses.forEach((e,i)=>{ const phase=(t*.00016 + (i%17)/17)%1; arr[i*3]=e.a.x+(e.b.x-e.a.x)*phase; arr[i*3+1]=e.a.y+(e.b.y-e.a.y)*phase; arr[i*3+2]=e.a.z+(e.b.z-e.a.z)*phase; });
+    threeVis.pulses.forEach((e,i)=>{ const phase=(t*.00030 + (i%17)/17)%1; const inv=1-phase; if(e._curve){ arr[i*3]=inv*inv*e.a.x+2*inv*phase*e._curve.cx+phase*phase*e.b.x; arr[i*3+1]=inv*inv*e.a.y+2*inv*phase*e._curve.cy+phase*phase*e.b.y; arr[i*3+2]=inv*inv*e.a.z+2*inv*phase*e._curve.cz+phase*phase*e.b.z; } else { arr[i*3]=e.a.x+(e.b.x-e.a.x)*phase; arr[i*3+1]=e.a.y+(e.b.y-e.a.y)*phase; arr[i*3+2]=e.a.z+(e.b.z-e.a.z)*phase; } });
     attr.needsUpdate = true;
   }
   threeVis.renderer.render(threeVis.scene, threeVis.camera); updateThreeLabels();
@@ -1715,14 +1762,58 @@ function animateThree(t=0){
 }
 async function loadThreeVisualiser(){ renderThreeVisualiser(await api('/api/constellation?limit=320')); }
 function switchThreeMode(mode){ threeVis.mode = mode === 'neural' ? 'neural' : 'constellation'; if(threeVis.data) renderThreeVisualiser(threeVis.data); else loadThreeVisualiser(); }
+function clampThreeCamera(){
+  const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
+  threeVis.cameraZ = Math.max(260, Math.min(1800, Number.isFinite(threeVis.cameraZ) ? threeVis.cameraZ : (threeVis.mode === 'neural' ? 860 : 840)));
+  threeVis.yaw = Number.isFinite(threeVis.yaw) ? threeVis.yaw : 0;
+  threeVis.pitch = Math.max(-1.15, Math.min(1.15, Number.isFinite(threeVis.pitch) ? threeVis.pitch : .32));
+  const zoomFactor = 900 / Math.max(320, threeVis.cameraZ);
+  const panLimitX = Math.max(120, rect.width * (.45 + zoomFactor * .18));
+  const panLimitY = Math.max(120, rect.height * (.34 + zoomFactor * .12));
+  threeVis.panX = Math.max(-panLimitX, Math.min(panLimitX, Number.isFinite(threeVis.panX) ? threeVis.panX : 0));
+  threeVis.panY = Math.max(-panLimitY, Math.min(panLimitY, Number.isFinite(threeVis.panY) ? threeVis.panY : 0));
+}
 function bindThreeControls(){
   const viewport = $('#threeViewport'); if(!viewport || viewport.dataset.controlsBound === 'true') return; viewport.dataset.controlsBound = 'true';
+  const pointers = threeVis.pointer || new Map(); threeVis.pointer = pointers;
+  const dist = () => { const ps=[...pointers.values()]; return ps.length < 2 ? 1 : Math.max(1, Math.hypot(ps[0].x-ps[1].x, ps[0].y-ps[1].y)); };
+  const center = () => { const ps=[...pointers.values()]; return ps.length < 2 ? {x:0,y:0} : {x:(ps[0].x+ps[1].x)/2, y:(ps[0].y+ps[1].y)/2}; };
   viewport.addEventListener('contextmenu', e=>e.preventDefault());
-  viewport.addEventListener('wheel', e=>{ e.preventDefault(); threeVis.cameraZ = Math.max(260, Math.min(1800, threeVis.cameraZ * Math.exp(e.deltaY*.001))); }, {passive:false});
-  viewport.addEventListener('pointerdown', e=>{ if(e.cancelable) e.preventDefault(); viewport.setPointerCapture?.(e.pointerId); threeVis.drag = {x:e.clientX,y:e.clientY,yaw:threeVis.yaw,pitch:threeVis.pitch,panX:threeVis.panX,panY:threeVis.panY,moved:false}; viewport.style.cursor='grabbing'; });
-  viewport.addEventListener('pointermove', e=>{ const d=threeVis.drag; if(!d) return; if(e.cancelable) e.preventDefault(); const dx=e.clientX-d.x, dy=e.clientY-d.y; if(Math.abs(dx)+Math.abs(dy)>3) d.moved=true; if(threeVis.panMode || e.shiftKey){ threeVis.panX=d.panX-dx*.7; threeVis.panY=d.panY+dy*.7; } else { threeVis.yaw=d.yaw+dx*.006; threeVis.pitch=Math.max(-1.15, Math.min(1.15, d.pitch+dy*.004)); } });
-  const end=e=>{ if(threeVis.drag?.moved) viewport.dataset.suppressClick='true'; threeVis.drag=null; viewport.style.cursor='grab'; };
-  viewport.addEventListener('pointerup', end); viewport.addEventListener('pointercancel', end);
+  viewport.addEventListener('wheel', e=>{ if(e.cancelable) e.preventDefault(); threeVis.cameraZ *= Math.exp(e.deltaY*.001); clampThreeCamera(); }, {passive:false});
+  viewport.addEventListener('pointerdown', e=>{
+    if(e.cancelable) e.preventDefault();
+    try { viewport.setPointerCapture?.(e.pointerId); } catch(_err) {}
+    pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    if(pointers.size >= 2){ const c=center(); threeVis.drag={mode:'pinch',x:c.x,y:c.y,dist:dist(),cameraZ:threeVis.cameraZ,panX:threeVis.panX,panY:threeVis.panY,moved:false}; }
+    else threeVis.drag = {mode:'drag',x:e.clientX,y:e.clientY,yaw:threeVis.yaw,pitch:threeVis.pitch,panX:threeVis.panX,panY:threeVis.panY,moved:false};
+    viewport.style.cursor='grabbing';
+  }, {passive:false});
+  viewport.addEventListener('pointermove', e=>{
+    if(!pointers.has(e.pointerId) || !threeVis.drag) return;
+    if(e.cancelable) e.preventDefault();
+    pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    const d=threeVis.drag;
+    if(d.mode === 'pinch'){
+      if(pointers.size < 2) return;
+      const c=center(); const scale=dist()/Math.max(1,d.dist);
+      threeVis.cameraZ = d.cameraZ / Math.max(.35, Math.min(2.8, scale));
+      threeVis.panX = d.panX - (c.x-d.x)*.72;
+      threeVis.panY = d.panY + (c.y-d.y)*.72;
+      d.moved = d.moved || Math.abs(c.x-d.x)+Math.abs(c.y-d.y)>3 || Math.abs(scale-1)>.015;
+      clampThreeCamera(); return;
+    }
+    const dx=e.clientX-d.x, dy=e.clientY-d.y; if(Math.abs(dx)+Math.abs(dy)>3) d.moved=true;
+    if(threeVis.panMode || e.shiftKey){ threeVis.panX=d.panX-dx*.7; threeVis.panY=d.panY+dy*.7; }
+    else { threeVis.yaw=d.yaw+dx*.006; threeVis.pitch=d.pitch+dy*.004; }
+    clampThreeCamera();
+  }, {passive:false});
+  const end=e=>{
+    pointers.delete(e.pointerId);
+    if(threeVis.drag?.moved) viewport.dataset.suppressClick='true';
+    if(pointers.size === 1){ const p=[...pointers.values()][0]; threeVis.drag={mode:'drag',x:p.x,y:p.y,yaw:threeVis.yaw,pitch:threeVis.pitch,panX:threeVis.panX,panY:threeVis.panY,moved:true}; }
+    else { threeVis.drag=null; viewport.style.cursor='grab'; }
+  };
+  viewport.addEventListener('pointerup', end); viewport.addEventListener('pointercancel', end); viewport.addEventListener('pointerleave', end);
   viewport.addEventListener('click', e=>{ if(viewport.dataset.suppressClick==='true'){ viewport.dataset.suppressClick='false'; return; } pickThreeNode(e); });
 }
 function pickThreeNode(e){

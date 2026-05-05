@@ -208,7 +208,7 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 
 /* Three.js comparison visualiser */
 .three-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:stretch}
-.three-viewport{position:relative;height:650px;min-height:650px;border:1px solid var(--line);border-radius:24px;overflow:hidden;background:radial-gradient(circle at 50% 40%,rgba(65,105,180,.18),transparent 36%),linear-gradient(180deg,rgba(5,8,17,.96),rgba(8,11,22,.92));box-shadow:var(--shadow);touch-action:none;cursor:grab}
+.three-viewport{position:relative;height:650px;min-height:650px;border:1px solid var(--line);border-radius:24px;overflow:hidden;background:radial-gradient(circle at 50% 40%,rgba(65,105,180,.18),transparent 36%),linear-gradient(180deg,rgba(5,8,17,.96),rgba(8,11,22,.92));box-shadow:var(--shadow);touch-action:none;overscroll-behavior:contain;-webkit-user-select:none;user-select:none;cursor:grab}
 .three-viewport[data-three-mode="neural"]{background:radial-gradient(circle at 48% 42%,rgba(34,130,111,.24),transparent 36%),radial-gradient(circle at 74% 24%,rgba(255,145,96,.10),transparent 26%),linear-gradient(180deg,rgba(5,9,15,.96),rgba(8,13,24,.92))}
 .three-viewport canvas{position:absolute;inset:0;width:100%!important;height:100%!important;display:block}
 .three-labels{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
