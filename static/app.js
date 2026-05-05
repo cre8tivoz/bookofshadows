@@ -1452,40 +1452,20 @@ function buildThreePositions(data){
   const nodes = (data.nodes || []).slice(0,160).map(n => ({...n}));
   const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
   const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
-  const categoryRank = {};
-  const categoryCount = Object.fromEntries(categories.map(c => [c, nodes.filter(n => (n.category || 'Other') === c).length]));
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  const categoryCenters = Object.fromEntries(categories.map((cat, ci) => {
-    const t = categories.length <= 1 ? 0 : ((ci + .5) / categories.length) * 2 - 1;
-    const radial = Math.sqrt(Math.max(0, 1 - t * t));
-    const angle = ci * golden + .45;
-    return [cat, {
-      x:Math.cos(angle) * radial * 250,
-      y:t * 205,
-      z:Math.sin(angle) * radial * 310,
-      angle
-    }];
-  }));
   nodes.forEach((n,i) => {
     const cat = n.category || 'Other';
     const ci = catIndex[cat] || 0;
-    const rank = categoryRank[cat] || 0; categoryRank[cat] = rank + 1;
-    const count = Math.max(1, categoryCount[cat] || 1);
-    const center = categoryCenters[cat] || {x:0,y:0,z:0,angle:0};
+    const angle = (i / Math.max(nodes.length,1)) * Math.PI * 2 + ci * .62;
+    const band = n.kind === 'memory' ? 1.28 : .72 + (ci % 4) * .16;
+    const radius = 250 * band + (i % 7) * 16;
     const weight = Math.max(1, Number(n.weight || n.count || 1));
-    const t = count <= 1 ? 0 : ((rank + .5) / count) * 2 - 1;
-    const radial = Math.sqrt(Math.max(0, 1 - t * t));
-    const angle = rank * golden + ci * .73;
-    const shell = (n.kind === 'memory' ? 118 : 82) + Math.min(58, Math.sqrt(weight) * 11) + (rank % 5) * 9;
-    const wobble = ((i * 97) % 41 - 20);
-    n.x = center.x + Math.cos(angle) * radial * shell * 1.18 + Math.cos(center.angle + rank) * wobble;
-    n.y = center.y + t * shell * 1.08 + (((i * 53) % 67) - 33) * .55;
-    n.z = center.z + Math.sin(angle) * radial * shell * 1.42 + Math.sin(center.angle - rank * .5) * wobble * 1.35;
-    n.size = Math.min(32, 8 + Math.sqrt(weight)*4.8) * (n.kind === 'memory' ? 1.12 : 1);
+    n.x = Math.cos(angle) * radius;
+    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24) + ((i % 9) - 4) * 8;
+    n.z = Math.sin(angle) * radius * .82 + Math.cos(angle * 1.7) * 42 + ((ci % 5) - 2) * 42;
+    n.size = Math.min(22, 4 + Math.sqrt(weight)*3.4) * (n.kind === 'memory' ? 1.08 : 1);
     n.twinkle = (i % 23) / 23;
-    const twinkleTier = i % 13 === 0 ? 2 : (i % 5 === 0 ? 1 : 0);
-    n.twinkleFreq = twinkleTier === 2 ? .0048 + ((i * 31) % 80) / 100000 : (twinkleTier === 1 ? .0022 + ((i * 37) % 90) / 100000 : .00095 + ((i * 41) % 100) / 100000);
-    n.twinkleAmp = twinkleTier === 2 ? .30 : (twinkleTier === 1 ? .20 : .12 + ((i * 29) % 50) / 1000);
+    n.twinkleFreq = .001 + ((i * 41) % 120) / 100000;
+    n.twinkleAmp = .08 + ((i * 29) % 70) / 1000;
     n._degree = 0; n._weight = weight;
   });
   return nodes;
@@ -1552,10 +1532,10 @@ function buildThreeNeuralPositions(data){
   threeVis.neuralRegions = Object.values(regions);
   return nodes;
 }
-function limitedThreeEdges(data, byId){
+function limitedThreeEdges(data, byId, mobile=false){
   const degree = new Map(); const out=[];
-  const limit = threeVis.mode === 'neural' ? 132 : 260;
-  const degreeLimit = threeVis.mode === 'neural' ? 5 : 999;
+  const limit = threeVis.mode === 'neural' ? 132 : (mobile ? 52 : 118);
+  const degreeLimit = threeVis.mode === 'neural' ? 5 : (mobile ? 2 : 4);
   for(const e of (data.edges || [])){
     const a=byId.get(e.source), b=byId.get(e.target); if(!a || !b) continue;
     const da=degree.get(e.source)||0, db=degree.get(e.target)||0; if(da>=degreeLimit || db>=degreeLimit) continue;
@@ -1785,7 +1765,7 @@ async function renderThreeVisualiser(data){
   const group = new THREE.Group(); scene.add(group);
   const ambient = new THREE.AmbientLight(0xffffff, .55); scene.add(ambient);
   const light = new THREE.PointLight(colors.entity, 1.2, 1200); light.position.set(180,220,260); scene.add(light);
-  const nodes = buildThreePositions(data); const byId = new Map(nodes.map(n=>[n.id,n])); const edges = limitedThreeEdges(data, byId);
+  const nodes = buildThreePositions(data); const byId = new Map(nodes.map(n=>[n.id,n])); const edges = limitedThreeEdges(data, byId, mobileThree);
   const linkGeom = buildThreeLinkSegments(THREE, edges);
   const linkMaterial = threeVis.mode === 'neural'
     ? new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity:colors.light ? .30 : .40, blending:colors.light ? THREE.NormalBlending : THREE.AdditiveBlending, depthWrite:false })
@@ -1798,11 +1778,11 @@ async function renderThreeVisualiser(data){
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 48);
     addNeuralDendrites(THREE, group, nodes, colors);
   } else {
-    addHaloPoints(THREE, group, nodes, 'entity', colors.entity, mobileThree ? 58 : 68);
-    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, mobileThree ? 56 : 66);
+    // Constellation already has per-star shader halos. A separate halo layer made
+    // the mobile view read like blurry particles instead of the original star map.
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 52));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 50));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 44));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 42));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
@@ -1851,7 +1831,7 @@ function updateThreeLabels(){
   updateThreeAuras(rect, v);
   const labelBoxes = [];
   const zoomReveal = threeVis.mode === 'neural' ? Math.max(0, Math.min(1, (900 - threeVis.cameraZ) / 420)) : Math.max(0, Math.min(1, (760 - threeVis.cameraZ) / 520));
-  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 7 : 11) + Math.round(zoomReveal * (rect.width < 520 ? 9 : 12))) : ((rect.width < 520 ? 4 : 9) + Math.round(zoomReveal * (rect.width < 520 ? 5 : 8)));
+  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 7 : 11) + Math.round(zoomReveal * (rect.width < 520 ? 9 : 12))) : (rect.width < 520 ? (zoomReveal > .42 ? Math.round(zoomReveal * 4) : 0) : (4 + Math.round(zoomReveal * 5)));
   let shown = 0;
   $$('#threeLabels .three-label').forEach((el,i)=>{
     const n = threeVis.labels[i]; if(!n) return;
