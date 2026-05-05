@@ -574,7 +574,7 @@ function inspectConstellationNode(node){
 }
 function constellationColors(){
   const light = document.documentElement.dataset.theme === 'light';
-  return light ? { light:true, bg:'#fbf8f3', nebula:'rgba(101,214,255,.11)', star:'#087fa6', memory:'#a9700a', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(25,65,108,.50)', memoryEdge:'rgba(130,78,18,.48)' } : { light:false, bg:'#050711', nebula:'rgba(101,214,255,.14)', star:'#65d6ff', memory:'#ffd166', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(198,224,255,.44)', memoryEdge:'rgba(255,209,102,.50)' };
+  return light ? { light:true, bg:'#fbf8f3', nebula:'rgba(101,214,255,.11)', star:'#087fa6', memory:'#c9a96e', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(25,65,108,.50)', memoryEdge:'rgba(130,78,18,.48)' } : { light:false, bg:'#050711', nebula:'rgba(101,214,255,.14)', star:'#65d6ff', memory:'#ffe08a', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(198,224,255,.44)', memoryEdge:'rgba(255,224,138,.50)' };
 }
 function projectConstellationNode(n, w, h, t){
   const rot = constellationScene.rotation;
@@ -1700,9 +1700,9 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           float alpha = (body * 0.92 + core * 0.38 + halo + rays) * uOpacity * clamp(0.74 + (vPulse - 1.0) * 1.02, 0.50, 1.24);
           if(alpha < 0.022) discard;
           vec3 starCore = mix(uColor, vec3(1.0), core * 0.72 + rays * 0.38);
-          vec3 memoryCore = mix(uColor, vec3(1.0, 0.92, 0.58), core * 0.34);
+          vec3 memoryCore = uColor;
           vec3 crisp = mix(memoryCore, starCore, uIsStar);
-          gl_FragColor = vec4(crisp * (0.96 + (vPulse - 1.0) * 0.16), min(alpha, 1.0));
+          gl_FragColor = vec4(crisp * (0.99 + (vPulse - 1.0) * 0.10), min(alpha, 1.0));
         }
       `,
       transparent:true,
