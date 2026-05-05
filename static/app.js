@@ -1404,19 +1404,19 @@ function makePointTexture(THREE, kind){
     g.addColorStop(1,'rgba(255,255,255,0)');
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,61,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,.70)'; ctx.lineCap='round'; ctx.lineJoin='round';
-    for(let i=0;i<12;i++){
-      const a=(i/12)*Math.PI*2 + .13;
-      const len=30 + (i%4)*6;
-      const fork=len*.70;
-      const sx=cx+Math.cos(a)*14, sy=cy+Math.sin(a)*14;
+    for(let i=0;i<9;i++){
+      const a=(i/9)*Math.PI*2 + .13;
+      const len=22 + (i%4)*4;
+      const fork=len*.62;
+      const sx=cx+Math.cos(a)*13, sy=cy+Math.sin(a)*13;
       const mx=cx+Math.cos(a+.10*Math.sin(i))*fork, my=cy+Math.sin(a+.10*Math.sin(i))*fork;
       const ex=cx+Math.cos(a)*len, ey=cy+Math.sin(a)*len;
-      ctx.lineWidth=i%3===0?3.0:1.8;
+      ctx.lineWidth=i%3===0?2.25:1.45;
       ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(mx,my,ex,ey); ctx.stroke();
-      ctx.lineWidth=1.15;
+      ctx.lineWidth=.9;
       ctx.globalAlpha=.72;
-      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(cx+Math.cos(a+.38)*len*.82,cy+Math.sin(a+.38)*len*.82); ctx.stroke();
-      if(i%3!==1){ ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(cx+Math.cos(a-.34)*len*.76,cy+Math.sin(a-.34)*len*.76); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(cx+Math.cos(a+.38)*len*.66,cy+Math.sin(a+.38)*len*.66); ctx.stroke();
+      if(i%3===0){ ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(cx+Math.cos(a-.34)*len*.60,cy+Math.sin(a-.34)*len*.60); ctx.stroke(); }
       ctx.globalAlpha=1;
     }
     ctx.fillStyle='rgba(255,255,255,.98)'; ctx.beginPath(); ctx.arc(cx,cy,16,0,Math.PI*2); ctx.fill();
@@ -1428,9 +1428,9 @@ function makePointTexture(THREE, kind){
     g.addColorStop(.42,'rgba(255,255,255,.34)');
     g.addColorStop(1,'rgba(255,255,255,0)');
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,62,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,.68)'; ctx.lineCap='round'; ctx.lineWidth=2.1;
+    ctx.strokeStyle='rgba(255,255,255,.68)'; ctx.lineCap='round'; ctx.lineWidth=1.55;
     for(let i=0;i<5;i++){
-      const a=(i/5)*Math.PI*2+.22, len=27+(i%2)*6;
+      const a=(i/5)*Math.PI*2+.22, len=21+(i%2)*4;
       ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*18,cy+Math.sin(a)*18); ctx.lineTo(cx+Math.cos(a)*len,cy+Math.sin(a)*len); ctx.stroke();
     }
     ctx.lineWidth=2.4; ctx.beginPath(); ctx.arc(cx,cy,25,0,Math.PI*2); ctx.stroke();
@@ -1583,18 +1583,18 @@ function addHaloPoints(THREE, scene, nodes, kind, color, size){
 function addNeuralDendrites(THREE, group, nodes, colors){
   const trunks=[]; const twigs=[]; const tips=[];
   nodes.slice(0,150).forEach((n,i)=>{
-    const arms = n.kind === 'memory' ? 4 : 8;
-    const base = n.kind === 'memory' ? 15 : 25;
+    const arms = n.kind === 'memory' ? 3 : 6;
+    const base = n.kind === 'memory' ? 10 : 17;
     for(let a=0;a<arms;a++){
       const theta=(a/arms)*Math.PI*2 + (i%11)*.19;
       const phi=Math.sin(i*.37+a)*.58;
-      const len=base + ((i+a*13)%13);
-      const mid=[n.x+Math.cos(theta+.16)*Math.cos(phi)*len*.55, n.y+Math.sin(phi)*len*.44, n.z+Math.sin(theta+.16)*Math.cos(phi)*len*.55];
-      const end=[n.x+Math.cos(theta)*Math.cos(phi)*len, n.y+Math.sin(phi)*len*.72, n.z+Math.sin(theta)*Math.cos(phi)*len];
+      const len=base + ((i+a*13)%9);
+      const mid=[n.x+Math.cos(theta+.16)*Math.cos(phi)*len*.50, n.y+Math.sin(phi)*len*.36, n.z+Math.sin(theta+.16)*Math.cos(phi)*len*.50];
+      const end=[n.x+Math.cos(theta)*Math.cos(phi)*len*.78, n.y+Math.sin(phi)*len*.54, n.z+Math.sin(theta)*Math.cos(phi)*len*.78];
       trunks.push(n.x,n.y,n.z, mid[0],mid[1],mid[2], mid[0],mid[1],mid[2], end[0],end[1],end[2]);
-      if(n.kind !== 'memory' || a%2===0){
+      if(n.kind !== 'memory' && a%2===0){
         const side=theta+(a%2?.44:-.40);
-        const fork=[mid[0]+Math.cos(side)*len*.26, mid[1]+Math.sin(phi+.25)*len*.18, mid[2]+Math.sin(side)*len*.26];
+        const fork=[mid[0]+Math.cos(side)*len*.18, mid[1]+Math.sin(phi+.25)*len*.12, mid[2]+Math.sin(side)*len*.18];
         twigs.push(mid[0],mid[1],mid[2], fork[0],fork[1],fork[2]);
       }
       if(i%3===0 && a%2===0) tips.push(end[0],end[1],end[2]);
@@ -1674,8 +1674,8 @@ async function renderThreeVisualiser(data){
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 36);
     addNeuralDendrites(THREE, group, nodes, colors);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 14.2 : 7));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 10.2 : 5.8));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 12.8 : 7));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 9.4 : 5.8));
   const starCount = threeVis.mode === 'neural' ? 360 : 520;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
