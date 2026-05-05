@@ -724,9 +724,9 @@ function drawSynapse(ctx, a, b, e, c, t, compactCanvas, pulse=false){
   const inv=1-phase;
   const qx=inv*inv*a.x + 2*inv*phase*cx + phase*phase*b.x;
   const qy=inv*inv*a.y + 2*inv*phase*cy + phase*phase*b.y;
-  ctx.globalAlpha=(compactCanvas ? .28 : .42) * depth;
+  ctx.globalAlpha=(compactCanvas ? .36 : .54) * depth;
   ctx.fillStyle=e.kind === 'memory' ? c.memory : c.star;
-  ctx.beginPath(); ctx.arc(qx,qy,compactCanvas ? 1.35 : 1.75,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(qx,qy,compactCanvas ? 1.55 : 2.15,0,Math.PI*2); ctx.fill();
 }
 function drawNeuronSoma(ctx, n, p, c, t, compactCanvas){
   const weight=Math.max(1, Number(n.weight || n.count || 1));
@@ -836,8 +836,8 @@ function drawNeuralFrame(t=0){
     const da=edgeDegree.get(e.source) || 0, db=edgeDegree.get(e.target) || 0;
     if(da >= degreeLimit || db >= degreeLimit) continue;
     edgeDegree.set(e.source, da+1); edgeDegree.set(e.target, db+1); edgeDrawn++;
-    const pulseStride = compactCanvas ? 8 : 10;
-    const pulseLimit = compactCanvas ? 8 : 14;
+    const pulseStride = compactCanvas ? 4 : 3;
+    const pulseLimit = compactCanvas ? 24 : 72;
     const shouldPulse = !constellationScene.drag && edgeDrawn <= pulseLimit && ((edgeDrawn + ((e.id || '').length % pulseStride)) % pulseStride === 0);
     drawSynapse(ctx,a,b,e,c,t,compactCanvas,shouldPulse);
   }
@@ -903,7 +903,7 @@ function switchVisualiserMode(mode){
 }
 function drawVisualiserFrame(t=0){
   const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
-  const interval = mode === 'neural' ? 33 : 25;
+  const interval = 16;
   if(t && constellationScene.renderLastTime && t - constellationScene.renderLastTime < interval){
     constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
     return;
