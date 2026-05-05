@@ -1661,7 +1661,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
         uTime:{value:0},
         uScale:{value:420},
         uColor:{value:new THREE.Color(color)},
-        uMap:{value:makePointTexture(THREE, kind === 'memory' ? 'orb' : 'star')},
+        uIsStar:{value:kind === 'memory' ? 0 : 1},
         uOpacity:{value:kind === 'memory' ? .98 : .96}
       },
       vertexShader:`
@@ -1682,14 +1682,25 @@ function addPoints(THREE, scene, nodes, kind, color, size){
       `,
       fragmentShader:`
         uniform vec3 uColor;
-        uniform sampler2D uMap;
+        uniform float uIsStar;
         uniform float uOpacity;
         varying float vPulse;
         void main(){
-          vec4 tex = texture2D(uMap, gl_PointCoord);
-          float alpha = tex.a * uOpacity * clamp(0.72 + (vPulse - 1.0) * 1.15, 0.42, 1.28);
-          if(alpha < 0.018) discard;
-          gl_FragColor = vec4(uColor * (0.88 + (vPulse - 1.0) * 0.32), alpha);
+          vec2 p = gl_PointCoord - vec2(0.5);
+          float d = length(p);
+          if(d > 0.5) discard;
+          float core = 1.0 - smoothstep(0.055, 0.18, d);
+          float body = 1.0 - smoothstep(0.18, 0.34, d);
+          float halo = (1.0 - smoothstep(0.30, 0.50, d)) * 0.22;
+          float rayH = max(0.0, 1.0 - abs(p.y) / 0.018) * (1.0 - smoothstep(0.10, 0.48, abs(p.x)));
+          float rayV = max(0.0, 1.0 - abs(p.x) / 0.018) * (1.0 - smoothstep(0.10, 0.48, abs(p.y)));
+          float diag1 = max(0.0, 1.0 - abs(p.x - p.y) / 0.018) * (1.0 - smoothstep(0.08, 0.35, d));
+          float diag2 = max(0.0, 1.0 - abs(p.x + p.y) / 0.018) * (1.0 - smoothstep(0.08, 0.35, d));
+          float rays = uIsStar * (max(rayH, rayV) * 0.62 + max(diag1, diag2) * 0.26);
+          float alpha = (body * 0.80 + core * 0.55 + halo + rays) * uOpacity * clamp(0.74 + (vPulse - 1.0) * 1.02, 0.50, 1.24);
+          if(alpha < 0.022) discard;
+          vec3 crisp = mix(uColor, vec3(1.0), core * 0.72 + rays * 0.38);
+          gl_FragColor = vec4(crisp * (0.92 + (vPulse - 1.0) * 0.22), min(alpha, 1.0));
         }
       `,
       transparent:true,
