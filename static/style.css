@@ -216,8 +216,9 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 .three-label{transition:opacity .55s ease,transform .55s ease}.three-label.memory{color:#ffd6bd;border-color:rgba(255,155,106,.18)}
 .three-legend{z-index:3}.three-viewport[data-three-mode="neural"] .legend-dot.memory{background:#ff5f57;box-shadow:0 0 10px rgba(255,95,87,.90)}.three-viewport[data-three-mode="neural"] .legend-line{border-top-color:rgba(82,214,181,.62)}
 [data-theme="light"] .three-viewport{background:radial-gradient(circle at 50% 42%,rgba(101,214,255,.14),transparent 34%),linear-gradient(180deg,rgba(255,255,255,.92),rgba(247,243,237,.95))}
-[data-theme="light"] .three-viewport[data-three-mode="neural"]{background:radial-gradient(circle at 48% 42%,rgba(58,168,142,.14),transparent 34%),radial-gradient(circle at 20% 76%,rgba(216,122,74,.10),transparent 28%),linear-gradient(180deg,rgba(255,255,255,.92),rgba(247,243,237,.95))}
-[data-theme="light"] .three-label{background:rgba(255,255,255,.66);color:rgba(43,41,39,.78);border-color:rgba(61,52,44,.12);text-shadow:none}
+[data-theme="light"] .three-viewport[data-three-mode="neural"]{background:radial-gradient(circle at 48% 42%,rgba(24,128,107,.10),transparent 32%),radial-gradient(circle at 20% 76%,rgba(185,54,46,.08),transparent 28%),linear-gradient(180deg,rgba(249,244,237,.96),rgba(242,236,228,.98))}
+[data-theme="light"] .three-viewport[data-three-mode="neural"] .three-aura-oval{background:radial-gradient(ellipse at center,rgba(8,127,115,.10) 0%,rgba(8,127,115,.055) 50%,rgba(8,127,115,.018) 78%,transparent 100%);border-color:rgba(8,127,115,.10);box-shadow:inset 0 0 18px rgba(8,127,115,.05);mix-blend-mode:multiply}
+[data-theme="light"] .three-label{background:rgba(255,255,255,.80);color:rgba(37,34,32,.86);border-color:rgba(61,52,44,.16);text-shadow:none;box-shadow:0 8px 18px rgba(60,48,36,.08)}
 @media(max-width:1180px){.three-layout{grid-template-columns:1fr}.three-viewport{height:540px;min-height:540px}}
 @media(max-width:760px),(max-width:940px) and (max-height:520px){.three-layout{grid-template-columns:1fr;gap:10px}.three-viewport{height:430px;min-height:430px;border-radius:18px}.three-label{font-size:10px;padding:2px 5px}.three-layout .graph-inspector{min-height:auto}}
 
