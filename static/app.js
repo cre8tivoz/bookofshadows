@@ -9,7 +9,8 @@ let applyingHistory = false;
 let bulkSelection = new Set();
 let latestMemoryItems = [];
 let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
-let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], rotation: 0, tilt: 0.35, zoom: 1, panX: 0, panY: 0, paused: false, mode: 'rotate', lastFrameTime: 0, hits: [], data: null, drag: null, pointers: new Map() };
+const CONSTELLATION_DEFAULT_CAMERA = { rotation: 0.55, tilt: 0.78, zoom: 1, panX: 0, panY: 0 };
+let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], ...CONSTELLATION_DEFAULT_CAMERA, paused: false, mode: 'rotate', lastFrameTime: 0, hits: [], data: null, drag: null, pointers: new Map() };
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -744,7 +745,7 @@ function clampConstellationCamera(w, h){
   constellationScene.panY = Math.max(-panLimitY, Math.min(panLimitY, Number.isFinite(constellationScene.panY) ? constellationScene.panY : 0));
 }
 function resetConstellationView(){
-  Object.assign(constellationScene, { rotation: 0, tilt: 0.35, zoom: 1, panX: 0, panY: 0, drag: null, lastFrameTime: 0 });
+  Object.assign(constellationScene, { ...CONSTELLATION_DEFAULT_CAMERA, drag: null, lastFrameTime: 0 });
   constellationScene.pointers.clear();
   updateConstellationPauseButton();
   updateConstellationPanButton();
