@@ -303,7 +303,13 @@ class ChromeSession:
           localStorage.setItem('mnemosyne-dashboard-theme', {json.dumps(theme)});
           if (typeof setTheme === 'function') setTheme({json.dumps(theme)});
           if (typeof switchTab !== 'function') throw new Error('dashboard JS did not initialise');
-          switchTab({json.dumps(tab)});
+          switchTab({json.dumps(tab if tab != 'neural' else 'constellation')});
+          if ({json.dumps(tab)} === 'constellation' && typeof switchVisualiserMode === 'function') {{
+            switchVisualiserMode('constellation');
+          }}
+          if ({json.dumps(tab)} === 'neural' && typeof switchVisualiserMode === 'function') {{
+            switchVisualiserMode('neural');
+          }}
           await new Promise(r=>setTimeout(r,900));
           if ({json.dumps(tab)} === 'search') {{
             document.querySelector('#globalSearchQuery').value = 'dashboard';
@@ -391,6 +397,7 @@ def run() -> None:
             ("desktop-dark-today.png", 1440, 1000, False, "dark", "today"),
             ("desktop-light-profile.png", 1440, 1000, False, "light", "profile"),
             ("desktop-dark-constellation.png", 1440, 1000, False, "dark", "constellation"),
+            ("desktop-dark-neural.png", 1440, 1000, False, "dark", "neural"),
             ("desktop-dark-search.png", 1440, 1000, False, "dark", "search"),
             ("desktop-light-graph.png", 1440, 1000, False, "light", "graph"),
             ("desktop-dark-timeline.png", 1440, 1000, False, "dark", "timelineView"),
@@ -398,6 +405,7 @@ def run() -> None:
             ("mobile-light-today.png", 390, 844, True, "light", "today"),
             ("mobile-dark-profile.png", 390, 844, True, "dark", "profile"),
             ("mobile-light-constellation.png", 390, 844, True, "light", "constellation"),
+            ("mobile-dark-neural.png", 390, 844, True, "dark", "neural"),
             ("mobile-light-search.png", 390, 844, True, "light", "search"),
             ("mobile-dark-timeline.png", 390, 844, True, "dark", "timelineView"),
             ("mobile-light-graph.png", 390, 844, True, "light", "graph"),

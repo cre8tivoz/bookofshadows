@@ -108,13 +108,17 @@
         </section>
 
         <section id="constellation" class="tab">
-          <div class="section-head"><h2>Visualiser</h2><span>constellation-style memory map</span></div>
+          <div class="section-head"><h2>Visualiser</h2><span>memory maps + neural activation views</span></div>
+          <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode">
+            <button id="visualiserConstellationTab" data-visualiser="constellation" class="active">Constellation</button>
+            <button id="visualiserNeuralTab" data-visualiser="neural">Neural Map <small>experimental</small></button>
+          </div>
           <div class="toolbar glass">
-            <button id="constellationRefresh" class="primary">Refresh constellation</button>
+            <button id="constellationRefresh" class="primary">Refresh visualiser</button>
             <button id="constellationReset">Reset view</button>
             <button id="constellationPanMode">Pan mode</button>
             <button id="constellationPause">Pause rotation</button>
-            <span class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.</span>
+            <span id="visualiserHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.</span>
           </div>
           <div class="constellation-layout">
             <div class="constellation-wrap"><canvas id="constellationCanvas" aria-label="Interactive 3D memory constellation"></canvas><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>

@@ -1,6 +1,7 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const THEME_KEY = 'mnemosyne-dashboard-theme';
+const VISUALISER_MODE_KEY = 'mnemosyne-dashboard-visualiser-mode';
 let graphState = { nodes: [], edges: [], byId: {} };
 let consolidationState = [];
 let authState = { config: {}, auth_enabled: false, authenticated: true };
@@ -12,7 +13,7 @@ let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
 const CONSTELLATION_MIN_ZOOM = .55;
 const CONSTELLATION_MAX_ZOOM = 6;
 const CONSTELLATION_DEFAULT_CAMERA = { rotation: 0.55, tilt: 0.78, zoom: 1, panX: 0, panY: 0 };
-let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], ...CONSTELLATION_DEFAULT_CAMERA, paused: false, mode: 'rotate', lastFrameTime: 0, hits: [], data: null, drag: null, pointers: new Map() };
+let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], ...CONSTELLATION_DEFAULT_CAMERA, paused: false, mode: 'rotate', visualiserMode: localStorage.getItem(VISUALISER_MODE_KEY) || 'constellation', lastFrameTime: 0, hits: [], data: null, drag: null, pointers: new Map() };
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -556,7 +557,12 @@ async function loadProfile(){
   $$('#profileGrid .profile-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
   $$('#profileGrid .profile-item[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail'));
 }
-function constellationInspectorDefault(){ $('#constellationInspector').innerHTML = `<div class="inspector-kicker">Constellation inspector</div><h3>Nothing selected</h3><p class="muted">Pick a star, memory, or link to inspect the underlying read-only source.</p>`; }
+function constellationInspectorDefault(){
+  const neural = constellationScene.visualiserMode === 'neural';
+  $('#constellationInspector').innerHTML = neural
+    ? `<div class="inspector-kicker">Neural inspector</div><h3>Nothing selected</h3><p class="muted">Pick a neuron hub, memory soma, or synapse to inspect the underlying read-only source.</p>`
+    : `<div class="inspector-kicker">Constellation inspector</div><h3>Nothing selected</h3><p class="muted">Pick a star, memory, or link to inspect the underlying read-only source.</p>`;
+}
 function inspectConstellationNode(node){
   $('#constellationInspector').innerHTML = `<div class="inspector-kicker">${esc(node.kind || 'entity')}</div><h3>${esc(node.label)}</h3><p class="muted">${esc(node.category || 'Other')} · ${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="constellationMemory" class="primary tiny">Open memory</button>' : ''}<button id="constellationSearch" class="tiny">Search this</button></div>`;
   if(node.memory_id) $('#constellationMemory').onclick = () => openMemoryDetail(node.memory_id);
@@ -601,12 +607,271 @@ function buildConstellationScene(data){
   constellationScene.nodes = nodes;
   constellationScene.edges = (data.edges || []).filter(e => nodes.some(n => n.id === e.source) && nodes.some(n => n.id === e.target)).slice(0,300);
   constellationScene.byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  constellationScene.regions = [];
   constellationScene.data = data;
   constellationScene.stars = Array.from({length:140}, (_,i) => {
     const fast = i % 13 === 0;
     const medium = !fast && i % 6 === 0;
     return { x:((i*73)%1000)/1000, y:((i*191)%680)/680, r:.35 + ((i*37)%100)/90, a:.18 + ((i*29)%100)/240, phase:(i*47)%628/100, freq:fast ? .0058 + ((i*41)%80)/100000 : (medium ? .0027 + ((i*41)%90)/100000 : .00048 + ((i*41)%95)/100000) };
   });
+}
+function buildNeuralMapScene(data){
+  const nodes = (data.nodes || []).slice(0,170).map(n => ({...n}));
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const edges = (data.edges || []).filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)).slice(0,340);
+  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
+  const regionCount = Math.max(1, categories.length);
+  const regions = Object.fromEntries(categories.map((cat, i) => {
+    const angle = -Math.PI / 2 + (i / regionCount) * Math.PI * 2;
+    const ring = .72 + (i % 2) * .10;
+    return [cat, { label:cat, angle, cx:Math.cos(angle) * 250 * ring, cy:Math.sin(angle) * 158 * ring, spread:72 + (i % 4) * 10 }];
+  }));
+  const degree = new Map();
+  edges.forEach(e => { degree.set(e.source, (degree.get(e.source) || 0) + 1); degree.set(e.target, (degree.get(e.target) || 0) + 1); });
+  const hubsByCategory = {};
+  nodes.filter(n => n.kind !== 'memory').sort((a,b)=>(Number(b.weight || b.count || 0)+ (degree.get(b.id)||0)) - (Number(a.weight || a.count || 0)+(degree.get(a.id)||0))).forEach(n => {
+    const cat = n.category || 'Other';
+    if(!hubsByCategory[cat]) hubsByCategory[cat] = [];
+    hubsByCategory[cat].push(n);
+  });
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  nodes.forEach((n,i) => {
+    const cat = n.category || 'Other';
+    const region = regions[cat] || regions.Other || { cx:0, cy:0, angle:0, spread:80 };
+    const ci = catIndex[cat] || 0;
+    const weight = Math.max(1, Number(n.weight || n.count || 1));
+    const d = degree.get(n.id) || 0;
+    if(n.kind === 'memory'){
+      const linked = edges.find(e => e.source === n.id || e.target === n.id);
+      const parent = linked ? byId[linked.source === n.id ? linked.target : linked.source] : null;
+      const parentX = parent && parent.kind !== 'memory' && Number.isFinite(parent.x) ? parent.x : region.cx;
+      const parentY = parent && parent.kind !== 'memory' && Number.isFinite(parent.y) ? parent.y : region.cy;
+      const branch = ((i * 137.5) % 360) * Math.PI / 180;
+      const dist = 54 + (i % 7) * 15 + Math.min(52, Math.sqrt(weight) * 12);
+      n.x = parentX + Math.cos(branch) * dist;
+      n.y = parentY + Math.sin(branch) * dist * .72;
+      n.z = Math.sin(branch + ci) * 36;
+    } else {
+      const rank = Math.max(0, (hubsByCategory[cat] || []).indexOf(n));
+      const orbit = rank === 0 ? 0 : 30 + Math.sqrt(rank) * 24;
+      const angle = region.angle + rank * 2.399963 + (ci % 3) * .24;
+      n.x = region.cx + Math.cos(angle) * orbit;
+      n.y = region.cy + Math.sin(angle) * orbit * .68;
+      n.z = Math.sin(angle * 1.7) * 44;
+    }
+    n.size = Math.min(30, 8 + Math.sqrt(weight + d) * (n.kind === 'memory' ? 3.2 : 4.1));
+    n.twinkle = (i % 17) / 17;
+    n.twinkleFreq = .0017 + ((i * 31) % 80) / 100000;
+    n.twinkleAmp = .08 + ((i * 19) % 40) / 1000;
+    n.neuralRegion = cat;
+  });
+  constellationScene.nodes = nodes;
+  constellationScene.edges = edges;
+  constellationScene.byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  constellationScene.regions = Object.values(regions);
+  constellationScene.data = data;
+  constellationScene.stars = Array.from({length:60}, (_,i) => ({ x:((i*89)%1000)/1000, y:((i*157)%680)/680, r:.25 + ((i*17)%100)/120, a:.10 + ((i*23)%100)/340, phase:(i*41)%628/100, freq:.00045 + ((i*29)%70)/100000 }));
+}
+function projectNeuralNode(n, w, h){
+  const fit = w < 620 ? Math.min(.88, Math.max(.62, (w - 38) / 620)) : Math.min(1.10, Math.max(.76, (w - 80) / 720));
+  const cameraScale = fit * constellationScene.zoom;
+  const x = Number(n.x || 0), y = Number(n.y || 0), z = Number(n.z || 0);
+  const cosR=Math.cos(constellationScene.rotation || 0), sinR=Math.sin(constellationScene.rotation || 0);
+  const xr=x*cosR - z*sinR, zr=x*sinR + z*cosR;
+  const cosT=Math.cos(constellationScene.tilt || 0), sinT=Math.sin(constellationScene.tilt || 0);
+  const yr=y*cosT - zr*sinT, zt=y*sinT + zr*cosT;
+  const depthScale = Math.max(.62, Math.min(1.42, 1 + zt / 850));
+  return { x:w/2 + constellationScene.panX + xr*cameraScale*depthScale, y:h/2 + constellationScene.panY + yr*cameraScale*depthScale, z:zt, scale:cameraScale*depthScale, visible:true };
+}
+function drawSynapse(ctx, a, b, e, c, t, compactCanvas){
+  const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const len=Math.max(1, Math.hypot(dx,dy));
+  const curve=Math.min(compactCanvas ? 34 : 58, len*.18) * (((e.id || '').length % 2) ? 1 : -1);
+  const cx=mx - dy/len*curve, cy=my + dx/len*curve;
+  const grad=ctx.createLinearGradient(a.x,a.y,b.x,b.y);
+  grad.addColorStop(0, c.synapse);
+  grad.addColorStop(.55, e.kind === 'memory' ? c.memorySynapse : c.synapseHot);
+  grad.addColorStop(1, c.synapse);
+  ctx.strokeStyle=grad;
+  ctx.globalAlpha=compactCanvas ? .28 : .36;
+  ctx.lineWidth=compactCanvas ? .72 : .92;
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.quadraticCurveTo(cx,cy,b.x,b.y); ctx.stroke();
+  const phase=((t*.00018 + ((e.id || '').length % 17)/17) % 1);
+  const qx=(1-phase)*(1-phase)*a.x + 2*(1-phase)*phase*cx + phase*phase*b.x;
+  const qy=(1-phase)*(1-phase)*a.y + 2*(1-phase)*phase*cy + phase*phase*b.y;
+  ctx.globalAlpha=compactCanvas ? .34 : .52;
+  ctx.fillStyle=e.kind === 'memory' ? c.memory : c.star;
+  ctx.beginPath(); ctx.arc(qx,qy,compactCanvas ? 1.7 : 2.2,0,Math.PI*2); ctx.fill();
+}
+function drawNeuronSoma(ctx, n, p, c, t, compactCanvas){
+  const weight=Math.max(1, Number(n.weight || n.count || 1));
+  const base=n.kind === 'memory' ? c.memory : c.star;
+  const r=Math.min(compactCanvas ? 7.5 : 11, Math.max(compactCanvas ? 3.4 : 4.6, (2.8 + Math.sqrt(weight)*1.15) * p.scale));
+  const pulse=1 + Math.sin(t*(n.twinkleFreq || .0017) + n.twinkle*6.28)*(n.twinkleAmp || .09);
+  const somaR=r*pulse;
+  const halo=somaR*(n.kind === 'memory' ? 2.3 : 2.8);
+  const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,halo);
+  glow.addColorStop(0,'rgba(255,255,255,.82)');
+  glow.addColorStop(.20,base);
+  glow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.globalAlpha=c.light ? .20 : .30;
+  ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,halo,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate((n.twinkle || 0)*Math.PI*2 + t*.00004);
+  ctx.strokeStyle=base; ctx.lineCap='round'; ctx.shadowColor=base; ctx.shadowBlur=compactCanvas ? 5 : 8;
+  const dendrites=n.kind === 'memory' ? 3 : 6;
+  for(let i=0;i<dendrites;i++){
+    const a=(i/dendrites)*Math.PI*2 + Math.sin(t*.00018+i)*.10;
+    const length=somaR*(n.kind === 'memory' ? 1.55 : 2.15) + (i%3)*2.5;
+    ctx.globalAlpha=c.light ? .22 : .34;
+    ctx.lineWidth=Math.max(.55,somaR*.10);
+    ctx.beginPath(); ctx.moveTo(Math.cos(a)*somaR*.72, Math.sin(a)*somaR*.72); ctx.lineTo(Math.cos(a)*length, Math.sin(a)*length); ctx.stroke();
+    if(n.kind !== 'memory'){
+      ctx.globalAlpha=c.light ? .16 : .24;
+      const fork=length*.72;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a)*fork, Math.sin(a)*fork); ctx.lineTo(Math.cos(a+.38)*length*.96, Math.sin(a+.38)*length*.96); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=.96; ctx.fillStyle='rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(0,0,somaR*.88,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=.78; ctx.fillStyle=base; ctx.beginPath(); ctx.arc(0,0,somaR*.58,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=.72; ctx.fillStyle=c.bg; ctx.beginPath(); ctx.arc(-somaR*.16,-somaR*.18,somaR*.18,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  return { r:somaR, halo };
+}
+function drawNeuralFrame(t=0){
+  const canvas = $('#constellationCanvas');
+  if(!canvas) return;
+  const wrap = canvas.parentElement;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const w = Math.max(320, wrap.clientWidth || canvas.clientWidth || 1000);
+  const h = Math.max(430, wrap.clientHeight || canvas.clientHeight || 680);
+  const compactCanvas = w < 620;
+  if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const c = neuralColors();
+  if(!constellationScene.paused && !constellationScene.drag && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    const delta = constellationScene.lastFrameTime ? Math.min(48, t - constellationScene.lastFrameTime) : 16;
+    constellationScene.rotation += delta * 0.000032;
+  }
+  constellationScene.lastFrameTime = t;
+  clampConstellationCamera(w, h);
+  ctx.clearRect(0,0,w,h);
+  const bg = ctx.createRadialGradient(w*.48,h*.44,18,w*.48,h*.44,Math.max(w,h)*.78);
+  bg.addColorStop(0, c.core);
+  bg.addColorStop(.48, c.mid);
+  bg.addColorStop(1, c.bg);
+  ctx.fillStyle=bg; ctx.fillRect(0,0,w,h);
+  constellationScene.stars.forEach((s)=>{ const pulse=.50 + Math.sin(t*s.freq + s.phase)*.30; ctx.globalAlpha=s.a*Math.max(.10, pulse)*(c.light ? .35 : .55); ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r*(c.light ? .55 : .75), 0, Math.PI*2); ctx.fill(); });
+  ctx.globalAlpha=1;
+  const projected = new Map();
+  constellationScene.nodes.forEach(n => projected.set(n.id, projectNeuralNode(n,w,h)));
+  (constellationScene.regions || []).slice(0,10).forEach((region, i) => {
+    const rp = projectNeuralNode({x:region.cx,y:region.cy,z:0},w,h);
+    const rx = (region.spread || 82) * (compactCanvas ? 1.20 : 1.55) * rp.scale;
+    const ry = (region.spread || 82) * (compactCanvas ? .76 : .98) * rp.scale;
+    const hue = i % 3;
+    const fill = c.light
+      ? (hue === 0 ? 'rgba(76,171,158,.075)' : hue === 1 ? 'rgba(101,214,255,.065)' : 'rgba(255,209,102,.060)')
+      : (hue === 0 ? 'rgba(76,171,158,.115)' : hue === 1 ? 'rgba(101,214,255,.092)' : 'rgba(255,209,102,.070)');
+    ctx.save();
+    ctx.translate(rp.x,rp.y);
+    ctx.rotate(region.angle*.42);
+    ctx.globalAlpha=1;
+    ctx.fillStyle=fill;
+    ctx.beginPath();
+    ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha=c.light ? .18 : .24;
+    ctx.strokeStyle=hue === 2 ? c.memorySynapse : c.synapseHot;
+    ctx.lineWidth=.8;
+    ctx.beginPath(); ctx.ellipse(0,0,rx*.72,ry*.72,0,0,Math.PI*2); ctx.stroke();
+    if(!compactCanvas && region.label){
+      ctx.globalAlpha=c.light ? .32 : .28;
+      ctx.fillStyle=c.text;
+      ctx.font='10px Inter, system-ui, sans-serif';
+      ctx.fillText(region.label.slice(0,22), -rx*.42, -ry*.48);
+    }
+    ctx.restore();
+  });
+  const edgeDegree = new Map();
+  let edgeDrawn = 0;
+  const edgeLimit = compactCanvas ? 72 : 190;
+  const degreeLimit = compactCanvas ? 3 : 6;
+  for(const e of constellationScene.edges){
+    const a=projected.get(e.source), b=projected.get(e.target);
+    if(!a || !b) continue;
+    if(edgeDrawn >= edgeLimit) break;
+    const da=edgeDegree.get(e.source) || 0, db=edgeDegree.get(e.target) || 0;
+    if(da >= degreeLimit || db >= degreeLimit) continue;
+    edgeDegree.set(e.source, da+1); edgeDegree.set(e.target, db+1); edgeDrawn++;
+    drawSynapse(ctx,a,b,e,c,t,compactCanvas);
+  }
+  ctx.globalAlpha=1; ctx.setLineDash([]);
+  const hits=[];
+  const labelBoxes=[];
+  const nodeDegrees = new Map();
+  constellationScene.edges.forEach(e => { nodeDegrees.set(e.source, (nodeDegrees.get(e.source) || 0) + 1); nodeDegrees.set(e.target, (nodeDegrees.get(e.target) || 0) + 1); });
+  [...constellationScene.nodes].sort((a,b)=>(Number(a.z||0)-Number(b.z||0))).forEach(n => {
+    const p=projected.get(n.id); if(!p) return;
+    const drawn=drawNeuronSoma(ctx,n,p,c,t,compactCanvas);
+    const labelRaw=(n.label || '').replace(/^memory:/,'mem ');
+    const compactRaw=labelRaw.trim();
+    const alphaChars=(compactRaw.match(/[A-Za-z]/g) || []).length;
+    const isHashLike=/^[a-f0-9]{10,}$/i.test(compactRaw) || /^mem\s+[a-f0-9]{6,}$/i.test(compactRaw);
+    const isMachineToken=/^[A-Z0-9_:/.-]{14,}$/.test(compactRaw) && /[_:/.-]/.test(compactRaw);
+    const degree=nodeDegrees.get(n.id) || 0;
+    const weight=Math.max(1, Number(n.weight || n.count || 1));
+    const showLabel = !isHashLike && !isMachineToken && alphaChars >= 4 && (compactCanvas ? (n.kind !== 'memory' && (weight > 7.2 || degree > 2)) : (degree > 0 || weight > 3.4 || n.kind !== 'memory'));
+    if(showLabel){
+      const label=/^[A-Z][A-Z_\s-]{2,}$/.test(labelRaw) ? labelRaw.toLowerCase().replace(/(^|[_\s-])([a-z])/g, (_m, sep, ch) => (sep === '_' ? ' ' : sep) + ch.toUpperCase()) : labelRaw;
+      const short=label.length>22?label.slice(0,19)+'…':label;
+      ctx.font=`${Math.round((compactCanvas ? 9 : 10) + Math.min(3,Math.sqrt(weight)))}px Inter, system-ui, sans-serif`;
+      const lx=p.x+drawn.halo*.55+6, ly=p.y+4, tw=ctx.measureText(short).width;
+      const box={x:lx-4,y:ly-14,w:tw+8,h:19};
+      const onCanvas=box.x>=10 && box.x+box.w<=w-10 && box.y>=10 && box.y+box.h<=h-10;
+      const collides=labelBoxes.some(b => !(box.x+box.w<b.x || b.x+b.w<box.x || box.y+box.h<b.y || b.y+b.h<box.y));
+      if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=5; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(.82,.40+p.scale*.32); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
+    }
+    hits.push({x:p.x,y:p.y,r:Math.max(15,drawn.halo*.75),node:n});
+  });
+  constellationScene.hits=hits;
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
+}
+function neuralColors(){
+  const light = document.documentElement.dataset.theme === 'light';
+  return light ? { light:true, bg:'#fbf8f2', core:'rgba(58,168,142,.16)', mid:'rgba(216,122,74,.10)', star:'#138f7a', memory:'#b8643f', text:'#2b2927', synapse:'rgba(42,118,101,.26)', synapseHot:'rgba(16,144,119,.50)', memorySynapse:'rgba(184,92,55,.42)' } : { light:false, bg:'#06100f', core:'rgba(34,130,111,.28)', mid:'rgba(64,38,35,.35)', star:'#66e8c6', memory:'#ff9b6a', text:'#f6fbf7', synapse:'rgba(82,214,181,.22)', synapseHot:'rgba(90,238,196,.52)', memorySynapse:'rgba(255,145,96,.42)' };
+}
+function updateVisualiserModeUI(){
+  const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
+  $$('.visualiser-tabs button').forEach(b => b.classList.toggle('active', b.dataset.visualiser === mode));
+  const wrap = $('#constellationCanvas')?.parentElement;
+  if(wrap) wrap.dataset.visualiser = mode;
+  const legend = $('.constellation-legend');
+  if(legend) legend.innerHTML = mode === 'neural'
+    ? '<span><i class="legend-dot entity"></i>Neuron hub</span><span><i class="legend-dot memory"></i>Memory soma</span><span><i class="legend-line"></i>Synapse</span>'
+    : '<span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span>';
+  const help = $('#visualiserHelp');
+  if(help) help.textContent = mode === 'neural' ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron.' : 'Drag to orbit the neural sheet · Pan mode/Shift-drag to pan · wheel/pinch to zoom.') : 'Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.';
+  const pause = $('#constellationPause');
+  if(pause){ pause.style.display = ''; pause.textContent = constellationScene.paused ? (mode === 'neural' ? 'Resume drift' : 'Resume rotation') : (mode === 'neural' ? 'Pause drift' : 'Pause rotation'); }
+  const pan = $('#constellationPanMode');
+  if(pan) pan.textContent = constellationScene.mode === 'pan' ? (mode === 'neural' ? 'Orbit mode' : 'Rotate mode') : 'Pan mode';
+}
+function switchVisualiserMode(mode){
+  constellationScene.visualiserMode = mode === 'neural' ? 'neural' : 'constellation';
+  localStorage.setItem(VISUALISER_MODE_KEY, constellationScene.visualiserMode);
+  constellationScene.drag = null;
+  constellationScene.pointers.clear();
+  Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', lastFrameTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', lastFrameTime:0 });
+  updateVisualiserModeUI();
+  if(constellationScene.data) drawConstellation(constellationScene.data);
+}
+function drawVisualiserFrame(t=0){
+  if(constellationScene.visualiserMode === 'neural') drawNeuralFrame(t);
+  else drawConstellationFrame(t);
 }
 function drawConstellationFrame(t=0){
   const canvas = $('#constellationCanvas');
@@ -631,7 +896,7 @@ function drawConstellationFrame(t=0){
   clampConstellationCamera(w, h);
   ctx.clearRect(0,0,w,h);
   const bg = ctx.createRadialGradient(w*.52,h*.44,20,w*.52,h*.44,Math.max(w,h)*.72);
-  bg.addColorStop(0, compactCanvas ? 'rgba(101,214,255,.08)' : c.nebula); bg.addColorStop(.45, compactCanvas ? 'rgba(124,124,255,.035)' : 'rgba(124,124,255,.08)'); bg.addColorStop(1,c.bg);
+  bg.addColorStop(0, compactCanvas ? 'rgba(101,214,255,.055)' : c.nebula); bg.addColorStop(.45, compactCanvas ? 'rgba(60,110,150,.018)' : 'rgba(72,130,160,.035)'); bg.addColorStop(1,c.bg);
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
   constellationScene.stars.forEach((s)=>{ const pulse=.42 + Math.sin(t*s.freq + s.phase)*.34 + Math.sin(t*s.freq*.37 + s.phase*1.9)*.18; ctx.globalAlpha=s.a*Math.max(.12, Math.min(1, pulse))*(c.light ? .48 : .78); ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r*(c.light ? .72 : .9), 0, Math.PI*2); ctx.fill(); });
   ctx.globalAlpha=1;
@@ -742,7 +1007,7 @@ function drawConstellationFrame(t=0){
     hits.push({x:p.x,y:p.y,r:Math.max(14,flare+8),node:n});
   });
   constellationScene.hits=hits;
-  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawConstellationFrame);
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
 }
 function clampConstellationCamera(w, h){
   constellationScene.zoom = Math.max(CONSTELLATION_MIN_ZOOM, Math.min(CONSTELLATION_MAX_ZOOM, Number.isFinite(constellationScene.zoom) ? constellationScene.zoom : 1));
@@ -754,18 +1019,19 @@ function clampConstellationCamera(w, h){
   constellationScene.panY = Math.max(-panLimitY, Math.min(panLimitY, Number.isFinite(constellationScene.panY) ? constellationScene.panY : 0));
 }
 function resetConstellationView(){
-  Object.assign(constellationScene, { ...CONSTELLATION_DEFAULT_CAMERA, drag: null, lastFrameTime: 0 });
+  Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', drag:null, lastFrameTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', drag:null, lastFrameTime:0 });
   constellationScene.pointers.clear();
   updateConstellationPauseButton();
   updateConstellationPanButton();
+  updateVisualiserModeUI();
 }
 function updateConstellationPauseButton(){
   const btn = $('#constellationPause');
-  if(btn) btn.textContent = constellationScene.paused ? 'Resume rotation' : 'Pause rotation';
+  if(btn) btn.textContent = constellationScene.paused ? (constellationScene.visualiserMode === 'neural' ? 'Resume drift' : 'Resume rotation') : (constellationScene.visualiserMode === 'neural' ? 'Pause drift' : 'Pause rotation');
 }
 function updateConstellationPanButton(){
   const btn = $('#constellationPanMode');
-  if(btn) btn.textContent = constellationScene.mode === 'pan' ? 'Rotate mode' : 'Pan mode';
+  if(btn) btn.textContent = constellationScene.mode === 'pan' ? (constellationScene.visualiserMode === 'neural' ? 'Orbit mode' : 'Rotate mode') : 'Pan mode';
 }
 function toggleConstellationPanMode(){
   constellationScene.mode = constellationScene.mode === 'pan' ? 'rotate' : 'pan';
@@ -851,14 +1117,15 @@ function bindConstellationControls(canvas){
 }
 function drawConstellation(data){
   if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
-  buildConstellationScene(data);
+  if(constellationScene.visualiserMode === 'neural') buildNeuralMapScene(data); else buildConstellationScene(data);
+  updateVisualiserModeUI();
   const canvas = $('#constellationCanvas');
   bindConstellationControls(canvas);
   canvas.onclick = e => { if(canvas.dataset.suppressClick === 'true'){ canvas.dataset.suppressClick = 'false'; return; } const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; const hit=[...constellationScene.hits].reverse().find(h => Math.hypot(h.x-x,h.y-y) <= h.r); if(hit) inspectConstellationNode(hit.node); };
   canvas.onpointermove = e => { if(constellationScene.drag) return; const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; canvas.style.cursor = constellationScene.hits.some(h => Math.hypot(h.x-x,h.y-y) <= h.r) ? 'pointer' : 'grab'; };
   $('#constellationClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
   constellationInspectorDefault();
-  drawConstellationFrame(0);
+  drawVisualiserFrame(0);
 }
 async function loadConstellation(){ drawConstellation(await api('/api/constellation?limit=240')); }
 async function loadDiagnostics(){
@@ -1028,6 +1295,8 @@ $('#constellationRefresh').onclick = loadConstellation;
 $('#constellationReset').onclick = resetConstellationView;
 $('#constellationPanMode').onclick = toggleConstellationPanMode;
 $('#constellationPause').onclick = toggleConstellationPause;
+$$('.visualiser-tabs button[data-visualiser]').forEach(b => b.onclick = () => switchVisualiserMode(b.dataset.visualiser));
+updateVisualiserModeUI();
 updateConstellationPauseButton();
 updateConstellationPanButton();
 $('#consolidationQuery').oninput = renderConsolidations;
