@@ -57,7 +57,11 @@ function meta(item, opts={}){
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
 function memoryItem(item, opts={}){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="memory-check" data-id="${esc(item.id)}" ${bulkSelection.has(item.id) ? 'checked' : ''} /></label>` : ''; return `<div class="item ${role ? 'has-role' : ''} ${opts.selectable ? 'selectable' : ''}" data-id="${esc(item.id)}">${selectable}${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
-function canonicalTab(tab){ return tab === 'constellation' ? 'visualiser' : (tab || 'overview'); }
+function canonicalTab(tab){
+  if(tab === 'constellation') return 'visualiserlegacy';
+  if(tab === 'visualiser3d') return 'visualiser';
+  return tab || 'overview';
+}
 function routeTabState(tab=currentRoute.tab || 'overview'){ return { tab: canonicalTab(tab) }; }
 function routeToUrl(state){
   const params = new URLSearchParams(location.search);
@@ -234,7 +238,7 @@ function showPanel(sectionId, panelId){
   section.querySelectorAll('.section-tabs button').forEach(button => button.classList.toggle('active', button.dataset.panel === panelId));
 }
 function sectionFor(name){
-  return ({ visualiser:'constellation', constellation:'constellation', search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
+  return ({ visualiser:'visualiser3d', visualiserlegacy:'constellation', constellation:'constellation', search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
 }
 function defaultPanelFor(section){
   return ({ explore:'exploreSearch', activity:'activityTimeline', graph:'graphGraph', today:'todayAdded' })[section];
