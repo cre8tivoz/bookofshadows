@@ -1482,6 +1482,10 @@ function buildThreePositions(data){
     n.y = center.y + t * shell * 1.08 + (((i * 53) % 67) - 33) * .55;
     n.z = center.z + Math.sin(angle) * radial * shell * 1.42 + Math.sin(center.angle - rank * .5) * wobble * 1.35;
     n.size = Math.min(32, 8 + Math.sqrt(weight)*4.8) * (n.kind === 'memory' ? 1.12 : 1);
+    n.twinkle = (i % 23) / 23;
+    const twinkleTier = i % 13 === 0 ? 2 : (i % 5 === 0 ? 1 : 0);
+    n.twinkleFreq = twinkleTier === 2 ? .0048 + ((i * 31) % 80) / 100000 : (twinkleTier === 1 ? .0022 + ((i * 37) % 90) / 100000 : .00095 + ((i * 41) % 100) / 100000);
+    n.twinkleAmp = twinkleTier === 2 ? .30 : (twinkleTier === 1 ? .20 : .12 + ((i * 29) % 50) / 1000);
     n._degree = 0; n._weight = weight;
   });
   return nodes;
@@ -1631,10 +1635,68 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   const selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
   const positions = new Float32Array(selected.length * 3);
   const sizes = new Float32Array(selected.length);
-  selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; sizes[i]=Math.max(3.5, Math.min(size * 2.8, n.size || size)); });
-  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  const phases = new Float32Array(selected.length);
+  const freqs = new Float32Array(selected.length);
+  const amps = new Float32Array(selected.length);
+  selected.forEach((n,i)=>{
+    positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z;
+    sizes[i]=Math.max(10, Math.min(size * 2.6, n.size || size));
+    phases[i]=(n.twinkle || 0) * Math.PI * 2;
+    freqs[i]=n.twinkleFreq || .0012;
+    amps[i]=n.twinkleAmp || .12;
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  geometry.setAttribute('aSize', new THREE.BufferAttribute(sizes,1));
+  geometry.setAttribute('aPhase', new THREE.BufferAttribute(phases,1));
+  geometry.setAttribute('aFreq', new THREE.BufferAttribute(freqs,1));
+  geometry.setAttribute('aAmp', new THREE.BufferAttribute(amps,1));
   const themeColors = colorForTheme();
-  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, threeVis.mode === 'neural' ? (kind === 'memory' ? 'soma' : 'neuron') : (kind === 'memory' ? 'orb' : 'star')), alphaTest:threeVis.mode === 'neural' ? .04 : .025, size, sizeAttenuation:true, transparent:true, opacity: threeVis.mode === 'neural' ? (kind === 'memory' ? (themeColors.light ? .88 : .98) : (themeColors.light ? .76 : .86)) : (kind === 'memory' ? .98 : .96), depthWrite:false, blending:threeVis.mode === 'neural' ? (themeColors.light ? THREE.NormalBlending : THREE.AdditiveBlending) : THREE.NormalBlending });
+  let material;
+  if(threeVis.mode === 'neural'){
+    material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, kind === 'memory' ? 'soma' : 'neuron'), alphaTest:.04, size, sizeAttenuation:true, transparent:true, opacity:kind === 'memory' ? (themeColors.light ? .88 : .98) : (themeColors.light ? .76 : .86), depthWrite:false, blending:themeColors.light ? THREE.NormalBlending : THREE.AdditiveBlending });
+  } else {
+    material = new THREE.ShaderMaterial({
+      uniforms:{
+        uTime:{value:0},
+        uScale:{value:420},
+        uColor:{value:new THREE.Color(color)},
+        uMap:{value:makePointTexture(THREE, kind === 'memory' ? 'orb' : 'star')},
+        uOpacity:{value:kind === 'memory' ? .98 : .96}
+      },
+      vertexShader:`
+        attribute float aSize;
+        attribute float aPhase;
+        attribute float aFreq;
+        attribute float aAmp;
+        uniform float uTime;
+        uniform float uScale;
+        varying float vPulse;
+        void main(){
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          float wave = sin(uTime * aFreq + aPhase) + sin(uTime * aFreq * 0.43 + aPhase * 1.71) * 0.45;
+          vPulse = 1.0 + wave * aAmp;
+          gl_PointSize = aSize * vPulse * (uScale / max(260.0, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader:`
+        uniform vec3 uColor;
+        uniform sampler2D uMap;
+        uniform float uOpacity;
+        varying float vPulse;
+        void main(){
+          vec4 tex = texture2D(uMap, gl_PointCoord);
+          float alpha = tex.a * uOpacity * clamp(0.72 + (vPulse - 1.0) * 1.15, 0.42, 1.28);
+          if(alpha < 0.018) discard;
+          gl_FragColor = vec4(uColor * (0.88 + (vPulse - 1.0) * 0.32), alpha);
+        }
+      `,
+      transparent:true,
+      depthWrite:false,
+      blending:THREE.NormalBlending
+    });
+  }
   const points = new THREE.Points(geometry, material); points.userData.nodes = selected; scene.add(points); return points;
 }
 function buildThreeLinkSegments(THREE, edges){
@@ -1784,6 +1846,12 @@ function animateThree(t=0){
     threeVis.pulses.forEach((e,i)=>{ const phase=(t*.00030 + (i%17)/17)%1; const inv=1-phase; if(e._curve){ arr[i*3]=inv*inv*e.a.x+2*inv*phase*e._curve.cx+phase*phase*e.b.x; arr[i*3+1]=inv*inv*e.a.y+2*inv*phase*e._curve.cy+phase*phase*e.b.y; arr[i*3+2]=inv*inv*e.a.z+2*inv*phase*e._curve.cz+phase*phase*e.b.z; } else { arr[i*3]=e.a.x+(e.b.x-e.a.x)*phase; arr[i*3+1]=e.a.y+(e.b.y-e.a.y)*phase; arr[i*3+2]=e.a.z+(e.b.z-e.a.z)*phase; } });
     attr.needsUpdate = true;
   }
+  threeVis.scene.traverse(obj => {
+    if(obj.isPoints && obj.material?.uniforms?.uTime){
+      obj.material.uniforms.uTime.value = t;
+      obj.material.uniforms.uScale.value = Math.max(360, Math.min(820, threeVis.renderer.domElement.clientHeight || 420));
+    }
+  });
   threeVis.renderer.render(threeVis.scene, threeVis.camera); updateThreeLabels();
   threeVis.frame = requestAnimationFrame(animateThree);
 }
