@@ -1640,7 +1640,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   const amps = new Float32Array(selected.length);
   selected.forEach((n,i)=>{
     positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z;
-    sizes[i]=Math.max(10, Math.min(size * 2.6, n.size || size));
+    sizes[i]=Math.max(size, Math.min(size * 3.2, (n.size || size) * 1.55));
     phases[i]=(n.twinkle || 0) * Math.PI * 2;
     freqs[i]=n.twinkleFreq || .0012;
     amps[i]=n.twinkleAmp || .12;
@@ -1697,10 +1697,12 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           float diag1 = max(0.0, 1.0 - abs(p.x - p.y) / 0.018) * (1.0 - smoothstep(0.08, 0.35, d));
           float diag2 = max(0.0, 1.0 - abs(p.x + p.y) / 0.018) * (1.0 - smoothstep(0.08, 0.35, d));
           float rays = uIsStar * (max(rayH, rayV) * 0.62 + max(diag1, diag2) * 0.26);
-          float alpha = (body * 0.80 + core * 0.55 + halo + rays) * uOpacity * clamp(0.74 + (vPulse - 1.0) * 1.02, 0.50, 1.24);
+          float alpha = (body * 0.92 + core * 0.38 + halo + rays) * uOpacity * clamp(0.74 + (vPulse - 1.0) * 1.02, 0.50, 1.24);
           if(alpha < 0.022) discard;
-          vec3 crisp = mix(uColor, vec3(1.0), core * 0.72 + rays * 0.38);
-          gl_FragColor = vec4(crisp * (0.92 + (vPulse - 1.0) * 0.22), min(alpha, 1.0));
+          vec3 starCore = mix(uColor, vec3(1.0), core * 0.72 + rays * 0.38);
+          vec3 memoryCore = mix(uColor, vec3(1.0, 0.92, 0.58), core * 0.34);
+          vec3 crisp = mix(memoryCore, starCore, uIsStar);
+          gl_FragColor = vec4(crisp * (0.96 + (vPulse - 1.0) * 0.16), min(alpha, 1.0));
         }
       `,
       transparent:true,
@@ -1773,8 +1775,8 @@ async function renderThreeVisualiser(data){
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 48);
     addNeuralDendrites(THREE, group, nodes, colors);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 31));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 29));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 42));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 40));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
