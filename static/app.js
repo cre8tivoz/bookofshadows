@@ -1362,7 +1362,35 @@ function updateThreeUI(){
   const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? (threeVis.mode === 'neural' ? 'Resume drift' : 'Resume rotation') : (threeVis.mode === 'neural' ? 'Pause drift' : 'Pause rotation');
   const pan = $('#threePanMode'); if(pan) pan.textContent = threeVis.panMode ? 'Orbit mode' : 'Pan mode';
 }
-function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .12 : .70, pitch: threeVis.mode === 'neural' ? .10 : .96, cameraZ: threeVis.mode === 'neural' ? 600 : 760, panX:0, panY: threeVis.mode === 'neural' ? -10 : -84, lastT:0 }); }
+function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .12 : .70, pitch: threeVis.mode === 'neural' ? .10 : .96, cameraZ: threeVis.mode === 'neural' ? 600 : 760, panX:0, panY:0, lastT:0 }); }
+function fitThreeCameraToNodes(){
+  if(!threeVis.camera || !threeVis.group || !threeVis.nodes?.length || !threeVis.THREE) return;
+  const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
+  const w = Math.max(320, rect.width || 650), h = Math.max(320, rect.height || 650);
+  threeVis.group.rotation.y = threeVis.yaw; threeVis.group.rotation.x = threeVis.pitch;
+  const euler = threeVis.group.rotation;
+  const pts = threeVis.nodes.map(n => new threeVis.THREE.Vector3(n.x || 0, n.y || 0, n.z || 0).applyEuler(euler));
+  const min = new threeVis.THREE.Vector3(Infinity, Infinity, Infinity), max = new threeVis.THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  pts.forEach(p => { min.min(p); max.max(p); });
+  const center = min.clone().add(max).multiplyScalar(.5);
+  const vfov = (threeVis.camera.fov || 48) * Math.PI / 180;
+  const tanV = Math.tan(vfov / 2), tanH = tanV * (w / h);
+  const mobile = w < 520;
+  const margin = threeVis.mode === 'neural' ? (mobile ? 1.38 : 1.24) : (mobile ? 1.44 : 1.28);
+  const nodePad = threeVis.mode === 'neural' ? (mobile ? 42 : 34) : (mobile ? 58 : 44);
+  let requiredZ = 0;
+  pts.forEach(p => {
+    const dx = Math.abs(p.x - center.x) * margin + nodePad;
+    const dy = Math.abs(p.y - center.y) * margin + nodePad;
+    requiredZ = Math.max(requiredZ, p.z + dx / Math.max(.12, tanH), p.z + dy / Math.max(.12, tanV));
+  });
+  const minZ = threeVis.mode === 'neural' ? 430 : 780;
+  const maxZ = threeVis.mode === 'neural' ? 2400 : 3000;
+  threeVis.cameraZ = Math.max(minZ, Math.min(maxZ, requiredZ + (threeVis.mode === 'neural' ? 90 : 130)));
+  threeVis.panX = center.x;
+  threeVis.panY = center.y;
+  clampThreeCamera();
+}
 function clearThreeScene(){
   if(threeVis.frame) cancelAnimationFrame(threeVis.frame);
   threeVis.frame = 0;
@@ -1807,7 +1835,7 @@ async function renderThreeVisualiser(data){
   $('#threeLabels').innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
   $('#threeClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
-  resetThreeCamera(); bindThreeControls(); resizeThree(); animateThree(0);
+  resetThreeCamera(); bindThreeControls(); resizeThree(); fitThreeCameraToNodes(); animateThree(0);
 }
 function resizeThree(){
   if(!threeVis.renderer) return;
@@ -1892,7 +1920,7 @@ function clampThreeCamera(){
   const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
   const fallbackZ = threeVis.mode === 'neural' ? 600 : 760;
   const minCameraZ = fallbackZ / 10;
-  threeVis.cameraZ = Math.max(minCameraZ, Math.min(1800, Number.isFinite(threeVis.cameraZ) ? threeVis.cameraZ : fallbackZ));
+  threeVis.cameraZ = Math.max(minCameraZ, Math.min(3200, Number.isFinite(threeVis.cameraZ) ? threeVis.cameraZ : fallbackZ));
   threeVis.yaw = Number.isFinite(threeVis.yaw) ? threeVis.yaw : 0;
   threeVis.pitch = Math.max(-1.15, Math.min(1.15, Number.isFinite(threeVis.pitch) ? threeVis.pitch : .32));
   const zoomFactor = 900 / Math.max(80, threeVis.cameraZ);
@@ -1993,7 +2021,7 @@ $('#constellationPanMode').onclick = toggleConstellationPanMode;
 $('#constellationPause').onclick = toggleConstellationPause;
 $$('.visualiser-tabs button[data-visualiser]').forEach(b => b.onclick = () => switchVisualiserMode(b.dataset.visualiser));
 $('#threeRefresh').onclick = loadThreeVisualiser;
-$('#threeReset').onclick = () => { resetThreeCamera(); threeInspectorDefault(); };
+$('#threeReset').onclick = () => { resetThreeCamera(); resizeThree(); fitThreeCameraToNodes(); threeInspectorDefault(); };
 $('#threePanMode').onclick = () => { threeVis.panMode = !threeVis.panMode; updateThreeUI(); };
 $('#threePause').onclick = () => { threeVis.paused = !threeVis.paused; updateThreeUI(); };
 $$('.visualiser-tabs button[data-three-mode]').forEach(b => b.onclick = () => switchThreeMode(b.dataset.threeMode));
