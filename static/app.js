@@ -630,6 +630,16 @@ function drawConstellationFrame(t=0){
   const hits=[];
   const labelBoxes=[];
   const compactLabels = compactCanvas;
+  const nodeDegrees = new Map();
+  constellationScene.edges.forEach(e => { nodeDegrees.set(e.source, (nodeDegrees.get(e.source) || 0) + 1); nodeDegrees.set(e.target, (nodeDegrees.get(e.target) || 0) + 1); });
+  const labelCounts = new Map();
+  const categoryCounts = new Map();
+  constellationScene.nodes.forEach(n => {
+    const key=(n.label || '').replace(/^memory:/,'mem ').trim().toLowerCase();
+    if(key) labelCounts.set(key, (labelCounts.get(key) || 0) + 1);
+    const category=(n.category || '').trim().toLowerCase();
+    if(category) categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+  });
   [...constellationScene.nodes].sort((a,b)=>projected.get(a.id).z-projected.get(b.id).z).forEach(n => {
     const p=projected.get(n.id); if(!p?.visible) return;
     const base=n.kind === 'memory' ? c.memory : c.star;
@@ -670,8 +680,24 @@ function drawConstellationFrame(t=0){
     ctx.globalAlpha=1;
     ctx.restore();
     const labelRaw=(n.label || '').replace(/^memory:/,'mem ');
-    const technicalLabel=/^[a-f0-9]{10,}$/i.test(labelRaw) || /^mem\s+[a-f0-9]{6,}$/i.test(labelRaw) || /daemon|timeout|embed|^[0-9a-f-]{8,}$/i.test(labelRaw);
-    const showLabel = compactLabels ? (!technicalLabel && (p.scale > 1.18 || weight > 5.8)) : (!technicalLabel && (p.scale > 1.02 || weight > 5.4 || (n.kind === 'memory' && weight > 4.8)));
+    const labelKey=labelRaw.trim().toLowerCase();
+    const compactRaw=labelRaw.trim();
+    const alphaChars=(compactRaw.match(/[A-Za-z]/g) || []).length;
+    const isHashLike=/^[a-f0-9]{10,}$/i.test(compactRaw) || /^mem\s+[a-f0-9]{6,}$/i.test(compactRaw);
+    const isMachineToken=/^[A-Z0-9_:/.-]{14,}$/.test(compactRaw) && /[_:/.-]/.test(compactRaw);
+    const isDateLike=/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(compactRaw);
+    const lowInformation=alphaChars < 4;
+    const technicalLabel=isHashLike || isMachineToken || isDateLike || lowInformation;
+    const degree = nodeDegrees.get(n.id) || 0;
+    const frequency = labelCounts.get(labelKey) || 1;
+    const categoryFrequency = categoryCounts.get((n.category || '').trim().toLowerCase()) || 1;
+    const dominantCategory = categoryFrequency > constellationScene.nodes.length * .35;
+    const shoutingDominantToken = /^[A-Z]{4,}$/.test(compactRaw) && dominantCategory;
+    const specificity = Math.max(.35, Math.min(1.15, 1 / Math.sqrt(frequency)));
+    const categorySpecificity = Math.max(.05, Math.min(1.10, Math.log1p(constellationScene.nodes.length / categoryFrequency) / 2.4));
+    const lengthQuality = Math.max(.25, Math.min(1.1, (alphaChars - 2) / 8));
+    const labelScore = (p.scale * 2.05) + (Math.log1p(weight) * .52) + (Math.log1p(degree) * .38) + specificity + categorySpecificity + lengthQuality + (n.kind === 'memory' ? .15 : 0) - (shoutingDominantToken ? 1.25 : 0);
+    const showLabel = !technicalLabel && (compactLabels ? labelScore > 4.15 : labelScore > 3.95);
     if(showLabel){
       const label=/^[A-Z][A-Z_\s-]{2,}$/.test(labelRaw) ? labelRaw.toLowerCase().replace(/(^|[_\s-])([a-z])/g, (_m, sep, ch) => (sep === '_' ? ' ' : sep) + ch.toUpperCase()) : labelRaw;
       const short=label.length>22?label.slice(0,19)+'…':label;
