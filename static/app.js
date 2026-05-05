@@ -764,14 +764,20 @@ function drawNeuronSoma(ctx, n, p, c, t, compactCanvas){
   ctx.restore();
   return { r:somaR, halo };
 }
+
+function visualiserDpr(compactCanvas, mode){
+  const raw = window.devicePixelRatio || 1;
+  if(mode === 'neural') return Math.min(raw, compactCanvas ? 1.8 : 1.25);
+  return Math.min(raw, compactCanvas ? 2 : 1.5);
+}
 function drawNeuralFrame(t=0){
   const canvas = $('#constellationCanvas');
   if(!canvas) return;
   const wrap = canvas.parentElement;
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const w = Math.max(320, wrap.clientWidth || canvas.clientWidth || 1000);
   const h = Math.max(430, wrap.clientHeight || canvas.clientHeight || 680);
   const compactCanvas = w < 620;
+  const dpr = visualiserDpr(compactCanvas, 'neural');
   if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); }
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -812,7 +818,7 @@ function drawNeuralFrame(t=0){
     ctx.strokeStyle=hue === 2 ? c.memorySynapse : c.synapseHot;
     ctx.lineWidth=.8;
     ctx.beginPath(); ctx.ellipse(0,0,rx*.72,ry*.72,0,0,Math.PI*2); ctx.stroke();
-    if(!compactCanvas && region.label){
+    if(!compactCanvas && !constellationScene.drag && region.label){
       ctx.globalAlpha=c.light ? .32 : .28;
       ctx.fillStyle=c.text;
       ctx.font='10px Inter, system-ui, sans-serif';
@@ -822,8 +828,8 @@ function drawNeuralFrame(t=0){
   });
   const edgeDegree = new Map();
   let edgeDrawn = 0;
-  const edgeLimit = compactCanvas ? 72 : 190;
-  const degreeLimit = compactCanvas ? 3 : 6;
+  const edgeLimit = constellationScene.drag ? (compactCanvas ? 42 : 96) : (compactCanvas ? 58 : 132);
+  const degreeLimit = compactCanvas ? 3 : 5;
   for(const e of constellationScene.edges){
     const a=projected.get(e.source), b=projected.get(e.target);
     if(!a || !b) continue;
@@ -848,7 +854,7 @@ function drawNeuralFrame(t=0){
     const isMachineToken=/^[A-Z0-9_:/.-]{14,}$/.test(compactRaw) && /[_:/.-]/.test(compactRaw);
     const degree=nodeDegrees.get(n.id) || 0;
     const weight=Math.max(1, Number(n.weight || n.count || 1));
-    const showLabel = !isHashLike && !isMachineToken && alphaChars >= 4 && (compactCanvas ? (n.kind !== 'memory' && (weight > 7.2 || degree > 2)) : (degree > 0 || weight > 3.4 || n.kind !== 'memory'));
+    const showLabel = !constellationScene.drag && !isHashLike && !isMachineToken && alphaChars >= 4 && (compactCanvas ? (n.kind !== 'memory' && (weight > 7.2 || degree > 2)) : (degree > 1 || weight > 4.2 || n.kind !== 'memory'));
     if(showLabel){
       const label=/^[A-Z][A-Z_\s-]{2,}$/.test(labelRaw) ? labelRaw.toLowerCase().replace(/(^|[_\s-])([a-z])/g, (_m, sep, ch) => (sep === '_' ? ' ' : sep) + ch.toUpperCase()) : labelRaw;
       const short=label.length>22?label.slice(0,19)+'…':label;
@@ -889,25 +895,32 @@ function switchVisualiserMode(mode){
   localStorage.setItem(VISUALISER_MODE_KEY, constellationScene.visualiserMode);
   constellationScene.drag = null;
   constellationScene.pointers.clear();
-  Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', lastFrameTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', lastFrameTime:0 });
+  Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', lastFrameTime:0, renderLastTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', lastFrameTime:0, renderLastTime:0 });
   updateVisualiserModeUI();
   if(constellationScene.data) drawConstellation(constellationScene.data);
 }
 function drawVisualiserFrame(t=0){
-  if(constellationScene.visualiserMode === 'neural') drawNeuralFrame(t);
+  const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
+  const interval = mode === 'neural' ? 33 : 25;
+  if(t && constellationScene.renderLastTime && t - constellationScene.renderLastTime < interval){
+    constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
+    return;
+  }
+  constellationScene.renderLastTime = t || 0;
+  if(mode === 'neural') drawNeuralFrame(t);
   else drawConstellationFrame(t);
 }
 function drawConstellationFrame(t=0){
   const canvas = $('#constellationCanvas');
   if(!canvas) return;
   const wrap = canvas.parentElement;
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   // Use content-box dimensions only. getBoundingClientRect() includes the
   // wrapper border; writing that value back to canvas.style.height creates a
   // per-frame growth loop on mobile.
   const w = Math.max(320, wrap.clientWidth || canvas.clientWidth || 1000);
   const h = Math.max(430, wrap.clientHeight || canvas.clientHeight || 680);
   const compactCanvas = w < 620;
+  const dpr = visualiserDpr(compactCanvas, 'constellation');
   if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); }
   const ctx = canvas.getContext('2d');
   if(!constellationScene.paused && !constellationScene.drag){
@@ -1043,7 +1056,7 @@ function clampConstellationCamera(w, h){
   constellationScene.panY = Math.max(-panLimitY, Math.min(panLimitY, Number.isFinite(constellationScene.panY) ? constellationScene.panY : 0));
 }
 function resetConstellationView(){
-  Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', drag:null, lastFrameTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', drag:null, lastFrameTime:0 });
+  Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', drag:null, lastFrameTime:0, renderLastTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', drag:null, lastFrameTime:0, renderLastTime:0 });
   constellationScene.pointers.clear();
   updateConstellationPauseButton();
   updateConstellationPanButton();
@@ -1141,6 +1154,8 @@ function bindConstellationControls(canvas){
 }
 function drawConstellation(data){
   if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
+  constellationScene.frame = 0;
+  constellationScene.renderLastTime = 0;
   if(constellationScene.visualiserMode === 'neural') buildNeuralMapScene(data); else buildConstellationScene(data);
   updateVisualiserModeUI();
   const canvas = $('#constellationCanvas');
