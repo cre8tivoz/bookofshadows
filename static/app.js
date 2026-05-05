@@ -1377,7 +1377,7 @@ function colorForTheme(){
     entity: cssHexToInt(c.star),
     memory: cssHexToInt(c.memory),
     link: cssHexToInt(threeVis.mode === 'neural' ? (c.light ? '#2a7665' : '#52d6b5') : (c.light ? '#19416c' : '#c6e0ff')),
-    pulse: cssHexToInt(c.memory),
+    pulse: cssHexToInt(threeVis.mode === 'neural' ? (c.light ? '#fff8e8' : '#fffaf0') : c.memory),
     text: c.text,
     light: c.light
   };
