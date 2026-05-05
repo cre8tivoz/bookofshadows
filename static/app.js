@@ -663,20 +663,22 @@ function buildNeuralMapScene(data){
       const parentX = parent && parent.kind !== 'memory' && Number.isFinite(parent.x) ? parent.x : region.cx;
       const parentY = parent && parent.kind !== 'memory' && Number.isFinite(parent.y) ? parent.y : region.cy;
       const parentZ = parent && parent.kind !== 'memory' && Number.isFinite(parent.z) ? parent.z : region.cz;
-      const branch = ((i * 137.5) % 360) * Math.PI / 180;
-      const branch2 = ((i * 91.7 + ci * 23) % 360) * Math.PI / 180;
-      const dist = 58 + (i % 7) * 15 + Math.min(56, Math.sqrt(weight) * 12);
-      n.x = parentX + Math.cos(branch) * Math.cos(branch2*.34) * dist;
-      n.y = parentY + Math.sin(branch2) * dist * .78;
-      n.z = parentZ + Math.sin(branch) * Math.cos(branch2) * dist * .92;
+      const branch = ((i * 137.508 + ci * 19) % 360) * Math.PI / 180;
+      const yUnit = ((((i * 43 + ci * 17) % 97) + .5) / 97) * 2 - 1;
+      const radial = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+      const dist = 46 + (i % 6) * 13 + Math.min(48, Math.sqrt(weight) * 10);
+      n.x = parentX + Math.cos(branch) * radial * dist;
+      n.y = parentY + yUnit * dist * .82;
+      n.z = parentZ + Math.sin(branch) * radial * dist * .86;
     } else {
       const rank = Math.max(0, (hubsByCategory[cat] || []).indexOf(n));
-      const orbit = rank === 0 ? 0 : 34 + Math.sqrt(rank) * 26;
+      const orbit = rank === 0 ? 0 : 30 + Math.sqrt(rank) * 20;
       const angle = region.angle + rank * 2.399963 + (ci % 3) * .24;
-      const zAngle = angle * 1.31 + rank * .73;
-      n.x = region.cx + Math.cos(angle) * orbit;
-      n.y = region.cy + Math.sin(zAngle) * orbit * .62;
-      n.z = region.cz + Math.sin(angle) * orbit * .88;
+      const yUnit = rank === 0 ? 0 : ((((rank * 37 + ci * 11) % 89) + .5) / 89) * 2 - 1;
+      const radial = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+      n.x = region.cx + Math.cos(angle) * radial * orbit;
+      n.y = region.cy + yUnit * orbit * .86;
+      n.z = region.cz + Math.sin(angle) * radial * orbit * .80;
     }
     n.size = Math.min(30, 8 + Math.sqrt(weight + d) * (n.kind === 'memory' ? 3.2 : 4.1));
     n.twinkle = (i % 17) / 17;
@@ -1491,20 +1493,22 @@ function buildThreeNeuralPositions(data){
       const parentX = parent && parent.kind !== 'memory' && Number.isFinite(parent.x) ? parent.x : region.cx;
       const parentY = parent && parent.kind !== 'memory' && Number.isFinite(parent.y) ? parent.y : region.cy;
       const parentZ = parent && parent.kind !== 'memory' && Number.isFinite(parent.z) ? parent.z : region.cz;
-      const branch = ((i * 137.5) % 360) * Math.PI / 180;
-      const branch2 = ((i * 91.7 + ci * 23) % 360) * Math.PI / 180;
-      const dist = 58 + (i % 7) * 15 + Math.min(56, Math.sqrt(weight) * 12);
-      n.x = parentX + Math.cos(branch) * Math.cos(branch2*.34) * dist;
-      n.y = parentY + Math.sin(branch2) * dist * .78;
-      n.z = parentZ + Math.sin(branch) * Math.cos(branch2) * dist * .92;
+      const branch = ((i * 137.508 + ci * 19) % 360) * Math.PI / 180;
+      const yUnit = ((((i * 43 + ci * 17) % 97) + .5) / 97) * 2 - 1;
+      const radial = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+      const dist = 46 + (i % 6) * 13 + Math.min(48, Math.sqrt(weight) * 10);
+      n.x = parentX + Math.cos(branch) * radial * dist;
+      n.y = parentY + yUnit * dist * .82;
+      n.z = parentZ + Math.sin(branch) * radial * dist * .86;
     } else {
       const rank = Math.max(0, (hubsByCategory[cat] || []).indexOf(n));
-      const orbit = rank === 0 ? 0 : 34 + Math.sqrt(rank) * 26;
+      const orbit = rank === 0 ? 0 : 30 + Math.sqrt(rank) * 20;
       const angle = region.angle + rank * 2.399963 + (ci % 3) * .24;
-      const zAngle = angle * 1.31 + rank * .73;
-      n.x = region.cx + Math.cos(angle) * orbit;
-      n.y = region.cy + Math.sin(zAngle) * orbit * .62;
-      n.z = region.cz + Math.sin(angle) * orbit * .88;
+      const yUnit = rank === 0 ? 0 : ((((rank * 37 + ci * 11) % 89) + .5) / 89) * 2 - 1;
+      const radial = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+      n.x = region.cx + Math.cos(angle) * radial * orbit;
+      n.y = region.cy + yUnit * orbit * .86;
+      n.z = region.cz + Math.sin(angle) * radial * orbit * .80;
     }
     n.size = Math.min(30, 8 + Math.sqrt(weight + d) * (n.kind === 'memory' ? 3.2 : 4.1));
     n._degree = d; n._weight = weight; n.neuralRegion = cat;
