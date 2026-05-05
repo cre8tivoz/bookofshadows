@@ -552,6 +552,14 @@ function drawConstellation(data){
   nodes.forEach(n => { const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('class',`constellation-node ${n.kind || 'entity'}`); g.dataset.id=n.id; g.onclick = () => inspectConstellationNode(n); const r=Math.min(24, 5 + Math.sqrt(Number(n.weight || n.count || 1))*4); const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',n.x); c.setAttribute('cy',n.y); c.setAttribute('r',r); g.appendChild(c); const text=document.createElementNS('http://www.w3.org/2000/svg','text'); text.textContent=(n.label || '').replace(/^memory:/,'mem '); if(text.textContent.length>26) text.textContent=text.textContent.slice(0,23)+'…'; text.setAttribute('x',n.x+r+5); text.setAttribute('y',n.y+4); g.appendChild(text); svg.appendChild(g); });
   $('#constellationClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
   constellationInspectorDefault();
+  centerConstellationOnMobile();
+}
+function centerConstellationOnMobile(){
+  const wrap = document.querySelector('.constellation-wrap');
+  if(!wrap || !window.matchMedia('(max-width: 760px)').matches) return;
+  requestAnimationFrame(() => {
+    wrap.scrollLeft = Math.max(0, (wrap.scrollWidth - wrap.clientWidth) / 2);
+  });
 }
 async function loadConstellation(){ drawConstellation(await api('/api/constellation?limit=240')); }
 async function loadDiagnostics(){
