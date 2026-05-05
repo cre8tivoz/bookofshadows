@@ -581,10 +581,13 @@ function drawConstellationFrame(t=0){
   const canvas = $('#constellationCanvas');
   if(!canvas) return;
   const wrap = canvas.parentElement;
-  const rect = wrap.getBoundingClientRect();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = Math.max(320, rect.width), h = Math.max(430, rect.height || 680);
-  if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); canvas.style.width = `${w}px`; canvas.style.height = `${h}px`; }
+  // Use content-box dimensions only. getBoundingClientRect() includes the
+  // wrapper border; writing that value back to canvas.style.height creates a
+  // per-frame growth loop on mobile.
+  const w = Math.max(320, wrap.clientWidth || canvas.clientWidth || 1000);
+  const h = Math.max(430, wrap.clientHeight || canvas.clientHeight || 680);
+  if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); }
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const c = constellationColors();
