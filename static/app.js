@@ -623,7 +623,7 @@ function drawConstellationFrame(t=0){
   const ctx = canvas.getContext('2d');
   if(!constellationScene.paused && !constellationScene.drag){
     const delta = constellationScene.lastFrameTime ? Math.min(48, t - constellationScene.lastFrameTime) : 16;
-    constellationScene.rotation += delta * 0.000075;
+    constellationScene.rotation += delta * 0.000065;
   }
   constellationScene.lastFrameTime = t;
   ctx.setTransform(dpr,0,0,dpr,0,0);
