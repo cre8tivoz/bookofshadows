@@ -194,7 +194,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"items": self.store.list_memories(
                     kind=q.get("kind", "all"), q=q.get("q", ""), source=q.get("source", ""),
                     scope=q.get("scope", ""), session_id=q.get("session_id", ""), sort=q.get("sort", "recent"),
-                    status=q.get("status", "active"),
+                    status=q.get("status", "active"), veracity=q.get("veracity", ""),
+                    degradation_tier=q.get("degradation_tier", ""), contaminated_only=q.get("contaminated_only", ""),
+                    degraded_only=q.get("degraded_only", ""), due_for_degradation=q.get("due_for_degradation", ""),
                     limit=_safe_int(q.get("limit"), 100, maximum=500), offset=_safe_int(q.get("offset"), 0, minimum=0, maximum=100000),
                 )})
             if path == "/api/memory":

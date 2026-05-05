@@ -7,7 +7,7 @@ import shutil
 import sqlite3
 import uuid
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,36 @@ def _utc_now() -> str:
 def _is_expired(value: object, now: str | None = None) -> bool:
     text = str(value or "").strip()
     return bool(text and text <= (now or _utc_now()))
+
+
+DEGRADATION_LABELS = {1: "hot", 2: "warm", 3: "cold"}
+DEGRADATION_WEIGHTS = {
+    1: float(os.environ.get("MNEMOSYNE_TIER1_WEIGHT", "1.0")),
+    2: float(os.environ.get("MNEMOSYNE_TIER2_WEIGHT", "0.5")),
+    3: float(os.environ.get("MNEMOSYNE_TIER3_WEIGHT", "0.25")),
+}
+VERACITY_WEIGHTS = {
+    "stated": float(os.environ.get("MNEMOSYNE_STATED_WEIGHT", "1.0")),
+    "inferred": float(os.environ.get("MNEMOSYNE_INFERRED_WEIGHT", "0.7")),
+    "tool": float(os.environ.get("MNEMOSYNE_TOOL_WEIGHT", "0.5")),
+    "imported": float(os.environ.get("MNEMOSYNE_IMPORTED_WEIGHT", "0.6")),
+    "unknown": float(os.environ.get("MNEMOSYNE_UNKNOWN_WEIGHT", "0.8")),
+}
+CONTAMINATED_VERACITIES = {"inferred", "tool", "imported", "unknown"}
+
+
+def _degradation_label(value: object) -> str:
+    try:
+        return DEGRADATION_LABELS.get(int(value or 1), "hot")
+    except (TypeError, ValueError):
+        return "hot"
+
+
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 def default_db_path() -> Path:
     home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
@@ -59,6 +89,52 @@ class DashboardStore:
     @staticmethod
     def _tables(con: sqlite3.Connection) -> set[str]:
         return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    @staticmethod
+    def _columns(con: sqlite3.Connection, table: str) -> set[str]:
+        return {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+
+    @staticmethod
+    def _memory_select_columns(columns: set[str], memory_kind: str) -> str:
+        fields = [
+            "id", "content", "source", "timestamp", "session_id", "importance", "metadata_json",
+            "created_at", "recall_count", "last_recalled", "valid_until", "superseded_by",
+            "scope", "author_id", "author_type", "channel_id",
+        ]
+        select = [name if name in columns else f"NULL AS {name}" for name in fields]
+        select.append("veracity" if "veracity" in columns else "'unknown' AS veracity")
+        if memory_kind == "episodic":
+            select.append("tier AS degradation_tier" if "tier" in columns else "1 AS degradation_tier")
+            select.append("degraded_at" if "degraded_at" in columns else "NULL AS degraded_at")
+        else:
+            select.append("NULL AS degradation_tier")
+            select.append("NULL AS degraded_at")
+        return ", ".join(select)
+
+    @staticmethod
+    def _enrich_memory(d: dict[str, Any], memory_kind: str) -> dict[str, Any]:
+        d["memory_kind"] = memory_kind
+        d["tier"] = memory_kind  # Backwards-compatible alias for pre-v2.3 dashboard clients.
+        veracity = str(d.get("veracity") or "unknown").lower()
+        if veracity not in VERACITY_WEIGHTS:
+            veracity = "unknown"
+        d["veracity"] = veracity
+        if memory_kind == "episodic":
+            raw_degradation_tier = d.get("degradation_tier", d.get("tier"))
+            try:
+                degradation_tier = int(raw_degradation_tier or 1)
+            except (TypeError, ValueError):
+                degradation_tier = 1
+            degradation_tier = degradation_tier if degradation_tier in DEGRADATION_LABELS else 1
+        else:
+            degradation_tier = None
+        d["degradation_tier"] = degradation_tier
+        d["degradation_label"] = _degradation_label(degradation_tier) if degradation_tier else None
+        d["trust_weight"] = VERACITY_WEIGHTS.get(veracity, VERACITY_WEIGHTS["unknown"])
+        d["degradation_weight"] = DEGRADATION_WEIGHTS.get(degradation_tier or 1, 1.0) if memory_kind == "episodic" else 1.0
+        d["effective_memory_weight"] = round(float(d["trust_weight"]) * float(d["degradation_weight"]), 4)
+        d["contaminated"] = veracity in CONTAMINATED_VERACITIES
+        return d
 
     @staticmethod
     def _dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -148,18 +224,58 @@ class DashboardStore:
             by_source_raw = []
             by_scope_raw = []
             by_session_raw = []
-            for table, tier in [("working_memory", "working"), ("episodic_memory", "episodic")]:
+            veracity_counts: Counter[str] = Counter()
+            contaminated_total = 0
+            contaminated_high = 0
+            degradation_counts: Counter[str] = Counter({label: 0 for label in DEGRADATION_LABELS.values()})
+            degraded_count = 0
+            due_tier2 = 0
+            due_tier3 = 0
+            tier2_cutoff = os.environ.get("MNEMOSYNE_TIER2_DAYS", "30")
+            tier3_cutoff = os.environ.get("MNEMOSYNE_TIER3_DAYS", "180")
+            now = datetime.now(UTC).replace(tzinfo=None)
+            try:
+                tier2_days = int(tier2_cutoff)
+                tier3_days = int(tier3_cutoff)
+            except ValueError:
+                tier2_days, tier3_days = 30, 180
+            tier2_ts = (now - timedelta(days=tier2_days)).isoformat(timespec="seconds")
+            tier3_ts = (now - timedelta(days=tier3_days)).isoformat(timespec="seconds")
+            for table, memory_kind in [("working_memory", "working"), ("episodic_memory", "episodic")]:
                 if table not in tables:
                     continue
-                by_source_raw += [dict(r, tier=tier) for r in con.execute(
+                columns = self._columns(con, table)
+                by_source_raw += [dict(r, tier=memory_kind, memory_kind=memory_kind) for r in con.execute(
                     f"SELECT COALESCE(source,'') AS source, count(*) AS count FROM {table} GROUP BY source ORDER BY count DESC LIMIT 20"
                 )]
-                by_scope_raw += [dict(r, tier=tier) for r in con.execute(
+                by_scope_raw += [dict(r, tier=memory_kind, memory_kind=memory_kind) for r in con.execute(
                     f"SELECT COALESCE(scope,'') AS scope, count(*) AS count FROM {table} GROUP BY scope ORDER BY count DESC"
                 )]
-                by_session_raw += [dict(r, tier=tier) for r in con.execute(
+                by_session_raw += [dict(r, tier=memory_kind, memory_kind=memory_kind) for r in con.execute(
                     f"SELECT COALESCE(session_id,'') AS session_id, count(*) AS count FROM {table} GROUP BY session_id ORDER BY count DESC LIMIT 20"
                 )]
+                veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
+                for row in con.execute(f"SELECT {veracity_expr} AS veracity, COUNT(*) AS count FROM {table} GROUP BY veracity"):
+                    veracity = str(row["veracity"] or "unknown").lower()
+                    if veracity not in VERACITY_WEIGHTS:
+                        veracity = "unknown"
+                    count = int(row["count"] or 0)
+                    veracity_counts[veracity] += count
+                    if veracity in CONTAMINATED_VERACITIES:
+                        contaminated_total += count
+                contaminated_clause = f"{veracity_expr} IN ('inferred','tool','imported','unknown')"
+                contaminated_high += int(con.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE {contaminated_clause} AND COALESCE(importance, 0) > 0.5"
+                ).fetchone()[0])
+                if table == "episodic_memory":
+                    tier_expr = "COALESCE(tier, 1)" if "tier" in columns else "1"
+                    for row in con.execute(f"SELECT {tier_expr} AS degradation_tier, COUNT(*) AS count FROM episodic_memory GROUP BY degradation_tier"):
+                        degradation_counts[_degradation_label(row["degradation_tier"])] += int(row["count"] or 0)
+                    if "degraded_at" in columns:
+                        degraded_count = int(con.execute("SELECT COUNT(*) FROM episodic_memory WHERE COALESCE(degraded_at, '') != ''").fetchone()[0])
+                    if "tier" in columns:
+                        due_tier2 = int(con.execute("SELECT COUNT(*) FROM episodic_memory WHERE COALESCE(tier, 1) = 1 AND COALESCE(created_at, timestamp, '') < ?", (tier2_ts,)).fetchone()[0])
+                        due_tier3 = int(con.execute("SELECT COUNT(*) FROM episodic_memory WHERE COALESCE(tier, 1) = 2 AND COALESCE(created_at, timestamp, '') < ?", (tier3_ts,)).fetchone()[0])
 
             def aggregate(rows: list[dict[str, Any]], key: str, limit: int = 20) -> list[dict[str, Any]]:
                 totals: dict[str, int] = {}
@@ -171,6 +287,15 @@ class DashboardStore:
             by_source = aggregate(by_source_raw, "source", 20)
             by_scope = aggregate(by_scope_raw, "scope", 20)
             by_session = aggregate(by_session_raw, "session_id", 20)
+            by_veracity = [
+                {"veracity": key, "count": int(veracity_counts.get(key, 0)), "weight": VERACITY_WEIGHTS[key]}
+                for key in ["stated", "unknown", "inferred", "imported", "tool"]
+                if veracity_counts.get(key, 0)
+            ]
+            by_degradation = [
+                {"degradation_tier": tier, "degradation_label": label, "count": int(degradation_counts.get(label, 0)), "weight": DEGRADATION_WEIGHTS[tier]}
+                for tier, label in DEGRADATION_LABELS.items()
+            ]
 
             recent = self.list_memories(kind="all", limit=10)
             return {
@@ -179,6 +304,19 @@ class DashboardStore:
                 "by_source": by_source,
                 "by_scope": by_scope,
                 "by_session": by_session,
+                "by_veracity": by_veracity,
+                "by_degradation": by_degradation,
+                "contamination": {
+                    "total": contaminated_total,
+                    "high_importance": contaminated_high,
+                    "veracities": sorted(CONTAMINATED_VERACITIES),
+                },
+                "degradation": {
+                    "degraded": degraded_count,
+                    "due_tier2": due_tier2,
+                    "due_tier3": due_tier3,
+                    "labels": {str(k): v for k, v in DEGRADATION_LABELS.items()},
+                },
                 "recent": recent,
             }
 
@@ -193,6 +331,11 @@ class DashboardStore:
         limit: int = 100,
         offset: int = 0,
         status: str = "active",
+        veracity: str = "",
+        degradation_tier: int | str | None = None,
+        contaminated_only: bool | str = False,
+        degraded_only: bool | str = False,
+        due_for_degradation: bool | str = False,
     ) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit or 100), 500))
         offset = max(0, int(offset or 0))
@@ -202,9 +345,29 @@ class DashboardStore:
         session_id = (session_id or "").strip()
         sort = (sort or "recent").strip()
         status = (status or "active").strip().lower()
+        veracity = (veracity or "").strip().lower()
+        if veracity and veracity not in VERACITY_WEIGHTS:
+            veracity = ""
+        try:
+            degradation_tier_value = int(degradation_tier) if degradation_tier not in (None, "") else None
+        except (TypeError, ValueError):
+            degradation_tier_value = None
+        if degradation_tier_value not in DEGRADATION_LABELS:
+            degradation_tier_value = None
+        contaminated = _truthy(contaminated_only)
+        degraded = _truthy(degraded_only)
+        due = _truthy(due_for_degradation)
         if status not in {"active", "expired", "superseded", "all"}:
             status = "active"
         now = _utc_now()
+        now_dt = datetime.now(UTC).replace(tzinfo=None)
+        try:
+            tier2_days = int(os.environ.get("MNEMOSYNE_TIER2_DAYS", "30"))
+            tier3_days = int(os.environ.get("MNEMOSYNE_TIER3_DAYS", "180"))
+        except ValueError:
+            tier2_days, tier3_days = 30, 180
+        tier2_ts = (now_dt - timedelta(days=tier2_days)).isoformat(timespec="seconds")
+        tier3_ts = (now_dt - timedelta(days=tier3_days)).isoformat(timespec="seconds")
         sql_order = {
             "recent": "COALESCE(timestamp, created_at) DESC",
             "oldest": "COALESCE(timestamp, created_at) ASC",
@@ -220,9 +383,10 @@ class DashboardStore:
         rows: list[dict[str, Any]] = []
         with self.connect() as con:
             tables = self._tables(con)
-            for table, tier in wanted:
+            for table, memory_kind in wanted:
                 if table not in tables:
                     continue
+                columns = self._columns(con, table)
                 where = []
                 params: list[Any] = []
                 if q:
@@ -238,6 +402,27 @@ class DashboardStore:
                 if session_id:
                     where.append("session_id = ?")
                     params.append(session_id)
+                veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
+                if veracity:
+                    where.append(f"{veracity_expr} = ?")
+                    params.append(veracity)
+                if contaminated:
+                    where.append(f"{veracity_expr} IN ('inferred','tool','imported','unknown')")
+                if memory_kind == "episodic":
+                    tier_expr = "COALESCE(tier, 1)" if "tier" in columns else "1"
+                    if degradation_tier_value:
+                        where.append(f"{tier_expr} = ?")
+                        params.append(degradation_tier_value)
+                    if degraded:
+                        if "degraded_at" in columns:
+                            where.append("COALESCE(degraded_at, '') != ''")
+                        else:
+                            where.append("0 = 1")
+                    if due:
+                        where.append(f"(({tier_expr} = 1 AND COALESCE(created_at, timestamp, '') < ?) OR ({tier_expr} = 2 AND COALESCE(created_at, timestamp, '') < ?))")
+                        params.extend([tier2_ts, tier3_ts])
+                elif degradation_tier_value or degraded or due:
+                    where.append("0 = 1")
                 if status == "active":
                     where.append("COALESCE(superseded_by, '') = ''")
                     where.append("(valid_until IS NULL OR valid_until = '' OR valid_until > ?)")
@@ -249,18 +434,16 @@ class DashboardStore:
                 elif status == "superseded":
                     where.append("COALESCE(superseded_by, '') != ''")
                 clause = "WHERE " + " AND ".join(where) if where else ""
+                select_cols = self._memory_select_columns(columns, memory_kind)
                 sql = f"""
-                    SELECT id, content, source, timestamp, session_id, importance, metadata_json,
-                           created_at, recall_count, last_recalled, valid_until, superseded_by,
-                           scope, author_id, author_type, channel_id
+                    SELECT {select_cols}
                     FROM {table}
                     {clause}
                     ORDER BY {sql_order}
                     LIMIT ? OFFSET ?
                 """
                 for row in con.execute(sql, [*params, limit, offset]):
-                    d = self._dict(row)
-                    d["tier"] = tier
+                    d = self._enrich_memory(self._dict(row), memory_kind)
                     rows.append(d)
         rows.sort(key=lambda r: (
             float(r.get("importance") or 0) if sort == "importance" else int(r.get("recall_count") or 0) if sort == "recall" else (r.get("timestamp") or r.get("created_at") or "")
@@ -269,14 +452,13 @@ class DashboardStore:
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         with self.connect() as con:
-            for table, tier in [("working_memory", "working"), ("episodic_memory", "episodic")]:
-                if table not in self._tables(con):
+            tables = self._tables(con)
+            for table, memory_kind in [("working_memory", "working"), ("episodic_memory", "episodic")]:
+                if table not in tables:
                     continue
                 row = con.execute(f"SELECT * FROM {table} WHERE id = ?", (memory_id,)).fetchone()
                 if row:
-                    d = self._dict(row)
-                    d["tier"] = tier
-                    return d
+                    return self._enrich_memory(self._dict(row), memory_kind)
         return None
 
     def triples(self, q: str = "", subject: str = "", predicate: str = "", object_: str = "", limit: int = 200) -> list[dict[str, Any]]:

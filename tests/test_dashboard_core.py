@@ -18,7 +18,8 @@ def make_db(path: Path):
         metadata_json TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         recall_count INTEGER DEFAULT 0, last_recalled TIMESTAMP DEFAULT NULL,
         valid_until TIMESTAMP DEFAULT NULL, superseded_by TEXT DEFAULT NULL,
-        scope TEXT DEFAULT 'global', author_id TEXT, author_type TEXT, channel_id TEXT
+        scope TEXT DEFAULT 'global', author_id TEXT, author_type TEXT, channel_id TEXT,
+        veracity TEXT DEFAULT 'unknown'
     );
     CREATE TABLE episodic_memory (
         rowid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +28,8 @@ def make_db(path: Path):
         metadata_json TEXT, summary_of TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         recall_count INTEGER DEFAULT 0, last_recalled TIMESTAMP DEFAULT NULL,
         valid_until TIMESTAMP DEFAULT NULL, superseded_by TEXT DEFAULT NULL,
-        scope TEXT DEFAULT 'global', author_id TEXT, author_type TEXT, channel_id TEXT
+        scope TEXT DEFAULT 'global', author_id TEXT, author_type TEXT, channel_id TEXT,
+        veracity TEXT DEFAULT 'unknown', tier INTEGER DEFAULT 1, degraded_at TEXT
     );
     CREATE TABLE triples (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,6 +62,10 @@ def make_db(path: Path):
                 ('YC','knows','Diana','2026-01-01','preference',0.95))
     con.execute("INSERT INTO consolidation_log(session_id,items_consolidated,summary_preview) VALUES (?,?,?)",
                 ('s2',3,'Dashboard work'))
+    con.execute("UPDATE working_memory SET veracity = 'stated' WHERE id = 'w1'")
+    con.execute("UPDATE working_memory SET veracity = 'tool' WHERE id = 'w4'")
+    con.execute("UPDATE episodic_memory SET veracity = 'inferred', tier = 2, degraded_at = '2026-05-05T00:00:00' WHERE id = 'e1'")
+    con.execute("UPDATE episodic_memory SET veracity = 'imported', tier = 3, degraded_at = '2026-05-05T01:00:00' WHERE id = 'e2'")
     con.commit()
     con.close()
 
@@ -74,12 +80,52 @@ def test_stats_counts_memory_tables(tmp_path):
     assert stats['counts']['consolidation_log'] == 1
 
 
+def test_stats_exposes_v23_trust_and_degradation_mix(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    stats = DashboardStore(db).stats()
+
+    assert {r['veracity']: r['count'] for r in stats['by_veracity']} == {
+        'unknown': 2,
+        'stated': 1,
+        'tool': 1,
+        'inferred': 1,
+        'imported': 1,
+    }
+    assert {r['degradation_label']: r['count'] for r in stats['by_degradation']} == {
+        'hot': 0,
+        'warm': 1,
+        'cold': 1,
+    }
+    assert stats['contamination']['total'] == 5
+    assert stats['contamination']['high_importance'] == 2
+    assert stats['degradation']['degraded'] == 2
+
+
 def test_list_memories_searches_both_tiers(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
     rows = DashboardStore(db).list_memories(kind='all', q='visualiser', limit=10)
     assert [r['id'] for r in rows] == ['e1']
     assert rows[0]['tier'] == 'episodic'
+    assert rows[0]['memory_kind'] == 'episodic'
+    assert rows[0]['degradation_tier'] == 2
+    assert rows[0]['degradation_label'] == 'warm'
+    assert rows[0]['veracity'] == 'inferred'
+    assert rows[0]['trust_weight'] == 0.7
+    assert rows[0]['degradation_weight'] == 0.5
+    assert rows[0]['effective_memory_weight'] == 0.35
+
+
+def test_list_memories_filters_v23_veracity_and_degradation(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    assert [r['id'] for r in store.list_memories(kind='all', veracity='tool', limit=10)] == ['w4']
+    assert [r['id'] for r in store.list_memories(kind='all', contaminated_only=True, sort='importance', limit=10)] == ['w4', 'e1', 'e2', 'w3', 'w2']
+    assert [r['id'] for r in store.list_memories(kind='episodic', degradation_tier=3, limit=10)] == ['e2']
+    assert [r['id'] for r in store.list_memories(kind='episodic', degraded_only=True, limit=10)] == ['e2', 'e1']
 
 
 def test_search_uses_token_prefix_not_mid_word_substring(tmp_path):
