@@ -600,8 +600,8 @@ function buildConstellationScene(data){
     const band = n.kind === 'memory' ? 1.28 : .72 + (ci % 4) * .16;
     const radius = 250 * band + (i % 7) * 16;
     n.x = Math.cos(angle) * radius;
-    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24);
-    n.z = Math.sin(angle) * radius * .82;
+    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24) + (((i * 53) % 131) - 65) * .82;
+    n.z = Math.sin(angle) * radius * .82 + (((i * 97) % 181) - 90) * 1.55 + ((ci % 5) - 2) * 42;
     n.size = Math.min(22, 4 + Math.sqrt(Number(n.weight || n.count || 1))*3.4) * (n.kind === 'memory' ? 1.08 : 1);
     n.twinkle = (i % 17) / 17;
     const twinkleTier = i % 11 === 0 ? 2 : (i % 5 === 0 ? 1 : 0);
@@ -1339,7 +1339,12 @@ function threeInspectorDefault(){
   const mode = threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D';
   $('#threeInspector').innerHTML = `<div class="inspector-kicker">${mode} inspector</div><h3>Nothing selected</h3><p class="muted">Pick a GPU-rendered point or link to inspect the underlying read-only source.</p>`;
 }
-function inspectThreeNode(node){ inspectConstellationNode(node); $('#threeInspector').innerHTML = $('#constellationInspector').innerHTML.replace('Constellation inspector', `${threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D'} inspector`); }
+function inspectThreeNode(node){
+  const mode = threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D';
+  $('#threeInspector').innerHTML = `<div class="inspector-kicker">${mode} · ${esc(node.kind || 'entity')}</div><h3>${esc(node.label)}</h3><p class="muted">${esc(node.category || 'Other')} · ${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="threeMemory" class="primary tiny">Open memory</button>' : ''}<button id="threeSearch" class="tiny">Search this</button></div>`;
+  if(node.memory_id) $('#threeMemory').onclick = () => openMemoryDetail(node.memory_id);
+  $('#threeSearch').onclick = () => { $('#memoryQuery').value = String(node.label || '').replace(/^memory:/,''); switchTab('memories'); };
+}
 function updateThreeUI(){
   $$('.visualiser-tabs button[data-three-mode]').forEach(b => b.classList.toggle('active', b.dataset.threeMode === threeVis.mode));
   const viewport = $('#threeViewport'); if(viewport) viewport.dataset.threeMode = threeVis.mode;
@@ -1413,8 +1418,8 @@ function buildThreePositions(data){
     const radius = 250 * band + (i % 7) * 16;
     const weight = Math.max(1, Number(n.weight || n.count || 1));
     n.x = Math.cos(angle) * radius;
-    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24);
-    n.z = Math.sin(angle) * radius * .82;
+    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24) + (((i * 53) % 131) - 65) * .82;
+    n.z = Math.sin(angle) * radius * .82 + (((i * 97) % 181) - 90) * 1.55 + ((ci % 5) - 2) * 42;
     n.size = Math.min(22, 4 + Math.sqrt(weight)*3.4) * (n.kind === 'memory' ? 1.08 : 1);
     n._degree = 0; n._weight = weight;
   });
@@ -1485,6 +1490,30 @@ function limitedThreeEdges(data, byId){
   }
   return out;
 }
+function addHaloPoints(THREE, scene, nodes, kind, color, size){
+  const selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
+  const positions = new Float32Array(selected.length * 3);
+  selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; });
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, 'orb'), alphaTest:.02, size, sizeAttenuation:true, transparent:true, opacity: kind === 'memory' ? .28 : .34, depthWrite:false, blending:THREE.AdditiveBlending });
+  const points = new THREE.Points(geometry, material); scene.add(points); return points;
+}
+function addNeuralDendrites(THREE, group, nodes, colors){
+  const segs=[];
+  nodes.slice(0,150).forEach((n,i)=>{
+    const arms = n.kind === 'memory' ? 3 : 6;
+    const base = n.kind === 'memory' ? 18 : 28;
+    for(let a=0;a<arms;a++){
+      const theta=(a/arms)*Math.PI*2 + (i%11)*.19;
+      const phi=Math.sin(i*.37+a)*.65;
+      const len=base + ((i+a*13)%17);
+      const dx=Math.cos(theta)*Math.cos(phi)*len, dy=Math.sin(phi)*len*.72, dz=Math.sin(theta)*Math.cos(phi)*len;
+      segs.push(n.x,n.y,n.z,n.x+dx,n.y+dy,n.z+dz);
+    }
+  });
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segs),3));
+  group.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity:colors.light ? .16 : .22, blending:THREE.AdditiveBlending, depthWrite:false })));
+}
 function addPoints(THREE, scene, nodes, kind, color, size){
   const selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
   const positions = new Float32Array(selected.length * 3);
@@ -1521,14 +1550,19 @@ async function renderThreeVisualiser(data){
   edges.forEach((e,i)=>{ linkPositions.set([e.a.x,e.a.y,e.a.z,e.b.x,e.b.y,e.b.z], i*6); });
   const linkGeom = new THREE.BufferGeometry(); linkGeom.setAttribute('position', new THREE.BufferAttribute(linkPositions,3));
   group.add(new THREE.LineSegments(linkGeom, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity: threeVis.mode === 'neural' ? .30 : .22, blending:THREE.AdditiveBlending })));
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 8.5 : 7));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 6.8 : 5.8));
+  if(threeVis.mode === 'neural'){
+    addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 34);
+    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 25);
+    addNeuralDendrites(THREE, group, nodes, colors);
+  }
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 11.5 : 7));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 8.8 : 5.8));
   const starCount = threeVis.mode === 'neural' ? 360 : 520;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
   const starGeom = new THREE.BufferGeometry(); starGeom.setAttribute('position', new THREE.BufferAttribute(starPositions,3));
   scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:1.6, transparent:true, opacity:.38, depthWrite:false })));
-  const pulseEdges = edges.slice(0, threeVis.mode === 'neural' ? 90 : 45);
+  const pulseEdges = threeVis.mode === 'neural' ? edges.slice(0, 90) : [];
   const pulseGeom = new THREE.BufferGeometry(); const pulsePositions = new Float32Array(pulseEdges.length*3); pulseGeom.setAttribute('position', new THREE.BufferAttribute(pulsePositions,3));
   const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:5.2, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
   const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 28 : 22);
