@@ -1459,13 +1459,17 @@ function buildThreePositions(data){
   nodes.forEach((n,i) => {
     const cat = n.category || 'Other';
     const ci = catIndex[cat] || 0;
-    const angle = (i / Math.max(nodes.length,1)) * Math.PI * 2 + ci * .62;
-    const band = n.kind === 'memory' ? 1.28 : .72 + (ci % 4) * .16;
-    const radius = 250 * band + (i % 7) * 16;
     const weight = Math.max(1, Number(n.weight || n.count || 1));
-    n.x = Math.cos(angle) * radius;
-    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24) + ((i % 9) - 4) * 8;
-    n.z = Math.sin(angle) * radius * .82 + Math.cos(angle * 1.7) * 42 + ((ci % 5) - 2) * 42;
+    const shell = n.kind === 'memory' ? 1.12 : .74 + (ci % 3) * .10;
+    const radius = 285 * shell + (i % 7) * 18 + Math.min(46, Math.sqrt(weight) * 5.5);
+    const longitude = ((i * 137.508 + ci * 23) % 360) * Math.PI / 180;
+    const latitudeSeed = (((i * 53 + ci * 29) % 101) + .5) / 101;
+    const latitude = Math.acos(1 - 2 * latitudeSeed) - Math.PI / 2;
+    const radial = Math.cos(latitude);
+    const orbitBias = Math.sin((i / Math.max(nodes.length,1)) * Math.PI * 2 + ci * .62) * 22;
+    n.x = Math.cos(longitude) * radial * radius;
+    n.y = Math.sin(latitude) * radius * .92 + orbitBias;
+    n.z = Math.sin(longitude) * radial * radius * 1.12 + Math.cos(longitude * 1.7 + ci) * 54;
     n.size = Math.min(22, 4 + Math.sqrt(weight)*3.4) * (n.kind === 'memory' ? 1.08 : 1);
     n.twinkle = (i % 23) / 23;
     const twinkleTier = i % 17 === 0 ? 2 : (i % 5 === 0 ? 1 : 0);
