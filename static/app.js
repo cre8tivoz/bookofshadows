@@ -9,7 +9,7 @@ let applyingHistory = false;
 let bulkSelection = new Set();
 let latestMemoryItems = [];
 let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
-let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], rotation: 0, tilt: 0.35, hits: [], data: null, pointer: { x: 0, y: 0, active: false } };
+let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], rotation: 0, tilt: 0.35, zoom: 1, panX: 0, panY: 0, paused: false, mode: 'rotate', lastFrameTime: 0, hits: [], data: null, drag: null, pointers: new Map() };
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -544,7 +544,7 @@ function constellationColors(){
   return light ? { bg:'#fbf8f3', nebula:'rgba(101,214,255,.16)', star:'#146b8f', memory:'#c4821f', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(160,119,88,.20)' } : { bg:'#050711', nebula:'rgba(101,214,255,.18)', star:'#65d6ff', memory:'#ffd166', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(183,168,255,.18)' };
 }
 function projectConstellationNode(n, w, h, t){
-  const rot = constellationScene.rotation + t * 0.000075;
+  const rot = constellationScene.rotation;
   const cos = Math.cos(rot), sin = Math.sin(rot);
   const x = n.x * cos - n.z * sin;
   const z0 = n.x * sin + n.z * cos;
@@ -554,7 +554,8 @@ function projectConstellationNode(n, w, h, t){
   const depth = 760;
   const scale = depth / (depth + z + 260);
   const fit = Math.min(1, Math.max(.54, (w - 72) / 760));
-  return { x:w/2 + x*scale*fit, y:h/2 + y*scale*fit, z, scale, visible:scale > .35 };
+  const cameraScale = fit * constellationScene.zoom;
+  return { x:w/2 + constellationScene.panX + x*scale*cameraScale, y:h/2 + constellationScene.panY + y*scale*cameraScale, z, scale:scale*constellationScene.zoom, visible:scale > .35 };
 }
 function buildConstellationScene(data){
   const nodes = (data.nodes || []).slice(0,160);
@@ -590,6 +591,11 @@ function drawConstellationFrame(t=0){
   const compactCanvas = w < 620;
   if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); }
   const ctx = canvas.getContext('2d');
+  if(!constellationScene.paused && !constellationScene.drag){
+    const delta = constellationScene.lastFrameTime ? Math.min(48, t - constellationScene.lastFrameTime) : 16;
+    constellationScene.rotation += delta * 0.000075;
+  }
+  constellationScene.lastFrameTime = t;
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const c = constellationColors();
   ctx.clearRect(0,0,w,h);
@@ -657,12 +663,104 @@ function drawConstellationFrame(t=0){
   constellationScene.hits=hits;
   if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawConstellationFrame);
 }
+function resetConstellationView(){
+  Object.assign(constellationScene, { rotation: 0, tilt: 0.35, zoom: 1, panX: 0, panY: 0, drag: null, lastFrameTime: 0 });
+  constellationScene.pointers.clear();
+  updateConstellationPauseButton();
+  updateConstellationPanButton();
+}
+function updateConstellationPauseButton(){
+  const btn = $('#constellationPause');
+  if(btn) btn.textContent = constellationScene.paused ? 'Resume rotation' : 'Pause rotation';
+}
+function updateConstellationPanButton(){
+  const btn = $('#constellationPanMode');
+  if(btn) btn.textContent = constellationScene.mode === 'pan' ? 'Rotate mode' : 'Pan mode';
+}
+function toggleConstellationPanMode(){
+  constellationScene.mode = constellationScene.mode === 'pan' ? 'rotate' : 'pan';
+  updateConstellationPanButton();
+}
+function toggleConstellationPause(){
+  constellationScene.paused = !constellationScene.paused;
+  constellationScene.lastFrameTime = 0;
+  updateConstellationPauseButton();
+}
+function zoomConstellation(factor, cx, cy){
+  const canvas = $('#constellationCanvas');
+  if(!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const oldZoom = constellationScene.zoom;
+  const nextZoom = Math.max(.45, Math.min(3.2, oldZoom * factor));
+  if(Math.abs(nextZoom - oldZoom) < .001) return;
+  const x = cx - rect.left - rect.width/2 - constellationScene.panX;
+  const y = cy - rect.top - rect.height/2 - constellationScene.panY;
+  const ratio = nextZoom / oldZoom;
+  constellationScene.panX -= x * (ratio - 1);
+  constellationScene.panY -= y * (ratio - 1);
+  constellationScene.zoom = nextZoom;
+}
+function bindConstellationControls(canvas){
+  if(canvas.dataset.controlsBound === 'true') return;
+  canvas.dataset.controlsBound = 'true';
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomConstellation(Math.exp(-e.deltaY * 0.0012), e.clientX, e.clientY);
+  }, { passive:false });
+  canvas.addEventListener('pointerdown', e => {
+    try { canvas.setPointerCapture(e.pointerId); } catch(_err) {}
+    constellationScene.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if(constellationScene.pointers.size === 2){
+      const pts=[...constellationScene.pointers.values()];
+      constellationScene.drag = { mode:'pinch', dist:Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y), midX:(pts[0].x+pts[1].x)/2, midY:(pts[0].y+pts[1].y)/2, zoom:constellationScene.zoom, panX:constellationScene.panX, panY:constellationScene.panY };
+      return;
+    }
+    constellationScene.drag = { mode:(constellationScene.mode === 'pan' || e.shiftKey || e.button === 1 || e.button === 2) ? 'pan' : 'rotate', x:e.clientX, y:e.clientY, rotation:constellationScene.rotation, tilt:constellationScene.tilt, panX:constellationScene.panX, panY:constellationScene.panY, moved:false };
+  });
+  canvas.addEventListener('pointermove', e => {
+    if(constellationScene.pointers.has(e.pointerId)) constellationScene.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    const d = constellationScene.drag;
+    if(!d) return;
+    if(d.mode === 'pinch' && constellationScene.pointers.size >= 2){
+      const pts=[...constellationScene.pointers.values()];
+      const dist=Math.max(1, Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y));
+      const midX=(pts[0].x+pts[1].x)/2, midY=(pts[0].y+pts[1].y)/2;
+      constellationScene.zoom = Math.max(.45, Math.min(3.2, d.zoom * (dist / d.dist)));
+      constellationScene.panX = d.panX + (midX - d.midX);
+      constellationScene.panY = d.panY + (midY - d.midY);
+      return;
+    }
+    const dx=e.clientX-d.x, dy=e.clientY-d.y;
+    if(Math.abs(dx)+Math.abs(dy) > 3) d.moved = true;
+    if(d.mode === 'pan'){
+      constellationScene.panX = d.panX + dx;
+      constellationScene.panY = d.panY + dy;
+      canvas.style.cursor = 'grabbing';
+    } else {
+      constellationScene.rotation = d.rotation + dx * 0.008;
+      constellationScene.tilt = Math.max(-1.05, Math.min(1.05, d.tilt + dy * 0.006));
+      canvas.style.cursor = 'grabbing';
+    }
+  });
+  const endPointer = e => {
+    constellationScene.pointers.delete(e.pointerId);
+    if(constellationScene.pointers.size === 0){
+      if(constellationScene.drag?.moved) canvas.dataset.suppressClick = 'true';
+      constellationScene.drag = null;
+      canvas.style.cursor = 'grab';
+    }
+  };
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+}
 function drawConstellation(data){
   if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
   buildConstellationScene(data);
   const canvas = $('#constellationCanvas');
-  canvas.onclick = e => { const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; const hit=[...constellationScene.hits].reverse().find(h => Math.hypot(h.x-x,h.y-y) <= h.r); if(hit) inspectConstellationNode(hit.node); };
-  canvas.onpointermove = e => { const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; canvas.style.cursor = constellationScene.hits.some(h => Math.hypot(h.x-x,h.y-y) <= h.r) ? 'pointer' : 'grab'; };
+  bindConstellationControls(canvas);
+  canvas.onclick = e => { if(canvas.dataset.suppressClick === 'true'){ canvas.dataset.suppressClick = 'false'; return; } const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; const hit=[...constellationScene.hits].reverse().find(h => Math.hypot(h.x-x,h.y-y) <= h.r); if(hit) inspectConstellationNode(hit.node); };
+  canvas.onpointermove = e => { if(constellationScene.drag) return; const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; canvas.style.cursor = constellationScene.hits.some(h => Math.hypot(h.x-x,h.y-y) <= h.r) ? 'pointer' : 'grab'; };
   $('#constellationClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
   constellationInspectorDefault();
   drawConstellationFrame(0);
@@ -832,7 +930,11 @@ $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };
 $('#graphResetView').onclick = resetGraphView;
 $('#constellationRefresh').onclick = loadConstellation;
-$('#constellationReset').onclick = loadConstellation;
+$('#constellationReset').onclick = resetConstellationView;
+$('#constellationPanMode').onclick = toggleConstellationPanMode;
+$('#constellationPause').onclick = toggleConstellationPause;
+updateConstellationPauseButton();
+updateConstellationPanButton();
 $('#consolidationQuery').oninput = renderConsolidations;
 $('#consolidationClear').onclick = () => { $('#consolidationQuery').value = ''; renderConsolidations(); };
 $('#closeDetail').onclick = () => closeDetail();
