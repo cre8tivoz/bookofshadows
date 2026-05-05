@@ -553,7 +553,7 @@ function projectConstellationNode(n, w, h, t){
   const z = n.y * Math.sin(tilt) + z0 * Math.cos(tilt);
   const depth = 760;
   const scale = depth / (depth + z + 260);
-  const fit = Math.min(1, Math.max(.54, (w - 72) / 760));
+  const fit = w < 620 ? Math.min(.72, Math.max(.58, (w - 36) / 680)) : Math.min(1.02, Math.max(.62, (w - 72) / 760));
   const cameraScale = fit * constellationScene.zoom;
   return { x:w/2 + constellationScene.panX + x*scale*cameraScale, y:h/2 + constellationScene.panY + y*scale*cameraScale, z, scale:scale*constellationScene.zoom, visible:scale > .35 };
 }
@@ -598,6 +598,7 @@ function drawConstellationFrame(t=0){
   constellationScene.lastFrameTime = t;
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const c = constellationColors();
+  clampConstellationCamera(w, h);
   ctx.clearRect(0,0,w,h);
   const bg = ctx.createRadialGradient(w*.52,h*.44,20,w*.52,h*.44,Math.max(w,h)*.72);
   bg.addColorStop(0, compactCanvas ? 'rgba(101,214,255,.08)' : c.nebula); bg.addColorStop(.45, compactCanvas ? 'rgba(124,124,255,.035)' : 'rgba(124,124,255,.08)'); bg.addColorStop(1,c.bg);
@@ -669,14 +670,15 @@ function drawConstellationFrame(t=0){
     ctx.globalAlpha=1;
     ctx.restore();
     const labelRaw=(n.label || '').replace(/^memory:/,'mem ');
-    const technicalLabel=/^[a-f0-9]{10,}$/i.test(labelRaw) || /daemon|timeout|embed|^[0-9a-f-]{8,}$/i.test(labelRaw);
-    const showLabel = compactLabels ? (!technicalLabel && (p.scale > 1.36 || weight > 8.2)) : (!technicalLabel && (p.scale > 1.12 || weight > 6.4 || (n.kind === 'memory' && weight > 5.2)));
+    const technicalLabel=/^[a-f0-9]{10,}$/i.test(labelRaw) || /^mem\s+[a-f0-9]{6,}$/i.test(labelRaw) || /daemon|timeout|embed|^[0-9a-f-]{8,}$/i.test(labelRaw);
+    const showLabel = compactLabels ? (!technicalLabel && (p.scale > 1.18 || weight > 5.8)) : (!technicalLabel && (p.scale > 1.02 || weight > 5.4 || (n.kind === 'memory' && weight > 4.8)));
     if(showLabel){
       const label=/^[A-Z][A-Z_\s-]{2,}$/.test(labelRaw) ? labelRaw.toLowerCase().replace(/(^|[_\s-])([a-z])/g, (_m, sep, ch) => (sep === '_' ? ' ' : sep) + ch.toUpperCase()) : labelRaw;
       const short=label.length>22?label.slice(0,19)+'…':label;
       ctx.font=`${Math.round((compactLabels ? 9 : 10) + p.scale*2.5)}px Inter, system-ui, sans-serif`;
       const lx=p.x+flare+6, ly=p.y+4, tw=ctx.measureText(short).width;
-      const box={x:lx-3,y:ly-13,w:tw+6,h:17};
+      const labelPad = compactLabels ? 4 : 4;
+      const box={x:lx-labelPad,y:ly-(compactLabels ? 13 : 14),w:tw+labelPad*2,h:compactLabels ? 18 : 19};
       const onCanvas=box.x>=10 && box.x+box.w<=w-10 && box.y>=10 && box.y+box.h<=h-10;
       const collides=labelBoxes.some(b => !(box.x+box.w<b.x || b.x+b.w<box.x || box.y+box.h<b.y || b.y+b.h<box.y));
       if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=5; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(.78,.30+p.scale*.42); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
@@ -685,6 +687,15 @@ function drawConstellationFrame(t=0){
   });
   constellationScene.hits=hits;
   if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawConstellationFrame);
+}
+function clampConstellationCamera(w, h){
+  constellationScene.zoom = Math.max(.55, Math.min(2.6, Number.isFinite(constellationScene.zoom) ? constellationScene.zoom : 1));
+  constellationScene.rotation = Number.isFinite(constellationScene.rotation) ? constellationScene.rotation : 0;
+  constellationScene.tilt = Math.max(-1.05, Math.min(1.05, Number.isFinite(constellationScene.tilt) ? constellationScene.tilt : .35));
+  const panLimitX = Math.max(80, w * (.24 + constellationScene.zoom * .12));
+  const panLimitY = Math.max(90, h * (.16 + constellationScene.zoom * .08));
+  constellationScene.panX = Math.max(-panLimitX, Math.min(panLimitX, Number.isFinite(constellationScene.panX) ? constellationScene.panX : 0));
+  constellationScene.panY = Math.max(-panLimitY, Math.min(panLimitY, Number.isFinite(constellationScene.panY) ? constellationScene.panY : 0));
 }
 function resetConstellationView(){
   Object.assign(constellationScene, { rotation: 0, tilt: 0.35, zoom: 1, panX: 0, panY: 0, drag: null, lastFrameTime: 0 });
@@ -714,7 +725,7 @@ function zoomConstellation(factor, cx, cy){
   if(!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const oldZoom = constellationScene.zoom;
-  const nextZoom = Math.max(.45, Math.min(3.2, oldZoom * factor));
+  const nextZoom = Math.max(.55, Math.min(2.6, oldZoom * factor));
   if(Math.abs(nextZoom - oldZoom) < .001) return;
   const x = cx - rect.left - rect.width/2 - constellationScene.panX;
   const y = cy - rect.top - rect.height/2 - constellationScene.panY;
@@ -722,6 +733,7 @@ function zoomConstellation(factor, cx, cy){
   constellationScene.panX -= x * (ratio - 1);
   constellationScene.panY -= y * (ratio - 1);
   constellationScene.zoom = nextZoom;
+  clampConstellationCamera(rect.width, rect.height);
 }
 function bindConstellationControls(canvas){
   if(canvas.dataset.controlsBound === 'true') return;
@@ -732,6 +744,7 @@ function bindConstellationControls(canvas){
     zoomConstellation(Math.exp(-e.deltaY * 0.0012), e.clientX, e.clientY);
   }, { passive:false });
   canvas.addEventListener('pointerdown', e => {
+    if(e.cancelable) e.preventDefault();
     try { canvas.setPointerCapture(e.pointerId); } catch(_err) {}
     constellationScene.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
     if(constellationScene.pointers.size === 2){
@@ -742,16 +755,19 @@ function bindConstellationControls(canvas){
     constellationScene.drag = { mode:(constellationScene.mode === 'pan' || e.shiftKey || e.button === 1 || e.button === 2) ? 'pan' : 'rotate', x:e.clientX, y:e.clientY, rotation:constellationScene.rotation, tilt:constellationScene.tilt, panX:constellationScene.panX, panY:constellationScene.panY, moved:false };
   });
   canvas.addEventListener('pointermove', e => {
+    if(constellationScene.drag && e.cancelable) e.preventDefault();
     if(constellationScene.pointers.has(e.pointerId)) constellationScene.pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
     const d = constellationScene.drag;
     if(!d) return;
-    if(d.mode === 'pinch' && constellationScene.pointers.size >= 2){
+    if(d.mode === 'pinch'){
+      if(constellationScene.pointers.size < 2) return;
       const pts=[...constellationScene.pointers.values()];
       const dist=Math.max(1, Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y));
       const midX=(pts[0].x+pts[1].x)/2, midY=(pts[0].y+pts[1].y)/2;
-      constellationScene.zoom = Math.max(.45, Math.min(3.2, d.zoom * (dist / d.dist)));
+      constellationScene.zoom = Math.max(.55, Math.min(2.6, d.zoom * (dist / Math.max(1, d.dist))));
       constellationScene.panX = d.panX + (midX - d.midX);
       constellationScene.panY = d.panY + (midY - d.midY);
+      clampConstellationCamera(canvas.clientWidth || canvas.getBoundingClientRect().width, canvas.clientHeight || canvas.getBoundingClientRect().height);
       return;
     }
     const dx=e.clientX-d.x, dy=e.clientY-d.y;
