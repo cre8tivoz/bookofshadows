@@ -1648,7 +1648,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
     positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z;
     const degreeBoost = Math.min(10, Number(n._degree || 0) * 1.9);
     const variedSize = (n.size || size) + degreeBoost;
-    sizes[i]=Math.max(size * .88, Math.min(size * 2.65, variedSize * 1.55));
+    sizes[i]=Math.max(size * 1.14, Math.min(size * 2.65, variedSize * 1.62));
     phases[i]=(n.twinkle || 0) * Math.PI * 2;
     freqs[i]=n.twinkleFreq || .0012;
     amps[i]=n.twinkleAmp || .12;
@@ -1793,8 +1793,8 @@ async function renderThreeVisualiser(data){
     // Constellation already has per-star shader halos. A separate halo layer made
     // the mobile view read like blurry particles instead of the original star map.
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 28 : 46));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 24 : 44));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 30 : 52));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 26 : 50));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
