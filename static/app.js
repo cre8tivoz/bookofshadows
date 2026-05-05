@@ -261,6 +261,7 @@ function switchTab(name, opts={}){
   if(section==='today') loadTodayDigest();
   if(section==='profile') loadProfile();
   if(section==='constellation') loadConstellation();
+  if(section==='visualiser3d') loadThreeVisualiser();
   if(section==='settings') { loadAuthStatus(); loadDiagnostics(); }
 }
 
@@ -1320,6 +1321,191 @@ async function loadGraph(){
   drawGraph(await api(`/api/graph?q=${q}&limit=300`));
 }
 
+
+let threeModulePromise = null;
+let threeVis = {
+  mode: 'constellation', data: null, renderer: null, scene: null, camera: null, group: null,
+  nodes: [], edgePairs: [], labels: [], pulses: [], frame: 0, paused: false, panMode: false,
+  drag: null, pointer: new Map(), yaw: 0, pitch: 0.32, cameraZ: 780, panX: 0, panY: 0, lastT: 0
+};
+function loadThreeModule(){
+  if(!threeModulePromise) threeModulePromise = import('/static/vendor/three.module.min.js');
+  return threeModulePromise;
+}
+function threeInspectorDefault(){
+  const mode = threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D';
+  $('#threeInspector').innerHTML = `<div class="inspector-kicker">${mode} inspector</div><h3>Nothing selected</h3><p class="muted">Pick a GPU-rendered point or link to inspect the underlying read-only source.</p>`;
+}
+function inspectThreeNode(node){ inspectConstellationNode(node); $('#threeInspector').innerHTML = $('#constellationInspector').innerHTML.replace('Constellation inspector', `${threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D'} inspector`); }
+function updateThreeUI(){
+  $$('.visualiser-tabs button[data-three-mode]').forEach(b => b.classList.toggle('active', b.dataset.threeMode === threeVis.mode));
+  const viewport = $('#threeViewport'); if(viewport) viewport.dataset.threeMode = threeVis.mode;
+  const legend = $('#threeLegend');
+  if(legend) legend.innerHTML = threeVis.mode === 'neural'
+    ? '<span><i class="legend-dot entity"></i>Neuron hub</span><span><i class="legend-dot memory"></i>Memory soma</span><span><i class="legend-line"></i>Synapse</span>'
+    : '<span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span>';
+  const help = $('#threeHelp'); if(help) help.textContent = threeVis.mode === 'neural' ? 'GPU/WebGL neural cloud · drag to orbit · wheel/pinch to zoom · click to inspect.' : 'GPU/WebGL star map · drag to orbit · wheel/pinch to zoom · click to inspect.';
+  const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? 'Resume drift' : 'Pause drift';
+  const pan = $('#threePanMode'); if(pan) pan.textContent = threeVis.panMode ? 'Orbit mode' : 'Pan mode';
+}
+function resetThreeCamera(){ Object.assign(threeVis, { yaw:0, pitch: threeVis.mode === 'neural' ? .24 : .38, cameraZ: threeVis.mode === 'neural' ? 760 : 820, panX:0, panY:0, lastT:0 }); }
+function clearThreeScene(){
+  if(threeVis.frame) cancelAnimationFrame(threeVis.frame);
+  threeVis.frame = 0;
+  if(threeVis.renderer){ threeVis.renderer.dispose(); threeVis.renderer.domElement.remove(); }
+  $('#threeLabels').innerHTML = '';
+  Object.assign(threeVis, { renderer:null, scene:null, camera:null, group:null, nodes:[], edgePairs:[], labels:[], pulses:[] });
+}
+function colorForTheme(){
+  const light = document.documentElement.dataset.theme === 'light';
+  return light ? { bg:0xfaf8f5, entity:0x138f7a, memory:0xb8643f, link:0x5d887e, pulse:0xff8f61, text:'#2b2927' } : { bg:0x06100f, entity:0x66e8c6, memory:0xff9b6a, link:0x47bda4, pulse:0xffb37d, text:'#f6fbf7' };
+}
+function buildThreePositions(data){
+  const nodes = (data.nodes || []).slice(0, threeVis.mode === 'neural' ? 220 : 180);
+  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const catIndex = new Map(categories.map((c,i)=>[c,i]));
+  return nodes.map((n,i) => {
+    const cat = catIndex.get(n.category || 'Other') || 0;
+    const angle = (i * 2.399963 + cat * .55) % (Math.PI*2);
+    const weight = Math.max(1, Number(n.weight || n.count || 1));
+    let x,y,z;
+    if(threeVis.mode === 'neural'){
+      const band = (cat - categories.length/2) * 32;
+      const radius = 84 + (i % 17) * 9 + Math.sqrt(weight) * 7;
+      x = Math.cos(angle) * radius * (1 + (cat % 3) * .16);
+      y = band + Math.sin(angle * .73) * 118 + ((i % 9) - 4) * 7;
+      z = Math.sin(angle) * radius * .82 + Math.cos(i*.41) * 92;
+    } else {
+      const shell = 180 + (cat % 5) * 24 + Math.sqrt(weight) * 5;
+      const phi = Math.acos(2 * (((i*37)%101)/100) - 1);
+      x = shell * Math.sin(phi) * Math.cos(angle);
+      y = shell * Math.cos(phi) * .72;
+      z = shell * Math.sin(phi) * Math.sin(angle);
+    }
+    return {...n, x, y, z, _degree:0, _weight:weight};
+  });
+}
+function limitedThreeEdges(data, byId){
+  const degree = new Map(); const out=[];
+  const limit = threeVis.mode === 'neural' ? 260 : 170;
+  const degreeLimit = threeVis.mode === 'neural' ? 7 : 5;
+  for(const e of (data.edges || [])){
+    const a=byId.get(e.source), b=byId.get(e.target); if(!a || !b) continue;
+    const da=degree.get(e.source)||0, db=degree.get(e.target)||0; if(da>=degreeLimit || db>=degreeLimit) continue;
+    degree.set(e.source, da+1); degree.set(e.target, db+1); a._degree++; b._degree++; out.push({ ...e, a, b });
+    if(out.length >= limit) break;
+  }
+  return out;
+}
+function addPoints(THREE, scene, nodes, kind, color, size){
+  const selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
+  const positions = new Float32Array(selected.length * 3);
+  selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; });
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  const material = new THREE.PointsMaterial({ color, size, sizeAttenuation:true, transparent:true, opacity:.92, depthWrite:false, blending:THREE.AdditiveBlending });
+  const points = new THREE.Points(geometry, material); points.userData.nodes = selected; scene.add(points); return points;
+}
+async function renderThreeVisualiser(data){
+  const THREE = await loadThreeModule();
+  clearThreeScene(); threeVis.data = data; updateThreeUI(); threeInspectorDefault();
+  const viewport = $('#threeViewport'); if(!viewport) return;
+  const colors = colorForTheme();
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
+  } catch(err) {
+    $('#threeViewport').classList.add('three-fallback');
+    $('#threeLabels').innerHTML = `<div class="three-fallback-card"><h3>WebGL unavailable</h3><p>This comparison view needs GPU/WebGL. The original Canvas Visualiser remains available for this browser.</p></div>`;
+    $('#threeInspector').innerHTML = `<div class="inspector-kicker">Three.js inspector</div><h3>WebGL unavailable</h3><p class="muted">Try this page in desktop Chrome/Safari/Firefox with hardware acceleration enabled.</p>`;
+    return;
+  }
+  $('#threeViewport').classList.remove('three-fallback');
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(colors.bg, 0);
+  viewport.prepend(renderer.domElement);
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(colors.bg, threeVis.mode === 'neural' ? .0011 : .0009);
+  const camera = new THREE.PerspectiveCamera(48, 1, 1, 5000);
+  const group = new THREE.Group(); scene.add(group);
+  const ambient = new THREE.AmbientLight(0xffffff, .55); scene.add(ambient);
+  const light = new THREE.PointLight(colors.entity, 1.2, 1200); light.position.set(180,220,260); scene.add(light);
+  const nodes = buildThreePositions(data); const byId = new Map(nodes.map(n=>[n.id,n])); const edges = limitedThreeEdges(data, byId);
+  const linkPositions = new Float32Array(edges.length * 6);
+  edges.forEach((e,i)=>{ linkPositions.set([e.a.x,e.a.y,e.a.z,e.b.x,e.b.y,e.b.z], i*6); });
+  const linkGeom = new THREE.BufferGeometry(); linkGeom.setAttribute('position', new THREE.BufferAttribute(linkPositions,3));
+  group.add(new THREE.LineSegments(linkGeom, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity: threeVis.mode === 'neural' ? .30 : .22, blending:THREE.AdditiveBlending })));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 8.5 : 7));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 6.8 : 5.8));
+  const starCount = threeVis.mode === 'neural' ? 360 : 520;
+  const starPositions = new Float32Array(starCount*3);
+  for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
+  const starGeom = new THREE.BufferGeometry(); starGeom.setAttribute('position', new THREE.BufferAttribute(starPositions,3));
+  scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, size:1.6, transparent:true, opacity:.38, depthWrite:false })));
+  const pulseEdges = edges.slice(0, threeVis.mode === 'neural' ? 90 : 45);
+  const pulseGeom = new THREE.BufferGeometry(); const pulsePositions = new Float32Array(pulseEdges.length*3); pulseGeom.setAttribute('position', new THREE.BufferAttribute(pulsePositions,3));
+  const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, size:5.2, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
+  const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 28 : 22);
+  $('#threeLabels').innerHTML = labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
+  Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
+  $('#threeClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
+  resetThreeCamera(); bindThreeControls(); resizeThree(); animateThree(0);
+}
+function resizeThree(){
+  if(!threeVis.renderer) return;
+  const viewport = $('#threeViewport'); const rect = viewport.getBoundingClientRect();
+  const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
+  threeVis.renderer.setSize(w,h,false); threeVis.camera.aspect = w/h; threeVis.camera.updateProjectionMatrix();
+}
+function updateThreeLabels(){
+  if(!threeVis.camera || !threeVis.group) return;
+  const viewport = $('#threeViewport'); const rect = viewport.getBoundingClientRect(); const v = new threeVis.THREE.Vector3();
+  $$('#threeLabels .three-label').forEach((el,i)=>{
+    const n = threeVis.labels[i]; if(!n) return;
+    v.set(n.x,n.y,n.z).applyMatrix4(threeVis.group.matrixWorld).project(threeVis.camera);
+    const visible = v.z < 1 && v.z > -1;
+    el.style.display = visible ? '' : 'none';
+    el.style.left = `${(v.x*.5+.5)*rect.width}px`; el.style.top = `${(-v.y*.5+.5)*rect.height}px`;
+    el.style.opacity = String(Math.max(.35, Math.min(.9, 1 - Math.abs(v.z)*.35)));
+  });
+}
+function animateThree(t=0){
+  if(!threeVis.renderer) return;
+  resizeThree();
+  const delta = threeVis.lastT ? Math.min(48, t - threeVis.lastT) : 16; threeVis.lastT = t;
+  if(!threeVis.paused && !threeVis.drag) threeVis.yaw += delta * (threeVis.mode === 'neural' ? .00009 : .000055);
+  threeVis.group.rotation.y = threeVis.yaw; threeVis.group.rotation.x = threeVis.pitch;
+  threeVis.camera.position.set(threeVis.panX, threeVis.panY, threeVis.cameraZ); threeVis.camera.lookAt(threeVis.panX, threeVis.panY, 0);
+  if(threeVis.pulsePoints){
+    const attr = threeVis.pulsePoints.geometry.attributes.position; const arr = attr.array;
+    threeVis.pulses.forEach((e,i)=>{ const phase=(t*.00016 + (i%17)/17)%1; arr[i*3]=e.a.x+(e.b.x-e.a.x)*phase; arr[i*3+1]=e.a.y+(e.b.y-e.a.y)*phase; arr[i*3+2]=e.a.z+(e.b.z-e.a.z)*phase; });
+    attr.needsUpdate = true;
+  }
+  threeVis.renderer.render(threeVis.scene, threeVis.camera); updateThreeLabels();
+  threeVis.frame = requestAnimationFrame(animateThree);
+}
+async function loadThreeVisualiser(){ renderThreeVisualiser(await api('/api/constellation?limit=320')); }
+function switchThreeMode(mode){ threeVis.mode = mode === 'neural' ? 'neural' : 'constellation'; if(threeVis.data) renderThreeVisualiser(threeVis.data); else loadThreeVisualiser(); }
+function bindThreeControls(){
+  const viewport = $('#threeViewport'); if(!viewport || viewport.dataset.controlsBound === 'true') return; viewport.dataset.controlsBound = 'true';
+  viewport.addEventListener('contextmenu', e=>e.preventDefault());
+  viewport.addEventListener('wheel', e=>{ e.preventDefault(); threeVis.cameraZ = Math.max(260, Math.min(1800, threeVis.cameraZ * Math.exp(e.deltaY*.001))); }, {passive:false});
+  viewport.addEventListener('pointerdown', e=>{ if(e.cancelable) e.preventDefault(); viewport.setPointerCapture?.(e.pointerId); threeVis.drag = {x:e.clientX,y:e.clientY,yaw:threeVis.yaw,pitch:threeVis.pitch,panX:threeVis.panX,panY:threeVis.panY,moved:false}; viewport.style.cursor='grabbing'; });
+  viewport.addEventListener('pointermove', e=>{ const d=threeVis.drag; if(!d) return; if(e.cancelable) e.preventDefault(); const dx=e.clientX-d.x, dy=e.clientY-d.y; if(Math.abs(dx)+Math.abs(dy)>3) d.moved=true; if(threeVis.panMode || e.shiftKey){ threeVis.panX=d.panX-dx*.7; threeVis.panY=d.panY+dy*.7; } else { threeVis.yaw=d.yaw+dx*.006; threeVis.pitch=Math.max(-1.15, Math.min(1.15, d.pitch+dy*.004)); } });
+  const end=e=>{ if(threeVis.drag?.moved) viewport.dataset.suppressClick='true'; threeVis.drag=null; viewport.style.cursor='grab'; };
+  viewport.addEventListener('pointerup', end); viewport.addEventListener('pointercancel', end);
+  viewport.addEventListener('click', e=>{ if(viewport.dataset.suppressClick==='true'){ viewport.dataset.suppressClick='false'; return; } pickThreeNode(e); });
+}
+function pickThreeNode(e){
+  if(!threeVis.camera || !threeVis.group) return;
+  const rect = $('#threeViewport').getBoundingClientRect(); const mouseX=e.clientX-rect.left, mouseY=e.clientY-rect.top;
+  const v = new threeVis.THREE.Vector3(); let best=null, bestD=Infinity;
+  for(const n of threeVis.nodes){
+    v.set(n.x,n.y,n.z).applyMatrix4(threeVis.group.matrixWorld).project(threeVis.camera);
+    if(v.z < -1 || v.z > 1) continue;
+    const sx=(v.x*.5+.5)*rect.width, sy=(-v.y*.5+.5)*rect.height; const d=Math.hypot(sx-mouseX, sy-mouseY);
+    if(d < bestD && d < 18){ bestD=d; best=n; }
+  }
+  if(best) inspectThreeNode(best);
+}
+
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 $$('.section-tabs button').forEach(b => b.onclick = () => {
   const panelRoute = ({ exploreSearch:'search', exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[b.dataset.panel];
@@ -1355,6 +1541,11 @@ $('#constellationReset').onclick = resetConstellationView;
 $('#constellationPanMode').onclick = toggleConstellationPanMode;
 $('#constellationPause').onclick = toggleConstellationPause;
 $$('.visualiser-tabs button[data-visualiser]').forEach(b => b.onclick = () => switchVisualiserMode(b.dataset.visualiser));
+$('#threeRefresh').onclick = loadThreeVisualiser;
+$('#threeReset').onclick = () => { resetThreeCamera(); threeInspectorDefault(); };
+$('#threePanMode').onclick = () => { threeVis.panMode = !threeVis.panMode; updateThreeUI(); };
+$('#threePause').onclick = () => { threeVis.paused = !threeVis.paused; updateThreeUI(); };
+$$('.visualiser-tabs button[data-three-mode]').forEach(b => b.onclick = () => switchThreeMode(b.dataset.threeMode));
 updateVisualiserModeUI();
 updateConstellationPauseButton();
 updateConstellationPanButton();

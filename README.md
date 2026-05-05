@@ -33,12 +33,14 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 - Read-only Memory Intelligence views:
   - Today — daily digest of memories added/recalled, triples, consolidations, entities, sources, and sessions
   - Context Bank — inferred context sections derived from active memories and triples without writing back
-  - Visualiser — selectable Constellation and experimental Neural Map views with click-through read-only inspectors
-- Eight-section product navigation instead of raw database tabs:
+  - Visualiser — selectable Constellation and Neural Map views with click-through read-only inspectors
+  - Visualiser 3D — separate Three.js/WebGL comparison lab for GPU-rendered Constellation and Neural Map prototypes
+- Nine-section product navigation instead of raw database tabs:
   - Overview — counts, breakdowns, quick actions, and recent memories
   - Today — read-only daily memory digest
   - Context Bank — inferred context from active memory
-  - Visualiser — Constellation and experimental Neural Map memory visualisers
+  - Visualiser — Constellation and Neural Map memory visualisers
+  - Visualiser 3D — Three.js/WebGL Constellation and Neural Map comparison page
   - Explore — global search, memory browser, and recall debugger
   - Activity — timeline and consolidation history
   - Graph — relationship graph and triples table
