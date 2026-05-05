@@ -592,14 +592,19 @@ function buildConstellationScene(data){
     n.z = Math.sin(angle) * radius * .82;
     n.size = Math.min(22, 4 + Math.sqrt(Number(n.weight || n.count || 1))*3.4) * (n.kind === 'memory' ? 1.08 : 1);
     n.twinkle = (i % 17) / 17;
-    n.twinkleFreq = 0.00145 + ((i * 29) % 83) / 100000;
-    n.twinkleAmp = .07 + ((i * 31) % 70) / 1000;
+    const twinkleTier = i % 11 === 0 ? 2 : (i % 5 === 0 ? 1 : 0);
+    n.twinkleFreq = twinkleTier === 2 ? .0062 + ((i * 29) % 70) / 100000 : (twinkleTier === 1 ? .0030 + ((i * 29) % 80) / 100000 : .00115 + ((i * 29) % 95) / 100000);
+    n.twinkleAmp = twinkleTier === 2 ? .18 : (twinkleTier === 1 ? .12 : .075 + ((i * 31) % 55) / 1000);
   });
   constellationScene.nodes = nodes;
   constellationScene.edges = (data.edges || []).filter(e => nodes.some(n => n.id === e.source) && nodes.some(n => n.id === e.target)).slice(0,300);
   constellationScene.byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
   constellationScene.data = data;
-  constellationScene.stars = Array.from({length:140}, (_,i) => ({ x:((i*73)%1000)/1000, y:((i*191)%680)/680, r:.35 + ((i*37)%100)/90, a:.18 + ((i*29)%100)/240, phase:(i*47)%628/100, freq:.00055 + ((i*41)%95)/100000 }));
+  constellationScene.stars = Array.from({length:140}, (_,i) => {
+    const fast = i % 13 === 0;
+    const medium = !fast && i % 6 === 0;
+    return { x:((i*73)%1000)/1000, y:((i*191)%680)/680, r:.35 + ((i*37)%100)/90, a:.18 + ((i*29)%100)/240, phase:(i*47)%628/100, freq:fast ? .0058 + ((i*41)%80)/100000 : (medium ? .0027 + ((i*41)%90)/100000 : .00048 + ((i*41)%95)/100000) };
+  });
 }
 function drawConstellationFrame(t=0){
   const canvas = $('#constellationCanvas');
