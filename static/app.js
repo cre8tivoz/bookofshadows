@@ -1636,7 +1636,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   selected.forEach((n,i)=>{
     const weight = Math.max(1, Number(n.weight || n.count || 1));
     positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z;
-    sizes[i]=Math.max(size, Math.min(size * 2.8, (n.size || size) * 1.42));
+    sizes[i]=Math.max(size * .72, Math.min(size * 1.85, (n.size || size) * 1.18));
     phases[i]=(n.twinkle || 0) * Math.PI * 2;
     freqs[i]=n.twinkleFreq || .0012;
     amps[i]=n.twinkleAmp || .12;
@@ -1677,7 +1677,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           float wave = sin(uTime * aFreq + aPhase) + sin(uTime * aFreq * 0.43 + aPhase * 1.71) * 0.45;
           vPulse = 1.0 + wave * aAmp;
           vMajor = aMajor;
-          gl_PointSize = aSize * vPulse * (uScale / max(72.0, -mvPosition.z));
+          gl_PointSize = aSize * (0.96 + (vPulse - 1.0) * 0.24) * (uScale / max(72.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -1691,20 +1691,20 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           vec2 p = gl_PointCoord - vec2(0.5);
           float d = length(p);
           if(d > 0.5) discard;
-          float core = 1.0 - smoothstep(0.040, 0.095, d);
-          float body = 1.0 - smoothstep(0.095, 0.230, d);
-          float halo = (1.0 - smoothstep(0.24, 0.48, d)) * 0.10;
-          float rayH = max(0.0, 1.0 - abs(p.y) / 0.012) * (1.0 - smoothstep(0.08, 0.46, abs(p.x)));
-          float rayV = max(0.0, 1.0 - abs(p.x) / 0.012) * (1.0 - smoothstep(0.08, 0.46, abs(p.y)));
-          float diag1 = max(0.0, 1.0 - abs(p.x - p.y) / 0.014) * (1.0 - smoothstep(0.07, 0.28, d));
-          float diag2 = max(0.0, 1.0 - abs(p.x + p.y) / 0.014) * (1.0 - smoothstep(0.07, 0.28, d));
-          float rays = vMajor * (max(rayH, rayV) * 0.58 + max(diag1, diag2) * 0.20);
-          float alpha = (body * 0.55 + core * 0.86 + halo + rays) * uOpacity * clamp(0.78 + (vPulse - 1.0) * 0.82, 0.56, 1.18);
-          if(alpha < 0.026) discard;
-          vec3 starCore = mix(uColor, vec3(1.0), core * 0.78 + rays * 0.42);
-          vec3 memoryCore = mix(uColor, vec3(1.0), core * 0.32);
+          float core = 1.0 - smoothstep(0.026, 0.060, d);
+          float body = 1.0 - smoothstep(0.060, 0.135, d);
+          float halo = (1.0 - smoothstep(0.13, 0.48, d)) * (0.13 + clamp(vPulse - 1.0, -0.22, 0.32) * 0.42);
+          float rayH = max(0.0, 1.0 - abs(p.y) / 0.010) * (1.0 - smoothstep(0.07, 0.44, abs(p.x)));
+          float rayV = max(0.0, 1.0 - abs(p.x) / 0.010) * (1.0 - smoothstep(0.07, 0.44, abs(p.y)));
+          float diag1 = max(0.0, 1.0 - abs(p.x - p.y) / 0.013) * (1.0 - smoothstep(0.06, 0.26, d));
+          float diag2 = max(0.0, 1.0 - abs(p.x + p.y) / 0.013) * (1.0 - smoothstep(0.06, 0.26, d));
+          float rays = vMajor * (max(rayH, rayV) * 0.50 + max(diag1, diag2) * 0.16);
+          float alpha = (body * 0.44 + core * 0.98 + halo + rays) * uOpacity * clamp(0.82 + (vPulse - 1.0) * 0.58, 0.58, 1.22);
+          if(alpha < 0.022) discard;
+          vec3 starCore = mix(uColor, vec3(1.0), core * 0.88 + rays * 0.38);
+          vec3 memoryCore = mix(uColor, vec3(1.0), core * 0.34);
           vec3 crisp = mix(memoryCore, starCore, uIsStar);
-          gl_FragColor = vec4(crisp * (0.99 + (vPulse - 1.0) * 0.08), min(alpha, 1.0));
+          gl_FragColor = vec4(crisp * (0.98 + (vPulse - 1.0) * 0.06), min(alpha, 1.0));
         }
       `,
       transparent:true,
@@ -1781,8 +1781,8 @@ async function renderThreeVisualiser(data){
     // Constellation already has per-star shader halos. A separate halo layer made
     // the mobile view read like blurry particles instead of the original star map.
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 44));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 42));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 38));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 36));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
