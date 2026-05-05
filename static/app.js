@@ -1534,8 +1534,8 @@ function buildThreeNeuralPositions(data){
 }
 function limitedThreeEdges(data, byId, mobile=false){
   const degree = new Map(); const out=[];
-  const limit = threeVis.mode === 'neural' ? 132 : (mobile ? 52 : 118);
-  const degreeLimit = threeVis.mode === 'neural' ? 5 : (mobile ? 2 : 4);
+  const limit = threeVis.mode === 'neural' ? 132 : (mobile ? 92 : 140);
+  const degreeLimit = threeVis.mode === 'neural' ? 5 : (mobile ? 3 : 4);
   for(const e of (data.edges || [])){
     const a=byId.get(e.source), b=byId.get(e.target); if(!a || !b) continue;
     const da=degree.get(e.source)||0, db=degree.get(e.target)||0; if(da>=degreeLimit || db>=degreeLimit) continue;
@@ -1769,7 +1769,7 @@ async function renderThreeVisualiser(data){
   const linkGeom = buildThreeLinkSegments(THREE, edges);
   const linkMaterial = threeVis.mode === 'neural'
     ? new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity:colors.light ? .30 : .40, blending:colors.light ? THREE.NormalBlending : THREE.AdditiveBlending, depthWrite:false })
-    : new THREE.LineDashedMaterial({ color:colors.link, transparent:true, opacity:colors.light ? (mobileThree ? .07 : .13) : (mobileThree ? .045 : .09), dashSize:10, gapSize:10, blending:THREE.NormalBlending, depthWrite:false });
+    : new THREE.LineDashedMaterial({ color:colors.link, transparent:true, opacity:colors.light ? (mobileThree ? .14 : .16) : (mobileThree ? .13 : .12), dashSize:9, gapSize:8, blending:THREE.NormalBlending, depthWrite:false });
   const linkLines = new THREE.LineSegments(linkGeom, linkMaterial);
   if(threeVis.mode !== 'neural') linkLines.computeLineDistances();
   group.add(linkLines);
@@ -1831,7 +1831,7 @@ function updateThreeLabels(){
   updateThreeAuras(rect, v);
   const labelBoxes = [];
   const zoomReveal = threeVis.mode === 'neural' ? Math.max(0, Math.min(1, (900 - threeVis.cameraZ) / 420)) : Math.max(0, Math.min(1, (760 - threeVis.cameraZ) / 520));
-  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 7 : 11) + Math.round(zoomReveal * (rect.width < 520 ? 9 : 12))) : (rect.width < 520 ? (zoomReveal > .42 ? Math.round(zoomReveal * 4) : 0) : (4 + Math.round(zoomReveal * 5)));
+  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 7 : 11) + Math.round(zoomReveal * (rect.width < 520 ? 9 : 12))) : (rect.width < 520 ? (5 + Math.round(zoomReveal * 5)) : (8 + Math.round(zoomReveal * 7)));
   let shown = 0;
   $$('#threeLabels .three-label').forEach((el,i)=>{
     const n = threeVis.labels[i]; if(!n) return;
