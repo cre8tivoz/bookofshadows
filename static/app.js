@@ -50,10 +50,15 @@ function meta(item, opts={}){
   const session = String(item.session_id || '').trim();
   const rawTime = item.timestamp || item.created_at || '';
   const timeLabel = prettyTime(rawTime);
+  const kind = item.memory_kind || item.tier || item.source || 'memory';
+  const veracity = String(item.veracity || 'unknown').toLowerCase();
+  const lifecycle = item.degradation_label ? `${item.degradation_label}${item.degradation_tier ? ` · T${item.degradation_tier}` : ''}` : '';
   const scopeBadge = scope && scope !== 'session' ? `<span class="badge" title="scope: ${esc(scope)}">${esc(scope)}</span>` : '';
   const sessionBadge = opts.sessionLink !== false && session && session !== 'default' ? `<button type="button" class="badge session-link" data-session="${esc(session)}" title="Open session: ${esc(session)}">session ${esc(shortId(session))}</button>` : '';
   const timeBadge = timeLabel ? `<span class="meta-time" title="${esc(rawTime)}">${esc(timeLabel)}</span>` : '';
-  return `<div class="meta"><span class="badge">${esc(item.tier || item.source || '')}</span><span class="badge status-${esc(status)}">${esc(status)}</span><span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span>${scopeBadge}${sessionBadge}${timeBadge}</div>`;
+  const veracityBadge = `<span class="badge trust-${esc(veracity)}" title="veracity: ${esc(veracity)} · recall weight ${Number(item.trust_weight ?? 0).toFixed(2)}">${esc(veracity)}</span>`;
+  const lifecycleBadge = lifecycle ? `<span class="badge lifecycle-${esc(item.degradation_label)}" title="degradation tier: ${esc(item.degradation_tier)} · recall weight ${Number(item.degradation_weight ?? 1).toFixed(2)}">${esc(lifecycle)}</span>` : '';
+  return `<div class="meta"><span class="badge">${esc(kind)}</span><span class="badge status-${esc(status)}">${esc(status)}</span>${veracityBadge}${lifecycleBadge}<span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span>${scopeBadge}${sessionBadge}${timeBadge}</div>`;
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
 function memoryItem(item, opts={}){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="memory-check" data-id="${esc(item.id)}" ${bulkSelection.has(item.id) ? 'checked' : ''} /></label>` : ''; return `<div class="item ${role ? 'has-role' : ''} ${opts.selectable ? 'selectable' : ''}" data-id="${esc(item.id)}">${selectable}${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
@@ -288,12 +293,14 @@ async function loadStats(){
   $('#dbPath').textContent = s.db_path;
   $('#dbPath').title = s.db_path;
   const cards = [
-    ['Working', s.counts.working_memory], ['Episodic', s.counts.episodic_memory], ['Triples', s.counts.triples], ['Consolidations', s.counts.consolidation_log]
+    ['Working', s.counts.working_memory], ['Episodic', s.counts.episodic_memory], ['Contaminated', s.contamination?.total || 0], ['Degraded', s.degradation?.degraded || 0], ['Triples', s.counts.triples], ['Consolidations', s.counts.consolidation_log]
   ];
   $('#cards').innerHTML = cards.map(([label,num]) => `<div class="card"><div class="num">${Number(num).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
   $('#sourceBreakdown').innerHTML = breakdown(s.by_source, 'source');
   $('#scopeBreakdown').innerHTML = breakdown(s.by_scope, 'scope');
   $('#sessionBreakdown').innerHTML = breakdown(s.by_session, 'session_id', 6);
+  $('#veracityBreakdown').innerHTML = breakdown(s.by_veracity || [], 'veracity', 8);
+  $('#degradationBreakdown').innerHTML = breakdown(s.by_degradation || [], 'degradation_label', 8);
   fillSelect($('#memorySource'), optionsFrom(s.by_source, 'source'), 'all sources');
   fillSelect($('#memoryScope'), optionsFrom(s.by_scope, 'scope'), 'all scopes');
   fillSelect($('#memorySession'), optionsFrom(s.by_session, 'session_id'), 'all sessions');
@@ -304,15 +311,23 @@ async function loadStats(){
 function bindBreakdownClicks(){
   $$('#sourceBreakdown .break-row').forEach(row => row.onclick = () => { $('#memorySource').value = row.dataset.filter || ''; switchTab('memories'); });
   $$('#scopeBreakdown .break-row').forEach(row => row.onclick = () => { $('#memoryScope').value = row.dataset.filter || ''; switchTab('memories'); });
+  $$('#veracityBreakdown .break-row').forEach(row => row.onclick = () => { $('#memoryVeracity').value = row.dataset.filter || ''; switchTab('memories'); });
+  $$('#degradationBreakdown .break-row').forEach(row => row.onclick = () => { const map={hot:'1',warm:'2',cold:'3'}; $('#memoryDegradation').value = map[row.dataset.filter] || ''; switchTab('memories'); });
   $$('#sessionBreakdown .break-row').forEach(row => row.onclick = () => openSessionDetail(row.dataset.filter || ''));
 }
 async function loadMemories(){
+  const trustPreset = $('#memoryTrustPreset').value;
   const params = new URLSearchParams({
     kind: $('#memoryKind').value,
     q: $('#memoryQuery').value.trim(),
     source: $('#memorySource').value,
     scope: $('#memoryScope').value,
     session_id: $('#memorySession').value,
+    veracity: $('#memoryVeracity').value,
+    degradation_tier: $('#memoryDegradation').value,
+    contaminated_only: trustPreset === 'contaminated' ? '1' : '',
+    degraded_only: trustPreset === 'degraded' ? '1' : '',
+    due_for_degradation: trustPreset === 'due' ? '1' : '',
     status: $('#memoryStatus').value,
     sort: $('#memorySort').value,
     limit: '150'
@@ -368,17 +383,24 @@ function whyMemoryHtml(item){
   const scope = $('#memoryScope')?.value;
   const session = $('#memorySession')?.value;
   const status = $('#memoryStatus')?.value;
+  const veracity = $('#memoryVeracity')?.value;
+  const degradation = $('#memoryDegradation')?.value;
+  const trustPreset = $('#memoryTrustPreset')?.value;
   const sort = $('#memorySort')?.value;
   if(q) reasons.push(`matches browser query “${q}” across content, id, session, source, or scope`);
   if(source && item.source === source) reasons.push(`source filter matched ${source}`);
   if(scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
   if(session && item.session_id === session) reasons.push(`session filter matched ${session}`);
+  if(veracity && item.veracity === veracity) reasons.push(`trust filter matched ${veracity}`);
+  if(degradation && String(item.degradation_tier || '') === String(degradation)) reasons.push(`lifecycle filter matched tier ${degradation}`);
+  if(trustPreset === 'contaminated' && item.contaminated) reasons.push('confidence review filter matched non-stated memory');
+  if(trustPreset === 'degraded' && item.degraded_at) reasons.push('degraded-only filter matched');
   if(!reasons.length) reasons.push('shown from the current list/search context');
   return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || 'active')}</span></h3><div class="diag-grid compact">
     <div class="diag-row"><span>Reason</span><strong>${esc(reasons.join(' · '))}</strong></div>
     <div class="diag-row"><span>Ranking</span><strong>${esc(sort || 'recent')} · importance ${Number(item.importance ?? 0).toFixed(2)} · recalled ${Number(item.recall_count || 0).toLocaleString()}×</strong></div>
     <div class="diag-row"><span>Freshness</span><strong>created ${esc(prettyTime(item.created_at) || item.created_at || 'unknown')} · last recalled ${esc(prettyTime(item.last_recalled) || item.last_recalled || 'never')}</strong></div>
-    <div class="diag-row"><span>Origin</span><strong>${esc(item.tier || 'memory')} · ${esc(item.source || 'unknown source')} · ${esc(item.scope || 'unknown scope')}</strong></div>
+    <div class="diag-row"><span>Origin</span><strong>${esc(item.memory_kind || item.tier || 'memory')} · ${esc(item.source || 'unknown source')} · ${esc(item.scope || 'unknown scope')}</strong></div>
   </div></div>`;
 }
 function memoryDetailHtml(item){
@@ -386,15 +408,26 @@ function memoryDetailHtml(item){
   const mutable = isMutableMemory(item);
   const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : '';
   const actionNote = admin ? (mutable ? '' : `<span class="muted">This memory is ${esc(item.status || 'not active')}; mutation actions are disabled.</span>`) : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>';
+  const trust = String(item.veracity || 'unknown').toLowerCase();
+  const lifecycle = item.degradation_label ? `${item.degradation_label} · tier ${item.degradation_tier}` : 'not degraded';
   return `
     <div class="memory-detail">
       ${meta(item, {sessionLink:false})}
       <div class="content detail-content">${esc(item.content)}</div>
+      <div class="trust-strip">
+        <span class="trust-chip trust-${esc(trust)}">${esc(trust)} trust · ×${Number(item.trust_weight ?? 0).toFixed(2)}</span>
+        <span class="trust-chip lifecycle-${esc(item.degradation_label || 'none')}">${esc(lifecycle)}${item.degradation_weight != null ? ` · ×${Number(item.degradation_weight).toFixed(2)}` : ''}</span>
+        <span class="trust-chip">effective ×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</span>
+        ${item.contaminated ? '<span class="trust-chip review">review non-stated</span>' : ''}
+      </div>
       ${whyMemoryHtml(item)}
       <div class="diag-grid compact">
         <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
         <div class="diag-row"><span>Session</span>${item.session_id && item.session_id !== 'default' ? `<button id="memorySessionLink" class="diag-link" title="Open session: ${esc(item.session_id)}">${esc(item.session_id)}</button>` : `<strong>${esc(item.session_id || 'default')}</strong>`}</div>
         <div class="diag-row"><span>Source</span><strong>${esc(item.source || 'unknown')}</strong></div>
+        <div class="diag-row"><span>Trust</span><strong>${esc(trust)} · recall weight ×${Number(item.trust_weight ?? 0).toFixed(2)}${item.contaminated ? ' · review recommended' : ''}</strong></div>
+        <div class="diag-row"><span>Lifecycle</span><strong>${esc(lifecycle)} · degraded ${esc(item.degraded_at || 'never')} · recall weight ×${Number(item.degradation_weight ?? 1).toFixed(2)}</strong></div>
+        <div class="diag-row"><span>Effective weight</span><strong>×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</strong></div>
         <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || 'none')}</strong></div>
         <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || 'none')}</strong></div>
       </div>
@@ -1998,8 +2031,8 @@ $('#bulkImportance').onclick = setSelectedImportance; $('#memoryQuery').onkeydow
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
 $('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
-$('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; loadMemories(); };
-['memoryKind','memorySource','memoryScope','memorySession','memoryStatus','memorySort'].forEach(id => $('#'+id).onchange = loadMemories);
+$('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; loadMemories(); };
+['memoryKind','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset','memoryStatus','memorySort'].forEach(id => $('#'+id).onchange = loadMemories);
 $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { if(e.key==='Enter') loadTriples(); };
 $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e.key==='Enter') loadGraph(); };
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };

@@ -226,3 +226,23 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 .three-fallback-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,calc(100% - 32px));border:1px solid var(--line2);border-radius:22px;padding:22px;background:rgba(5,8,17,.74);backdrop-filter:blur(18px);box-shadow:var(--shadow);text-align:center;color:var(--soft)}
 .three-fallback-card h3{margin:0 0 8px;font-family:var(--font-brand-serif);font-size:28px;color:var(--text)}
 [data-theme="light"] .three-fallback-card{background:rgba(255,255,255,.78);color:var(--soft)}
+
+/* Mnemosyne v2.3 trust + lifecycle UI */
+.trust-stated{color:var(--green);border-color:rgba(46,229,157,.36);background:rgba(46,229,157,.07)}
+.trust-inferred{color:var(--amber);border-color:rgba(255,209,102,.38);background:rgba(255,209,102,.07)}
+.trust-tool{color:var(--accent2);border-color:rgba(101,214,255,.34);background:rgba(101,214,255,.07)}
+.trust-imported{color:#b9a6ff;border-color:rgba(185,166,255,.34);background:rgba(185,166,255,.07)}
+.trust-unknown{color:var(--muted);border-color:var(--line2);background:rgba(255,255,255,.035)}
+.lifecycle-hot{color:var(--green);border-color:rgba(46,229,157,.32);background:rgba(46,229,157,.055)}
+.lifecycle-warm{color:var(--amber);border-color:rgba(255,209,102,.34);background:rgba(255,209,102,.06)}
+.lifecycle-cold{color:var(--red);border-color:rgba(255,107,138,.32);background:rgba(255,107,138,.055)}
+.lifecycle-none{color:var(--muted);border-color:var(--line);background:rgba(255,255,255,.03)}
+.trust-strip{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}.trust-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:6px 9px;font-size:12px;font-weight:800;line-height:1.1;background:rgba(255,255,255,.035);color:var(--soft)}.trust-chip.review{color:var(--amber);border-color:rgba(255,209,102,.42);background:rgba(255,209,102,.08)}
+[data-theme="light"] .trust-chip{background:#fff;border-color:#e2dbd3;color:#3a332d}
+[data-theme="light"] .trust-stated,[data-theme="light"] .lifecycle-hot{color:#547a3f;background:#f1f6ed;border-color:#cdddc2}
+[data-theme="light"] .trust-inferred,[data-theme="light"] .lifecycle-warm,[data-theme="light"] .trust-chip.review{color:#8a5b09;background:#fff7e2;border-color:#ddc68f}
+[data-theme="light"] .trust-tool{color:#326c86;background:#edf7fb;border-color:#b7d9e6}
+[data-theme="light"] .trust-imported{color:#6650a4;background:#f2efff;border-color:#cfc5f6}
+[data-theme="light"] .trust-unknown,[data-theme="light"] .lifecycle-none{color:#6b6560;background:#faf8f5;border-color:#e2dbd3}
+[data-theme="light"] .lifecycle-cold{color:#9a4f31;background:#fff0eb;border-color:#e0bba9}
+@media(max-width:760px),(max-width:940px) and (max-height:520px){.trust-strip{gap:6px}.trust-chip{font-size:11px;padding:6px 8px}.toolbar select#memoryVeracity,.toolbar select#memoryDegradation,.toolbar select#memoryTrustPreset{min-width:100%}}

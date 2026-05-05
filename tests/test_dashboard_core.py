@@ -280,6 +280,26 @@ def test_memory_intelligence_read_only_views(tmp_path):
     assert constellation['edges']
 
 
+def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
+    html = (ROOT / 'static' / 'index.html').read_text()
+    js = (ROOT / 'static' / 'app.js').read_text()
+    css = (ROOT / 'static' / 'style.css').read_text()
+
+    assert 'id="veracityBreakdown"' in html
+    assert 'id="degradationBreakdown"' in html
+    assert 'id="memoryVeracity"' in html
+    assert 'id="memoryDegradation"' in html
+    assert 'id="memoryTrustPreset"' in html
+    assert 'by_veracity' in js
+    assert 'by_degradation' in js
+    assert 'contaminated_only' in js
+    assert 'degradation_tier' in js
+    assert 'trust-strip' in js
+    assert 'effective_memory_weight' in js
+    assert '.trust-stated' in css
+    assert '.lifecycle-cold' in css
+
+
 def test_public_config_reports_lan_url_for_wildcard_bind(tmp_path, monkeypatch):
     monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
     monkeypatch.setattr('config.lan_host', lambda: '192.168.1.160')
