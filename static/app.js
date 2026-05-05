@@ -1356,7 +1356,7 @@ function updateThreeUI(){
   const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? 'Resume drift' : 'Pause drift';
   const pan = $('#threePanMode'); if(pan) pan.textContent = threeVis.panMode ? 'Orbit mode' : 'Pan mode';
 }
-function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .34 : .55, pitch: threeVis.mode === 'neural' ? .38 : .78, cameraZ: threeVis.mode === 'neural' ? 760 : 840, panX:0, panY:0, lastT:0 }); }
+function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .12 : .55, pitch: threeVis.mode === 'neural' ? .10 : .78, cameraZ: threeVis.mode === 'neural' ? 860 : 840, panX:0, panY:0, lastT:0 }); }
 function clearThreeScene(){
   if(threeVis.frame) cancelAnimationFrame(threeVis.frame);
   threeVis.frame = 0;
@@ -1453,12 +1453,15 @@ function buildThreeNeuralPositions(data){
   const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
   const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
   const regionCount = Math.max(1, categories.length);
+  const slots = [
+    {x:-190,y:-86,z:-34,s:112,a:-.48}, {x:48,y:-108,z:26,s:126,a:.18}, {x:202,y:-42,z:-18,s:118,a:.36},
+    {x:-122,y:52,z:18,s:104,a:.22}, {x:88,y:50,z:-30,s:116,a:-.28}, {x:-18,y:144,z:20,s:102,a:.52},
+    {x:238,y:110,z:16,s:92,a:-.42}, {x:-248,y:112,z:-8,s:88,a:.12}, {x:0,y:-8,z:0,s:132,a:0}
+  ];
   const regions = Object.fromEntries(categories.map((cat, i) => {
-    const t = regionCount === 1 ? 0 : (i / Math.max(1, regionCount - 1)) * 2 - 1;
-    const angle = -Math.PI / 2 + i * 2.399963;
-    const radial = Math.sqrt(Math.max(0, 1 - t * t));
-    const side = i % 2 === 0 ? -1 : 1;
-    return [cat, { label:cat, angle, cx:Math.cos(angle) * radial * 230, cy:t * 150 + Math.sin(angle * .7) * 24, cz:Math.sin(angle) * radial * 190 + side * 28, spread:78 + (i % 4) * 12 }];
+    const slot = slots[i % slots.length];
+    const lap = Math.floor(i / slots.length);
+    return [cat, { label:cat, angle:slot.a, cx:slot.x + lap * 28, cy:slot.y + lap * 18, cz:slot.z + (i % 3 - 1) * 16, spread:slot.s + (i % 4) * 8 }];
   }));
   const degree = new Map();
   edges.forEach(e => { degree.set(e.source, (degree.get(e.source) || 0) + 1); degree.set(e.target, (degree.get(e.target) || 0) + 1); });
@@ -1511,6 +1514,11 @@ function limitedThreeEdges(data, byId){
     if(out.length >= limit) break;
   }
   return out;
+}
+function neuralAuraOverlay(regions){
+  if(threeVis.mode !== 'neural') return '';
+  const regionList = (regions || []).slice(0,9);
+  return `<div class="three-aura-layer">${regionList.map((r,i)=>`<span class="three-aura-oval" data-region="${esc(r.label || '')}" style="opacity:0;transform:translate(-50%,-50%) rotate(${(Number(r.angle || 0) * 28).toFixed(1)}deg)"></span>`).join('')}</div>`;
 }
 function makeAuraOvalTexture(THREE){
   const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 320;
@@ -1595,7 +1603,6 @@ async function renderThreeVisualiser(data){
   const ambient = new THREE.AmbientLight(0xffffff, .55); scene.add(ambient);
   const light = new THREE.PointLight(colors.entity, 1.2, 1200); light.position.set(180,220,260); scene.add(light);
   const nodes = buildThreePositions(data); const byId = new Map(nodes.map(n=>[n.id,n])); const edges = limitedThreeEdges(data, byId);
-  if(threeVis.mode === 'neural') addNeuralAuraOvals(THREE, group, threeVis.neuralRegions || [], colors);
   const linkPositions = new Float32Array(edges.length * 6);
   edges.forEach((e,i)=>{ linkPositions.set([e.a.x,e.a.y,e.a.z,e.b.x,e.b.y,e.b.z], i*6); });
   const linkGeom = new THREE.BufferGeometry(); linkGeom.setAttribute('position', new THREE.BufferAttribute(linkPositions,3));
@@ -1616,7 +1623,7 @@ async function renderThreeVisualiser(data){
   const pulseGeom = new THREE.BufferGeometry(); const pulsePositions = new Float32Array(pulseEdges.length*3); pulseGeom.setAttribute('position', new THREE.BufferAttribute(pulsePositions,3));
   const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:5.2, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
   const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 28 : 22);
-  $('#threeLabels').innerHTML = labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
+  $('#threeLabels').innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
   $('#threeClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
   resetThreeCamera(); bindThreeControls(); resizeThree(); animateThree(0);
@@ -1627,9 +1634,32 @@ function resizeThree(){
   const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
   threeVis.renderer.setSize(w,h,false); threeVis.camera.aspect = w/h; threeVis.camera.updateProjectionMatrix();
 }
+function updateThreeAuras(rect, projectVector){
+  if(threeVis.mode !== 'neural') return;
+  const mobile = rect.width < 520;
+  $$('#threeLabels .three-aura-oval').forEach(el => {
+    const region = el.dataset.region || '';
+    const pts = threeVis.nodes.filter(n => n.neuralRegion === region);
+    const screens = [];
+    pts.forEach(n => {
+      projectVector.set(n.x,n.y,n.z).applyMatrix4(threeVis.group.matrixWorld).project(threeVis.camera);
+      if(projectVector.z < 1 && projectVector.z > -1) screens.push({ x:(projectVector.x*.5+.5)*rect.width, y:(-projectVector.y*.5+.5)*rect.height });
+    });
+    if(screens.length < 2){ el.style.opacity = '0'; return; }
+    const xs = screens.map(p=>p.x), ys = screens.map(p=>p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    const maxW = mobile ? rect.width * .62 : Math.min(340, rect.width * .34);
+    const maxH = mobile ? rect.height * .30 : Math.min(230, rect.height * .26);
+    const w = Math.max(mobile ? 92 : 128, Math.min(maxW, (maxX - minX) + (mobile ? 46 : 74)));
+    const h = Math.max(mobile ? 58 : 78, Math.min(maxH, (maxY - minY) + (mobile ? 34 : 56)));
+    el.style.left = `${cx}px`; el.style.top = `${cy}px`; el.style.width = `${w}px`; el.style.height = `${h}px`; el.style.opacity = screens.length > 4 ? '.42' : '.28';
+  });
+}
 function updateThreeLabels(){
   if(!threeVis.camera || !threeVis.group) return;
   const viewport = $('#threeViewport'); const rect = viewport.getBoundingClientRect(); const v = new threeVis.THREE.Vector3();
+  updateThreeAuras(rect, v);
   $$('#threeLabels .three-label').forEach((el,i)=>{
     const n = threeVis.labels[i]; if(!n) return;
     v.set(n.x,n.y,n.z).applyMatrix4(threeVis.group.matrixWorld).project(threeVis.camera);
