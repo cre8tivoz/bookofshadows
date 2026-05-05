@@ -990,11 +990,11 @@ function drawConstellationFrame(t=0){
       ctx.beginPath(); ctx.moveTo(-diag,-diag); ctx.lineTo(diag,diag); ctx.moveTo(-diag,diag); ctx.lineTo(diag,-diag); ctx.stroke();
     }
     ctx.shadowBlur=compactCanvas ? 5 : 7;
-    ctx.globalAlpha=.96 * depthAlpha;
+    ctx.globalAlpha=.96;
     ctx.fillStyle='rgba(255,255,255,.98)';
     ctx.beginPath(); ctx.arc(0,0,Math.max(.62, starR*.52),0,Math.PI*2); ctx.fill();
     ctx.fillStyle=base;
-    ctx.globalAlpha=.72 * depthAlpha;
+    ctx.globalAlpha=.72;
     ctx.beginPath(); ctx.arc(0,0,Math.max(.28, starR*.20),0,Math.PI*2); ctx.fill();
     ctx.globalAlpha=1;
     ctx.restore();
