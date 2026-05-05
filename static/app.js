@@ -9,6 +9,8 @@ let applyingHistory = false;
 let bulkSelection = new Set();
 let latestMemoryItems = [];
 let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
+const CONSTELLATION_MIN_ZOOM = .55;
+const CONSTELLATION_MAX_ZOOM = 6;
 const CONSTELLATION_DEFAULT_CAMERA = { rotation: 0.55, tilt: 0.78, zoom: 1, panX: 0, panY: 0 };
 let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], ...CONSTELLATION_DEFAULT_CAMERA, paused: false, mode: 'rotate', lastFrameTime: 0, hits: [], data: null, drag: null, pointers: new Map() };
 
@@ -743,11 +745,11 @@ function drawConstellationFrame(t=0){
   if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawConstellationFrame);
 }
 function clampConstellationCamera(w, h){
-  constellationScene.zoom = Math.max(.55, Math.min(2.6, Number.isFinite(constellationScene.zoom) ? constellationScene.zoom : 1));
+  constellationScene.zoom = Math.max(CONSTELLATION_MIN_ZOOM, Math.min(CONSTELLATION_MAX_ZOOM, Number.isFinite(constellationScene.zoom) ? constellationScene.zoom : 1));
   constellationScene.rotation = Number.isFinite(constellationScene.rotation) ? constellationScene.rotation : 0;
   constellationScene.tilt = Math.max(-1.05, Math.min(1.05, Number.isFinite(constellationScene.tilt) ? constellationScene.tilt : .35));
-  const panLimitX = Math.max(80, w * (.24 + constellationScene.zoom * .12));
-  const panLimitY = Math.max(90, h * (.16 + constellationScene.zoom * .08));
+  const panLimitX = Math.max(80, w * (.24 + constellationScene.zoom * .22));
+  const panLimitY = Math.max(90, h * (.16 + constellationScene.zoom * .14));
   constellationScene.panX = Math.max(-panLimitX, Math.min(panLimitX, Number.isFinite(constellationScene.panX) ? constellationScene.panX : 0));
   constellationScene.panY = Math.max(-panLimitY, Math.min(panLimitY, Number.isFinite(constellationScene.panY) ? constellationScene.panY : 0));
 }
@@ -779,7 +781,7 @@ function zoomConstellation(factor, cx, cy){
   if(!canvas) return;
   const rect = canvas.getBoundingClientRect();
   const oldZoom = constellationScene.zoom;
-  const nextZoom = Math.max(.55, Math.min(2.6, oldZoom * factor));
+  const nextZoom = Math.max(CONSTELLATION_MIN_ZOOM, Math.min(CONSTELLATION_MAX_ZOOM, oldZoom * factor));
   if(Math.abs(nextZoom - oldZoom) < .001) return;
   const x = cx - rect.left - rect.width/2 - constellationScene.panX;
   const y = cy - rect.top - rect.height/2 - constellationScene.panY;
@@ -818,7 +820,7 @@ function bindConstellationControls(canvas){
       const pts=[...constellationScene.pointers.values()];
       const dist=Math.max(1, Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y));
       const midX=(pts[0].x+pts[1].x)/2, midY=(pts[0].y+pts[1].y)/2;
-      constellationScene.zoom = Math.max(.55, Math.min(2.6, d.zoom * (dist / Math.max(1, d.dist))));
+      constellationScene.zoom = Math.max(CONSTELLATION_MIN_ZOOM, Math.min(CONSTELLATION_MAX_ZOOM, d.zoom * (dist / Math.max(1, d.dist))));
       constellationScene.panX = d.panX + (midX - d.midX);
       constellationScene.panY = d.panY + (midY - d.midY);
       clampConstellationCamera(canvas.clientWidth || canvas.getBoundingClientRect().width, canvas.clientHeight || canvas.getBoundingClientRect().height);
