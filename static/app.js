@@ -1338,8 +1338,8 @@ function loadThreeModule(){
   return threeModulePromise;
 }
 function threeInspectorDefault(){
-  const mode = threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D';
-  $('#threeInspector').innerHTML = `<div class="inspector-kicker">${mode} inspector</div><h3>Nothing selected</h3><p class="muted">Pick a GPU-rendered point or link to inspect the underlying read-only source.</p>`;
+  const mode = threeVis.mode === 'neural' ? 'Neural Map inspector' : 'Constellation inspector';
+  $('#threeInspector').innerHTML = `<div class="inspector-kicker">${mode}</div><h3>Nothing selected</h3><p class="muted">Pick a point or link to inspect the underlying read-only source.</p>`;
 }
 function inspectThreeNode(node){
   const mode = threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D';
@@ -1354,8 +1354,10 @@ function updateThreeUI(){
   if(legend) legend.innerHTML = threeVis.mode === 'neural'
     ? '<span><i class="legend-dot entity"></i>Neuron hub</span><span><i class="legend-dot memory"></i>Memory soma</span><span><i class="legend-line"></i>Synapse</span>'
     : '<span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span>';
-  const help = $('#threeHelp'); if(help) help.textContent = threeVis.mode === 'neural' ? 'GPU/WebGL neural cloud · drag to orbit · wheel/pinch to zoom · click to inspect.' : 'GPU/WebGL star map · drag to orbit · wheel/pinch to zoom · click to inspect.';
-  const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? 'Resume drift' : 'Pause drift';
+  const help = $('#threeHelp'); if(help) help.textContent = threeVis.mode === 'neural'
+    ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron.' : 'Drag to orbit the neural cloud · Pan mode/Shift-drag to pan · wheel/pinch to zoom.')
+    : 'Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.';
+  const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? (threeVis.mode === 'neural' ? 'Resume drift' : 'Resume rotation') : (threeVis.mode === 'neural' ? 'Pause drift' : 'Pause rotation');
   const pan = $('#threePanMode'); if(pan) pan.textContent = threeVis.panMode ? 'Orbit mode' : 'Pan mode';
 }
 function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .12 : .70, pitch: threeVis.mode === 'neural' ? .10 : .96, cameraZ: threeVis.mode === 'neural' ? 600 : 760, panX:0, panY: threeVis.mode === 'neural' ? -10 : -84, lastT:0 }); }
@@ -1753,8 +1755,8 @@ async function renderThreeVisualiser(data){
     renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
   } catch(err) {
     $('#threeViewport').classList.add('three-fallback');
-    $('#threeLabels').innerHTML = `<div class="three-fallback-card"><h3>WebGL unavailable</h3><p>This comparison view needs GPU/WebGL. The original Canvas Visualiser remains available for this browser.</p></div>`;
-    $('#threeInspector').innerHTML = `<div class="inspector-kicker">Three.js inspector</div><h3>WebGL unavailable</h3><p class="muted">Try this page in desktop Chrome/Safari/Firefox with hardware acceleration enabled.</p>`;
+    $('#threeLabels').innerHTML = `<div class="three-fallback-card"><h3>3D visualiser unavailable</h3><p>The original Visualiser remains available for this browser.</p></div>`;
+    $('#threeInspector').innerHTML = `<div class="inspector-kicker">Constellation inspector</div><h3>3D visualiser unavailable</h3><p class="muted">Try the original Visualiser, or reopen this page in a browser that supports the 3D view.</p>`;
     return;
   }
   $('#threeViewport').classList.remove('three-fallback');

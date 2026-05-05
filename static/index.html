@@ -133,27 +133,27 @@
         </section>
 
         <section id="visualiser3d" class="tab">
-          <div class="section-head"><h2>Visualiser 3D</h2><span>memory maps + neural maps</span></div>
-          <div class="section-tabs visualiser-tabs glass" aria-label="Three.js visualiser mode">
-            <button id="threeConstellationTab" data-three-mode="constellation" class="active">Constellation 3D</button>
-            <button id="threeNeuralTab" data-three-mode="neural">Neural Map 3D</button>
+          <div class="section-head"><h2>Visualiser 3D</h2><span>memory maps + neural activation views</span></div>
+          <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode">
+            <button id="threeConstellationTab" data-three-mode="constellation" class="active">Constellation</button>
+            <button id="threeNeuralTab" data-three-mode="neural">Neural Map</button>
           </div>
           <div class="toolbar glass">
-            <button id="threeRefresh" class="primary">Refresh 3D visualiser</button>
-            <button id="threeReset">Reset camera</button>
+            <button id="threeRefresh" class="primary">Refresh visualiser</button>
+            <button id="threeReset">Reset view</button>
             <button id="threePanMode">Pan mode</button>
-            <button id="threePause">Pause drift</button>
-            <span id="threeHelp" class="muted">Drag to orbit · wheel/pinch to zoom · click a point to inspect.</span>
+            <button id="threePause">Pause rotation</button>
+            <span id="threeHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.</span>
           </div>
           <div class="three-layout">
-            <div id="threeViewport" class="three-viewport glass" aria-label="Three.js GPU visualiser">
+            <div id="threeViewport" class="three-viewport glass" aria-label="Interactive 3D memory visualiser">
               <div id="threeLabels" class="three-labels"></div>
               <div id="threeLegend" class="constellation-legend three-legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div>
             </div>
             <aside id="threeInspector" class="graph-inspector glass">
-              <div class="inspector-kicker">Three.js inspector</div>
+              <div class="inspector-kicker">Constellation inspector</div>
               <h3>Nothing selected</h3>
-              <p class="muted">Pick a GPU-rendered point or link to inspect the underlying read-only source.</p>
+              <p class="muted">Pick a point or link to inspect the underlying read-only source.</p>
             </aside>
           </div>
           <div id="threeClusters" class="cluster-row"></div>
