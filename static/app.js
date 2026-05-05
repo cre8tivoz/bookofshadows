@@ -541,7 +541,7 @@ function inspectConstellationNode(node){
 }
 function constellationColors(){
   const light = document.documentElement.dataset.theme === 'light';
-  return light ? { light:true, bg:'#fbf8f3', nebula:'rgba(101,214,255,.11)', star:'#087fa6', memory:'#a9700a', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(31,73,116,.42)', memoryEdge:'rgba(142,92,28,.38)' } : { light:false, bg:'#050711', nebula:'rgba(101,214,255,.14)', star:'#65d6ff', memory:'#ffd166', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(198,224,255,.36)', memoryEdge:'rgba(255,209,102,.42)' };
+  return light ? { light:true, bg:'#fbf8f3', nebula:'rgba(101,214,255,.11)', star:'#087fa6', memory:'#a9700a', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(25,65,108,.50)', memoryEdge:'rgba(130,78,18,.48)' } : { light:false, bg:'#050711', nebula:'rgba(101,214,255,.14)', star:'#65d6ff', memory:'#ffd166', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(198,224,255,.44)', memoryEdge:'rgba(255,209,102,.50)' };
 }
 function projectConstellationNode(n, w, h, t){
   const rot = constellationScene.rotation;
@@ -608,8 +608,8 @@ function drawConstellationFrame(t=0){
   constellationScene.nodes.forEach(n => projected.set(n.id, projectConstellationNode(n,w,h,t)));
   const edgeDegree = new Map();
   let edgeDrawn = 0;
-  const edgeLimit = compactCanvas ? 32 : 120;
-  const degreeLimit = compactCanvas ? 1 : 4;
+  const edgeLimit = compactCanvas ? 44 : 140;
+  const degreeLimit = compactCanvas ? 2 : 4;
   for(const e of constellationScene.edges){
     const a=projected.get(e.source), b=projected.get(e.target);
     if(!a || !b || !a.visible || !b.visible) continue;
@@ -617,10 +617,10 @@ function drawConstellationFrame(t=0){
     const da=edgeDegree.get(e.source) || 0, db=edgeDegree.get(e.target) || 0;
     if(da >= degreeLimit || db >= degreeLimit) continue;
     edgeDegree.set(e.source, da+1); edgeDegree.set(e.target, db+1); edgeDrawn++;
-    const depthAlpha = Math.min(c.light ? .48 : .48, Math.max(c.light ? .18 : .16, (a.scale+b.scale) / (c.light ? 6.8 : 6.2)));
+    const depthAlpha = Math.min(c.light ? .58 : .58, Math.max(c.light ? .24 : .24, (a.scale+b.scale) / (c.light ? 5.4 : 5.2)));
     ctx.strokeStyle = e.kind === 'memory' ? c.memoryEdge : c.edge;
-    ctx.globalAlpha = depthAlpha * (compactCanvas ? .50 : .82);
-    ctx.lineWidth = (c.light ? .52 : .62) + Math.max(a.scale,b.scale) * (c.light ? .14 : .20);
+    ctx.globalAlpha = depthAlpha * (compactCanvas ? .74 : .92);
+    ctx.lineWidth = (c.light ? .68 : .78) + Math.max(a.scale,b.scale) * (c.light ? .20 : .26);
     ctx.setLineDash(e.kind === 'memory' ? [5,7] : [4,8]);
     ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
   }
