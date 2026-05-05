@@ -892,7 +892,7 @@ function drawNeuralFrame(t=0){
 }
 function neuralColors(){
   const light = document.documentElement.dataset.theme === 'light';
-  return light ? { light:true, bg:'#fbf8f2', core:'rgba(58,168,142,.16)', mid:'rgba(216,122,74,.10)', star:'#138f7a', memory:'#b8643f', text:'#2b2927', synapse:'rgba(42,118,101,.26)', synapseHot:'rgba(16,144,119,.50)', memorySynapse:'rgba(184,92,55,.42)' } : { light:false, bg:'#06100f', core:'rgba(34,130,111,.28)', mid:'rgba(64,38,35,.35)', star:'#66e8c6', memory:'#ff9b6a', text:'#f6fbf7', synapse:'rgba(82,214,181,.22)', synapseHot:'rgba(90,238,196,.52)', memorySynapse:'rgba(255,145,96,.42)' };
+  return light ? { light:true, bg:'#fbf8f2', core:'rgba(58,168,142,.16)', mid:'rgba(218,72,62,.12)', star:'#138f7a', memory:'#d94b3f', text:'#2b2927', synapse:'rgba(42,118,101,.26)', synapseHot:'rgba(16,144,119,.50)', memorySynapse:'rgba(210,66,54,.54)' } : { light:false, bg:'#06100f', core:'rgba(34,130,111,.28)', mid:'rgba(95,31,29,.40)', star:'#66e8c6', memory:'#ff5f57', text:'#f6fbf7', synapse:'rgba(82,214,181,.22)', synapseHot:'rgba(90,238,196,.52)', memorySynapse:'rgba(255,95,87,.58)' };
 }
 function updateVisualiserModeUI(){
   const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
@@ -1415,6 +1415,15 @@ function makePointTexture(THREE, kind){
       }
     }
     ctx.fillStyle='rgba(255,255,255,.95)'; ctx.beginPath(); ctx.arc(cx,cy,9,0,Math.PI*2); ctx.fill();
+  } else if(kind === 'soma') {
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,31);
+    g.addColorStop(0,'rgba(255,255,255,1)');
+    g.addColorStop(.20,'rgba(255,255,255,.96)');
+    g.addColorStop(.48,'rgba(255,255,255,.42)');
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,31,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.64)'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(cx,cy,15,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,1)'; ctx.beginPath(); ctx.arc(cx,cy,11,0,Math.PI*2); ctx.fill();
   } else {
     const g=ctx.createRadialGradient(cx,cy,0,cx,cy,30);
     g.addColorStop(0,'rgba(255,255,255,1)');
@@ -1577,7 +1586,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   const sizes = new Float32Array(selected.length);
   selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; sizes[i]=Math.max(3.5, Math.min(size * 2.8, n.size || size)); });
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
-  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, threeVis.mode === 'neural' ? 'neuron' : (kind === 'memory' ? 'orb' : 'star')), alphaTest:.04, size, sizeAttenuation:true, transparent:true, opacity: threeVis.mode === 'neural' ? .88 : .96, depthWrite:false, blending:THREE.AdditiveBlending });
+  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, threeVis.mode === 'neural' ? (kind === 'memory' ? 'soma' : 'neuron') : (kind === 'memory' ? 'orb' : 'star')), alphaTest:.04, size, sizeAttenuation:true, transparent:true, opacity: threeVis.mode === 'neural' ? (kind === 'memory' ? .98 : .86) : .96, depthWrite:false, blending:THREE.AdditiveBlending });
   const points = new THREE.Points(geometry, material); points.userData.nodes = selected; scene.add(points); return points;
 }
 async function renderThreeVisualiser(data){
@@ -1609,7 +1618,7 @@ async function renderThreeVisualiser(data){
   group.add(new THREE.LineSegments(linkGeom, new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity: threeVis.mode === 'neural' ? .30 : .22, blending:THREE.AdditiveBlending })));
   if(threeVis.mode === 'neural'){
     addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 34);
-    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 25);
+    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 36);
     addNeuralDendrites(THREE, group, nodes, colors);
   }
   group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 11.5 : 7));
