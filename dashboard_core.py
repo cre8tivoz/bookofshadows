@@ -668,26 +668,118 @@ class DashboardStore:
             "consolidations": consolidations_today[:limit],
         }
 
+    @staticmethod
+    def _split_context_metadata(text: str) -> tuple[str, list[dict[str, str]]]:
+        parts = [p.strip() for p in str(text or "").split("|") if p.strip()]
+        if not parts:
+            return "", []
+        meta: list[dict[str, str]] = []
+        for part in parts[1:]:
+            if ":" in part:
+                key, value = part.split(":", 1)
+                key = key.strip()
+                value = value.strip()
+                if key and value:
+                    meta.append({"label": key, "value": value})
+        return parts[0], meta
+
+    @staticmethod
+    def _context_type(text: str, category: str, kind: str = "memory") -> tuple[str, str]:
+        hay = f"{category} {text}".lower()
+        if kind == "triple":
+            return "Relationship", "schema"
+        if "health" in hay or "whoop" in hay or "sleep" in hay or "hrv" in hay or "wearable" in hay or "recovery" in hay or "strain" in hay or "resting" in hay:
+            return "Health insight", "sensitive"
+        if "privacy" in hay or "local-only" in hay or "local only" in hay or "no cloud" in hay or "cannot" in hay:
+            return "Privacy rule", "locked"
+        if any(term in hay for term in ("specific pr", "this pr", "current pr", "temporary", "for this", "in this", "asked", "inquired", "testing", "test migrating")):
+            return "Temporary context", "review"
+        if any(term in hay for term in ("prefers", "preference", "wants", "expects", "avoid", "should not", "do not", "tone", "style")):
+            return "Preference", "confirmed"
+        if any(term in hay for term in ("project", "plugin", "dashboard", "github", "release", "migration", "server", "config")):
+            return "Project context", "project"
+        return "Fact", "fact"
+
+    @staticmethod
+    def _confidence_label(value: object) -> tuple[str, int]:
+        try:
+            score = max(0.0, min(1.0, float(value or 0)))
+        except Exception:
+            score = 0.0
+        if score >= 0.8:
+            label = "High confidence"
+        elif score >= 0.55:
+            label = "Medium confidence"
+        else:
+            label = "Needs review"
+        return label, int(round(score * 100))
+
     def inferred_profile(self, limit_per_section: int = 10) -> dict[str, Any]:
         limit_per_section = max(3, min(int(limit_per_section or 10), 30))
-        sections = {name: [] for name in ["Preferences", "People", "Home setup", "Work / business", "Health / wearables", "Devices", "Projects", "Privacy rules", "Other"]}
+        section_names = ["Preference", "Temporary context", "Project context", "Privacy rule", "Health insight", "Fact", "Relationship"]
+        sections = {name: [] for name in section_names}
+        all_items: list[dict[str, Any]] = []
+
+        def add_row(*, kind: str, label: str, item: dict[str, Any], importance: object, timestamp: object, category: str) -> None:
+            clean, extracted = self._split_context_metadata(label)
+            context_type, type_tone = self._context_type(clean, category, kind)
+            confidence_label, confidence_pct = self._confidence_label(importance)
+            row = {
+                "kind": kind,
+                "label": clean[:220],
+                "raw_label": label,
+                "item": item,
+                "importance": importance,
+                "confidence_label": confidence_label,
+                "confidence_pct": confidence_pct,
+                "timestamp": timestamp,
+                "category": category,
+                "context_type": context_type,
+                "type_tone": type_tone,
+                "source": item.get("source") or item.get("tier") or kind,
+                "scope": item.get("scope") or "",
+                "status": item.get("status") or "active",
+                "tier": item.get("tier") or kind,
+                "extracted": extracted[:4],
+                "sensitive": context_type == "Health insight",
+                "needs_review": confidence_pct < 70 or context_type == "Temporary context",
+            }
+            all_items.append(row)
+            if len(sections[context_type]) < limit_per_section:
+                sections[context_type].append(row)
+
         memories = self.list_memories(kind="all", status="active", sort="importance", limit=500)
         for m in memories:
             category = self._category_for_text(str(m.get("content") or ""))
-            if len(sections[category]) >= limit_per_section:
-                continue
-            sections[category].append({"kind": "memory", "label": str(m.get("content") or "")[:160], "item": m, "importance": m.get("importance"), "timestamp": m.get("timestamp") or m.get("created_at")})
+            add_row(kind="memory", label=str(m.get("content") or ""), item=m, importance=m.get("importance"), timestamp=m.get("timestamp") or m.get("created_at"), category=category)
         for t in self.triples(limit=500):
             text = f"{t.get('subject')} {t.get('predicate')} {t.get('object')}"
             category = self._category_for_text(text)
-            if len(sections[category]) >= limit_per_section:
-                continue
-            sections[category].append({"kind": "triple", "label": text, "item": t, "importance": t.get("confidence"), "timestamp": t.get("created_at") or t.get("valid_from")})
+            add_row(kind="triple", label=text, item=t, importance=t.get("confidence"), timestamp=t.get("created_at") or t.get("valid_from"), category=category)
+
         ordered = []
-        for name, items in sections.items():
+        for name in section_names:
+            items = sections[name]
             if items:
                 ordered.append({"name": name, "count": len(items), "items": items[:limit_per_section]})
-        return {"read_only": True, "generated_at": _utc_now(), "sections": ordered}
+        type_counts = Counter(row["context_type"] for row in all_items)
+        top_types = type_counts.most_common(4)
+        remainder = len(all_items) - sum(v for _, v in top_types)
+        type_summary = [{"label": k, "count": v} for k, v in top_types]
+        if remainder > 0:
+            type_summary.append({"label": "Other types", "count": remainder})
+        return {
+            "read_only": True,
+            "generated_at": _utc_now(),
+            "sections": ordered,
+            "summary": {
+                "indexed_signals": len(all_items),
+                "sections": len(ordered),
+                "needs_review": sum(1 for row in all_items if row.get("needs_review")),
+                "sensitive": sum(1 for row in all_items if row.get("sensitive")),
+                "types": type_summary,
+            },
+        }
 
     def constellation(self, limit: int = 240) -> dict[str, Any]:
         limit = max(40, min(int(limit or 240), 600))

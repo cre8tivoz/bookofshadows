@@ -222,8 +222,10 @@ def test_memory_intelligence_read_only_views(tmp_path):
 
     profile = store.inferred_profile(limit_per_section=5)
     sections = {s['name']: s for s in profile['sections']}
-    assert 'Health / wearables' in sections
-    assert any('WHOOP' in item['label'] for item in sections['Health / wearables']['items'])
+    assert 'Health insight' in sections
+    assert any('WHOOP' in item['label'] for item in sections['Health insight']['items'])
+    assert profile['summary']['indexed_signals'] >= 1
+    assert profile['summary']['sensitive'] >= 1
 
     constellation = store.constellation(limit=80)
     assert constellation['read_only'] is True

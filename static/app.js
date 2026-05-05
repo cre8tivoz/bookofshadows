@@ -522,14 +522,34 @@ async function loadTodayDigest(day=''){
   bindJsonCards($('#todayTriples'), 'Triple detail');
   bindJsonCards($('#todayConsolidations'), 'Consolidation detail');
 }
+function contextSummary(data){
+  const s = data.summary || {};
+  const typeChips = (s.types || []).map(t => `<span class="context-type-chip">${esc(t.label)} <strong>${Number(t.count || 0).toLocaleString()}</strong></span>`).join('');
+  return `<div class="context-summary glass">
+    <div><span>Indexed signals</span><strong>${Number(s.indexed_signals || s.active_items || 0).toLocaleString()}</strong></div>
+    <div><span>Needs review</span><strong>${Number(s.needs_review || 0).toLocaleString()}</strong></div>
+    <div><span>Sensitive</span><strong>${Number(s.sensitive || 0).toLocaleString()}</strong></div>
+    <div><span>Sections</span><strong>${Number(s.sections || 0).toLocaleString()}</strong></div>
+    ${typeChips ? `<div class="context-types">${typeChips}</div>` : ''}
+  </div>`;
+}
 function profileItem(row){
   const item = row.item || {};
   const attrs = row.kind === 'memory' ? `data-id="${esc(item.id || '')}"` : `data-json='${esc(JSON.stringify(item))}'`;
-  return `<div class="profile-item" ${attrs}><span class="badge">${esc(row.kind)}</span><p>${esc(row.label || '')}</p><small>${esc(prettyTime(row.timestamp) || row.timestamp || '')} · score ${Number(row.importance || 0).toFixed(2)}</small></div>`;
+  const confidence = row.confidence_label || 'Confidence unknown';
+  const pct = Number(row.confidence_pct || row.importance * 100 || 0);
+  const extracted = (row.extracted || []).slice(0,3).map(m => `<span title="${esc(m.value)}">${esc(m.label)}: ${esc(m.value)}</span>`).join('');
+  const provenance = [row.category, row.tier || row.kind, row.source, row.scope, row.status].filter(Boolean).slice(0,5).map(x => `<span>${esc(x)}</span>`).join('');
+  return `<div class="profile-item context-card ${esc(row.type_tone || '')}" ${attrs}>
+    <div class="context-card-head"><span class="badge">${esc(row.context_type || row.kind)}</span><span class="confidence ${pct < 70 ? 'warn' : ''}">${esc(confidence)} · ${Math.round(pct)}%</span></div>
+    <p>${esc(row.label || '')}</p>
+    ${extracted ? `<div class="context-meta extracted">${extracted}</div>` : ''}
+    <div class="context-meta"><span>${esc(prettyTime(row.timestamp) || row.timestamp || '')}</span>${provenance}</div>
+  </div>`;
 }
 async function loadProfile(){
   const data = await api('/api/profile/inferred?limit=10');
-  $('#profileGrid').innerHTML = (data.sections || []).map(s => `<section class="profile-section glass"><div class="section-head mini"><h2>${esc(s.name)}</h2><span>${esc(s.count)} signal${Number(s.count) === 1 ? '' : 's'}</span></div>${(s.items || []).map(profileItem).join('')}</section>`).join('') || '<p class="muted">No inferred profile data found.</p>';
+  $('#profileGrid').innerHTML = `${contextSummary(data)}${(data.sections || []).map(s => `<section class="profile-section glass"><div class="section-head mini"><h2>${esc(s.name)}</h2><span>${esc(s.count)} active item${Number(s.count) === 1 ? '' : 's'}</span></div>${(s.items || []).map(profileItem).join('')}</section>`).join('') || '<p class="muted">No inferred profile data found.</p>'}`;
   $$('#profileGrid .profile-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
   $$('#profileGrid .profile-item[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail'));
 }
