@@ -707,27 +707,26 @@ function projectNeuralNode(n, w, h){
     visible:true
   };
 }
-function drawSynapse(ctx, a, b, e, c, t, compactCanvas){
+function drawSynapse(ctx, a, b, e, c, t, compactCanvas, pulse=false){
   const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
   const dx=b.x-a.x, dy=b.y-a.y;
   const len=Math.max(1, Math.hypot(dx,dy));
-  const curve=Math.min(compactCanvas ? 34 : 58, len*.18) * (((e.id || '').length % 2) ? 1 : -1);
+  const curve=Math.min(compactCanvas ? 30 : 48, len*.16) * (((e.id || '').length % 2) ? 1 : -1);
   const cx=mx - dy/len*curve, cy=my + dx/len*curve;
-  const grad=ctx.createLinearGradient(a.x,a.y,b.x,b.y);
-  grad.addColorStop(0, c.synapse);
-  grad.addColorStop(.55, e.kind === 'memory' ? c.memorySynapse : c.synapseHot);
-  grad.addColorStop(1, c.synapse);
-  ctx.strokeStyle=grad;
-  ctx.globalAlpha=(compactCanvas ? .28 : .36) * Math.min(1, Math.max(.42, ((a.alpha || 1) + (b.alpha || 1)) / 2));
-  ctx.lineWidth=compactCanvas ? .72 : .92;
+  const depth=Math.min(1, Math.max(.42, ((a.alpha || 1) + (b.alpha || 1)) / 2));
+  ctx.strokeStyle=e.kind === 'memory' ? c.memorySynapse : c.synapse;
+  ctx.globalAlpha=(compactCanvas ? .24 : .30) * depth;
+  ctx.lineWidth=compactCanvas ? .66 : .82;
   ctx.setLineDash([]);
   ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.quadraticCurveTo(cx,cy,b.x,b.y); ctx.stroke();
-  const phase=((t*.00018 + ((e.id || '').length % 17)/17) % 1);
-  const qx=(1-phase)*(1-phase)*a.x + 2*(1-phase)*phase*cx + phase*phase*b.x;
-  const qy=(1-phase)*(1-phase)*a.y + 2*(1-phase)*phase*cy + phase*phase*b.y;
-  ctx.globalAlpha=(compactCanvas ? .34 : .52) * Math.min(1, Math.max(.42, ((a.alpha || 1) + (b.alpha || 1)) / 2));
+  if(!pulse) return;
+  const phase=((t*.00012 + ((e.id || '').length % 17)/17) % 1);
+  const inv=1-phase;
+  const qx=inv*inv*a.x + 2*inv*phase*cx + phase*phase*b.x;
+  const qy=inv*inv*a.y + 2*inv*phase*cy + phase*phase*b.y;
+  ctx.globalAlpha=(compactCanvas ? .28 : .42) * depth;
   ctx.fillStyle=e.kind === 'memory' ? c.memory : c.star;
-  ctx.beginPath(); ctx.arc(qx,qy,compactCanvas ? 1.7 : 2.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(qx,qy,compactCanvas ? 1.35 : 1.75,0,Math.PI*2); ctx.fill();
 }
 function drawNeuronSoma(ctx, n, p, c, t, compactCanvas){
   const weight=Math.max(1, Number(n.weight || n.count || 1));
@@ -837,7 +836,10 @@ function drawNeuralFrame(t=0){
     const da=edgeDegree.get(e.source) || 0, db=edgeDegree.get(e.target) || 0;
     if(da >= degreeLimit || db >= degreeLimit) continue;
     edgeDegree.set(e.source, da+1); edgeDegree.set(e.target, db+1); edgeDrawn++;
-    drawSynapse(ctx,a,b,e,c,t,compactCanvas);
+    const pulseStride = compactCanvas ? 8 : 10;
+    const pulseLimit = compactCanvas ? 8 : 14;
+    const shouldPulse = !constellationScene.drag && edgeDrawn <= pulseLimit && ((edgeDrawn + ((e.id || '').length % pulseStride)) % pulseStride === 0);
+    drawSynapse(ctx,a,b,e,c,t,compactCanvas,shouldPulse);
   }
   ctx.globalAlpha=1; ctx.setLineDash([]);
   const hits=[];
