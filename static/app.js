@@ -592,12 +592,14 @@ function buildConstellationScene(data){
     n.z = Math.sin(angle) * radius * .82;
     n.size = Math.min(22, 4 + Math.sqrt(Number(n.weight || n.count || 1))*3.4) * (n.kind === 'memory' ? 1.08 : 1);
     n.twinkle = (i % 17) / 17;
+    n.twinkleFreq = 0.00145 + ((i * 29) % 83) / 100000;
+    n.twinkleAmp = .07 + ((i * 31) % 70) / 1000;
   });
   constellationScene.nodes = nodes;
   constellationScene.edges = (data.edges || []).filter(e => nodes.some(n => n.id === e.source) && nodes.some(n => n.id === e.target)).slice(0,300);
   constellationScene.byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
   constellationScene.data = data;
-  constellationScene.stars = Array.from({length:140}, (_,i) => ({ x:((i*73)%1000)/1000, y:((i*191)%680)/680, r:.35 + ((i*37)%100)/90, a:.18 + ((i*29)%100)/240 }));
+  constellationScene.stars = Array.from({length:140}, (_,i) => ({ x:((i*73)%1000)/1000, y:((i*191)%680)/680, r:.35 + ((i*37)%100)/90, a:.18 + ((i*29)%100)/240, phase:(i*47)%628/100, freq:.00055 + ((i*41)%95)/100000 }));
 }
 function drawConstellationFrame(t=0){
   const canvas = $('#constellationCanvas');
@@ -624,7 +626,7 @@ function drawConstellationFrame(t=0){
   const bg = ctx.createRadialGradient(w*.52,h*.44,20,w*.52,h*.44,Math.max(w,h)*.72);
   bg.addColorStop(0, compactCanvas ? 'rgba(101,214,255,.08)' : c.nebula); bg.addColorStop(.45, compactCanvas ? 'rgba(124,124,255,.035)' : 'rgba(124,124,255,.08)'); bg.addColorStop(1,c.bg);
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
-  constellationScene.stars.forEach((s,i)=>{ const pulse=.55 + Math.sin(t*.001 + i)*.45; ctx.globalAlpha=s.a*pulse*(c.light ? .48 : .78); ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r*(c.light ? .72 : .9), 0, Math.PI*2); ctx.fill(); });
+  constellationScene.stars.forEach((s)=>{ const pulse=.42 + Math.sin(t*s.freq + s.phase)*.34 + Math.sin(t*s.freq*.37 + s.phase*1.9)*.18; ctx.globalAlpha=s.a*Math.max(.12, Math.min(1, pulse))*(c.light ? .48 : .78); ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r*(c.light ? .72 : .9), 0, Math.PI*2); ctx.fill(); });
   ctx.globalAlpha=1;
   const projected = new Map();
   constellationScene.nodes.forEach(n => projected.set(n.id, projectConstellationNode(n,w,h,t)));
@@ -664,7 +666,7 @@ function drawConstellationFrame(t=0){
   [...constellationScene.nodes].sort((a,b)=>projected.get(a.id).z-projected.get(b.id).z).forEach(n => {
     const p=projected.get(n.id); if(!p?.visible) return;
     const base=n.kind === 'memory' ? c.memory : c.star;
-    const pulse=.88 + Math.sin(t*.0022 + n.twinkle*6.28)*.12;
+    const pulse=1 + Math.sin(t*(n.twinkleFreq || .0017) + n.twinkle*6.28)*(n.twinkleAmp || .09) + Math.sin(t*(n.twinkleFreq || .0017)*.43 + n.twinkle*11.7)*((n.twinkleAmp || .09)*.48);
     const weight = Math.max(1, Number(n.weight || n.count || 1));
     const starR = Math.min(compactCanvas ? 3.2 : 4.6, Math.max(compactCanvas ? .85 : 1.05, (1 + Math.sqrt(weight)) * p.scale * (compactCanvas ? .42 : .54))) * pulse;
     const important = weight > 3.2 || n.kind === 'memory';
