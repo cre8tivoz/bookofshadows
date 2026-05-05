@@ -9,6 +9,7 @@ let applyingHistory = false;
 let bulkSelection = new Set();
 let latestMemoryItems = [];
 let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
+let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], rotation: 0, tilt: 0.35, hits: [], data: null, pointer: { x: 0, y: 0, active: false } };
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -534,32 +535,109 @@ async function loadProfile(){
 }
 function constellationInspectorDefault(){ $('#constellationInspector').innerHTML = `<div class="inspector-kicker">Constellation inspector</div><h3>Nothing selected</h3><p class="muted">Pick a star, memory, or link to inspect the underlying read-only source.</p>`; }
 function inspectConstellationNode(node){
-  $('#constellationInspector').innerHTML = `<div class="inspector-kicker">${esc(node.kind || 'entity')}</div><h3>${esc(node.label)}</h3><p class="muted">${esc(node.category || 'Other')} · ${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="constellationMemory" class="primary tiny">Open memory</button>' : ''}<button id="constellationSearch" class="tiny">Search memories</button></div>`;
+  $('#constellationInspector').innerHTML = `<div class="inspector-kicker">${esc(node.kind || 'entity')}</div><h3>${esc(node.label)}</h3><p class="muted">${esc(node.category || 'Other')} · ${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="constellationMemory" class="primary tiny">Open memory</button>' : ''}<button id="constellationSearch" class="tiny">Search this</button></div>`;
   if(node.memory_id) $('#constellationMemory').onclick = () => openMemoryDetail(node.memory_id);
   $('#constellationSearch').onclick = () => { $('#memoryQuery').value = node.label.replace(/^memory:/,''); switchTab('memories'); };
 }
-function drawConstellation(data){
-  const svg = $('#constellationSvg'); svg.innerHTML = '';
-  const nodes = (data.nodes || []).slice(0,180);
-  const edges = (data.edges || []);
-  const w=1000,h=680,cx=w/2,cy=h/2;
+function constellationColors(){
+  const light = document.documentElement.dataset.theme === 'light';
+  return light ? { bg:'#fbf8f3', nebula:'rgba(101,214,255,.16)', star:'#146b8f', memory:'#c4821f', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(160,119,88,.20)' } : { bg:'#050711', nebula:'rgba(101,214,255,.18)', star:'#65d6ff', memory:'#ffd166', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(183,168,255,.18)' };
+}
+function projectConstellationNode(n, w, h, t){
+  const rot = constellationScene.rotation + t * 0.000075;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const x = n.x * cos - n.z * sin;
+  const z0 = n.x * sin + n.z * cos;
+  const tilt = constellationScene.tilt;
+  const y = n.y * Math.cos(tilt) - z0 * Math.sin(tilt);
+  const z = n.y * Math.sin(tilt) + z0 * Math.cos(tilt);
+  const depth = 760;
+  const scale = depth / (depth + z + 260);
+  const fit = Math.min(1, Math.max(.54, (w - 72) / 760));
+  return { x:w/2 + x*scale*fit, y:h/2 + y*scale*fit, z, scale, visible:scale > .35 };
+}
+function buildConstellationScene(data){
+  const nodes = (data.nodes || []).slice(0,160);
   const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
   const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
-  nodes.forEach((n,i) => { const ci=catIndex[n.category || 'Other'] || 0; const depth=i%3; const angle=(i/nodes.length)*Math.PI*2 + ci*.45; const ring=n.kind === 'memory' ? 285 + (i%5)*46 : 145 + ci*50 + depth*18; const zScale=[.78,1,1.2][depth]; n.depth=depth; n.x=cx+Math.cos(angle)*ring; n.y=cy+Math.sin(angle)*ring*.82; n.starScale=zScale; });
-  const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
-  svg.insertAdjacentHTML('afterbegin', `<defs><radialGradient id="starGlow"><stop offset="0%" stop-color="#fff"/><stop offset="24%" stop-color="#e9fbff"/><stop offset="56%" stop-color="#65d6ff" stop-opacity=".82"/><stop offset="100%" stop-color="#7c7cff" stop-opacity=".10"/></radialGradient><radialGradient id="memoryGlow"><stop offset="0%" stop-color="#fff8d8"/><stop offset="36%" stop-color="#ffd166"/><stop offset="100%" stop-color="#ff9f1c" stop-opacity=".16"/></radialGradient><linearGradient id="constellationEdge" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#65d6ff" stop-opacity=".10"/><stop offset="55%" stop-color="#b7a8ff" stop-opacity=".52"/><stop offset="100%" stop-color="#ffd166" stop-opacity=".16"/></linearGradient><filter id="stellarBlur"><feGaussianBlur stdDeviation="2.6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`);
-  edges.filter(e => byId[e.source] && byId[e.target]).slice(0,360).forEach(e => { const s=byId[e.source], t=byId[e.target]; const line=document.createElementNS('http://www.w3.org/2000/svg','line'); line.setAttribute('x1',s.x); line.setAttribute('y1',s.y); line.setAttribute('x2',t.x); line.setAttribute('y2',t.y); line.setAttribute('class',`constellation-link ${e.kind || ''} depth-${Math.min(s.depth || 0,t.depth || 0)}`); line.onclick = () => showDetail(e.item || e, 'Constellation link'); svg.appendChild(line); });
-  nodes.forEach((n,i) => { const g=document.createElementNS('http://www.w3.org/2000/svg','g'); g.setAttribute('class',`constellation-node ${n.kind || 'entity'} depth-${n.depth || 0}`); g.dataset.id=n.id; g.style.setProperty('--float-x', `${((i%5)-2)*(1.1+n.depth*.45)}px`); g.style.setProperty('--float-y', `${((i%7)-3)*(1+n.depth*.4)}px`); g.style.setProperty('--float-delay', `${-(i%11)*.7}s`); g.style.setProperty('--pulse-delay', `${-(i%13)*.45}s`); g.onclick = () => inspectConstellationNode(n); const weight=Number(n.weight || n.count || 1); const r=Math.min(26, (4 + Math.sqrt(weight)*3.4) * (n.starScale || 1)); if(weight >= 3.2 || n.kind === 'memory'){ const orbit=document.createElementNS('http://www.w3.org/2000/svg','circle'); orbit.setAttribute('class','constellation-orbit'); orbit.setAttribute('cx',n.x); orbit.setAttribute('cy',n.y); orbit.setAttribute('r',r+8+(i%3)*3); g.appendChild(orbit); } const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('class','star-core'); c.setAttribute('cx',n.x); c.setAttribute('cy',n.y); c.setAttribute('r',r); g.appendChild(c); const sparkle=document.createElementNS('http://www.w3.org/2000/svg','circle'); sparkle.setAttribute('class','star-spark'); sparkle.setAttribute('cx',n.x-r*.22); sparkle.setAttribute('cy',n.y-r*.24); sparkle.setAttribute('r',Math.max(1.4,r*.18)); g.appendChild(sparkle); const text=document.createElementNS('http://www.w3.org/2000/svg','text'); text.textContent=(n.label || '').replace(/^memory:/,'mem '); if(text.textContent.length>26) text.textContent=text.textContent.slice(0,23)+'…'; text.setAttribute('x',n.x+r+6); text.setAttribute('y',n.y+4); g.appendChild(text); svg.appendChild(g); });
+  nodes.forEach((n,i) => {
+    const ci = catIndex[n.category || 'Other'] || 0;
+    const angle = (i / Math.max(nodes.length,1)) * Math.PI * 2 + ci * .62;
+    const band = n.kind === 'memory' ? 1.28 : .72 + (ci % 4) * .16;
+    const radius = 250 * band + (i % 7) * 16;
+    n.x = Math.cos(angle) * radius;
+    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24);
+    n.z = Math.sin(angle) * radius * .82;
+    n.size = Math.min(22, 4 + Math.sqrt(Number(n.weight || n.count || 1))*3.4) * (n.kind === 'memory' ? 1.08 : 1);
+    n.twinkle = (i % 17) / 17;
+  });
+  constellationScene.nodes = nodes;
+  constellationScene.edges = (data.edges || []).filter(e => nodes.some(n => n.id === e.source) && nodes.some(n => n.id === e.target)).slice(0,300);
+  constellationScene.byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  constellationScene.data = data;
+  constellationScene.stars = Array.from({length:140}, (_,i) => ({ x:((i*73)%1000)/1000, y:((i*191)%680)/680, r:.35 + ((i*37)%100)/90, a:.18 + ((i*29)%100)/240 }));
+}
+function drawConstellationFrame(t=0){
+  const canvas = $('#constellationCanvas');
+  if(!canvas) return;
+  const wrap = canvas.parentElement;
+  const rect = wrap.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(320, rect.width), h = Math.max(430, rect.height || 680);
+  if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); canvas.style.width = `${w}px`; canvas.style.height = `${h}px`; }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const c = constellationColors();
+  ctx.clearRect(0,0,w,h);
+  const bg = ctx.createRadialGradient(w*.52,h*.44,20,w*.52,h*.44,Math.max(w,h)*.72);
+  bg.addColorStop(0,c.nebula); bg.addColorStop(.45,'rgba(124,124,255,.08)'); bg.addColorStop(1,c.bg);
+  ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
+  constellationScene.stars.forEach((s,i)=>{ const pulse=.55 + Math.sin(t*.001 + i)*.45; ctx.globalAlpha=s.a*pulse; ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r, 0, Math.PI*2); ctx.fill(); });
+  ctx.globalAlpha=1;
+  const projected = new Map();
+  constellationScene.nodes.forEach(n => projected.set(n.id, projectConstellationNode(n,w,h,t)));
+  constellationScene.edges.forEach(e => { const a=projected.get(e.source), b=projected.get(e.target); if(!a || !b) return; const alpha=Math.max(.05, Math.min(.28, (a.scale+b.scale)/8)); ctx.strokeStyle=e.kind === 'memory' ? `rgba(255,209,102,${alpha})` : c.edge; ctx.lineWidth=.7 + Math.max(a.scale,b.scale)*.45; ctx.setLineDash(e.kind === 'memory' ? [2,8] : [1,10]); ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); });
+  ctx.setLineDash([]);
+  const hits=[];
+  const labelBoxes=[];
+  const compactLabels = w < 620;
+  [...constellationScene.nodes].sort((a,b)=>projected.get(a.id).z-projected.get(b.id).z).forEach(n => {
+    const p=projected.get(n.id); if(!p?.visible) return;
+    const base=n.kind === 'memory' ? c.memory : c.star;
+    const pulse=.86 + Math.sin(t*.0022 + n.twinkle*6.28)*.14;
+    const r=Math.max(2.5,n.size*p.scale)*pulse;
+    ctx.globalAlpha=Math.max(.28,Math.min(1,p.scale*.9));
+    const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3.8);
+    glow.addColorStop(0,'rgba(255,255,255,.95)'); glow.addColorStop(.22,base); glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,r*3.8,0,Math.PI*2); ctx.fill();
+    if(n.kind === 'memory' || Number(n.weight || 0) > 2.8){ ctx.globalAlpha=.20*p.scale; ctx.strokeStyle=base; ctx.lineWidth=1; ctx.beginPath(); ctx.ellipse(p.x,p.y,r*2.2,r*1.05, t*.00025+n.twinkle,0,Math.PI*2); ctx.stroke(); }
+    ctx.globalAlpha=1; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(p.x-r*.2,p.y-r*.24,Math.max(1.1,r*.24),0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=base; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
+    const showLabel = compactLabels ? (p.scale > 1.03 || (n.kind === 'memory' && Number(n.weight || 0) > 3.2)) : (p.scale > .72 || n.kind === 'memory');
+    if(showLabel){
+      const label=(n.label || '').replace(/^memory:/,'mem ');
+      const short=label.length>24?label.slice(0,21)+'…':label;
+      ctx.font=`${Math.round((compactLabels ? 9 : 10) + p.scale*3)}px Inter, system-ui, sans-serif`;
+      const lx=p.x+r+6, ly=p.y+4, tw=ctx.measureText(short).width;
+      const box={x:lx-3,y:ly-13,w:tw+6,h:17};
+      const onCanvas=box.x>=10 && box.x+box.w<=w-10 && box.y>=10 && box.y+box.h<=h-10;
+      const collides=labelBoxes.some(b => !(box.x+box.w<b.x || b.x+b.w<box.x || box.y+box.h<b.y || b.y+b.h<box.y));
+      if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=4; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(1,.42+p.scale*.58); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
+    }
+    hits.push({x:p.x,y:p.y,r:Math.max(12,r+8),node:n});
+  });
+  constellationScene.hits=hits;
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawConstellationFrame);
+}
+function drawConstellation(data){
+  if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
+  buildConstellationScene(data);
+  const canvas = $('#constellationCanvas');
+  canvas.onclick = e => { const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; const hit=[...constellationScene.hits].reverse().find(h => Math.hypot(h.x-x,h.y-y) <= h.r); if(hit) inspectConstellationNode(hit.node); };
+  canvas.onpointermove = e => { const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; canvas.style.cursor = constellationScene.hits.some(h => Math.hypot(h.x-x,h.y-y) <= h.r) ? 'pointer' : 'grab'; };
   $('#constellationClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
   constellationInspectorDefault();
-  centerConstellationOnMobile();
-}
-function centerConstellationOnMobile(){
-  const wrap = document.querySelector('.constellation-wrap');
-  if(!wrap || !window.matchMedia('(max-width: 760px)').matches) return;
-  requestAnimationFrame(() => {
-    wrap.scrollLeft = Math.max(0, (wrap.scrollWidth - wrap.clientWidth) / 2);
-  });
+  drawConstellationFrame(0);
 }
 async function loadConstellation(){ drawConstellation(await api('/api/constellation?limit=240')); }
 async function loadDiagnostics(){
