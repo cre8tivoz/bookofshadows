@@ -1338,8 +1338,10 @@ function loadThreeModule(){
   return threeModulePromise;
 }
 function threeInspectorDefault(){
-  const mode = threeVis.mode === 'neural' ? 'Neural Map inspector' : 'Constellation inspector';
-  $('#threeInspector').innerHTML = `<div class="inspector-kicker">${mode}</div><h3>Nothing selected</h3><p class="muted">Pick a point or link to inspect the underlying read-only source.</p>`;
+  const neural = threeVis.mode === 'neural';
+  $('#threeInspector').innerHTML = neural
+    ? `<div class="inspector-kicker">Neural inspector</div><h3>Nothing selected</h3><p class="muted">Pick a neuron hub, memory soma, or synapse to inspect the underlying read-only source.</p>`
+    : `<div class="inspector-kicker">Constellation inspector</div><h3>Nothing selected</h3><p class="muted">Pick a star, memory, or link to inspect the underlying read-only source.</p>`;
 }
 function inspectThreeNode(node){
   const mode = threeVis.mode === 'neural' ? 'Neural Map 3D' : 'Constellation 3D';
