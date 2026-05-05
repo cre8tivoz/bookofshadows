@@ -1464,8 +1464,9 @@ function buildThreePositions(data){
     n.z = Math.sin(angle) * radius * .82 + Math.cos(angle * 1.7) * 42 + ((ci % 5) - 2) * 42;
     n.size = Math.min(22, 4 + Math.sqrt(weight)*3.4) * (n.kind === 'memory' ? 1.08 : 1);
     n.twinkle = (i % 23) / 23;
-    n.twinkleFreq = .001 + ((i * 41) % 120) / 100000;
-    n.twinkleAmp = .08 + ((i * 29) % 70) / 1000;
+    const twinkleTier = i % 17 === 0 ? 2 : (i % 5 === 0 ? 1 : 0);
+    n.twinkleFreq = twinkleTier === 2 ? .0048 + ((i * 41) % 130) / 100000 : (twinkleTier === 1 ? .0024 + ((i * 47) % 120) / 100000 : .00125 + ((i * 53) % 110) / 100000);
+    n.twinkleAmp = twinkleTier === 2 ? .34 : (twinkleTier === 1 ? .24 : .15 + ((i * 29) % 70) / 1000);
     n._degree = 0; n._weight = weight;
   });
   return nodes;
@@ -1677,7 +1678,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           float wave = sin(uTime * aFreq + aPhase) + sin(uTime * aFreq * 0.43 + aPhase * 1.71) * 0.45;
           vPulse = 1.0 + wave * aAmp;
           vMajor = aMajor;
-          gl_PointSize = aSize * (0.96 + (vPulse - 1.0) * 0.24) * (uScale / max(72.0, -mvPosition.z));
+          gl_PointSize = aSize * (0.98 + (vPulse - 1.0) * 0.32) * (uScale / max(72.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -1693,18 +1694,18 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           if(d > 0.5) discard;
           float core = 1.0 - smoothstep(0.026, 0.060, d);
           float body = 1.0 - smoothstep(0.060, 0.135, d);
-          float halo = (1.0 - smoothstep(0.13, 0.48, d)) * (0.13 + clamp(vPulse - 1.0, -0.22, 0.32) * 0.42);
+          float halo = (1.0 - smoothstep(0.13, 0.48, d)) * (0.15 + clamp(vPulse - 1.0, -0.30, 0.46) * 0.82);
           float rayH = max(0.0, 1.0 - abs(p.y) / 0.010) * (1.0 - smoothstep(0.07, 0.44, abs(p.x)));
           float rayV = max(0.0, 1.0 - abs(p.x) / 0.010) * (1.0 - smoothstep(0.07, 0.44, abs(p.y)));
           float diag1 = max(0.0, 1.0 - abs(p.x - p.y) / 0.013) * (1.0 - smoothstep(0.06, 0.26, d));
           float diag2 = max(0.0, 1.0 - abs(p.x + p.y) / 0.013) * (1.0 - smoothstep(0.06, 0.26, d));
           float rays = vMajor * (max(rayH, rayV) * 0.50 + max(diag1, diag2) * 0.16);
-          float alpha = (body * 0.44 + core * 0.98 + halo + rays) * uOpacity * clamp(0.82 + (vPulse - 1.0) * 0.58, 0.58, 1.22);
+          float alpha = (body * 0.46 + core * 1.02 + halo + rays) * uOpacity * clamp(0.72 + (vPulse - 1.0) * 0.92, 0.46, 1.35);
           if(alpha < 0.022) discard;
           vec3 starCore = mix(uColor, vec3(1.0), core * 0.88 + rays * 0.38);
           vec3 memoryCore = mix(uColor, vec3(1.0), core * 0.34);
           vec3 crisp = mix(memoryCore, starCore, uIsStar);
-          gl_FragColor = vec4(crisp * (0.98 + (vPulse - 1.0) * 0.06), min(alpha, 1.0));
+          gl_FragColor = vec4(crisp * (0.92 + (vPulse - 1.0) * 0.22), min(alpha, 1.0));
         }
       `,
       transparent:true,
@@ -1791,7 +1792,7 @@ async function renderThreeVisualiser(data){
   const pulseEdges = threeVis.mode === 'neural' ? edges.slice(0, 90) : [];
   const pulseGeom = new THREE.BufferGeometry(); const pulsePositions = new Float32Array(pulseEdges.length*3); pulseGeom.setAttribute('position', new THREE.BufferAttribute(pulsePositions,3));
   const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'star'), alphaTest:.03, size:threeVis.mode === 'neural' ? 10.5 : 5.2, transparent:true, opacity:threeVis.mode === 'neural' ? (colors.light ? .54 : .98) : .85, depthWrite:false, depthTest:false, blending:colors.light ? THREE.NormalBlending : THREE.AdditiveBlending })); group.add(pulsePoints);
-  const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 36 : 22);
+  const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 72 : 56);
   $('#threeLabels').innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
   $('#threeClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
@@ -1831,7 +1832,7 @@ function updateThreeLabels(){
   updateThreeAuras(rect, v);
   const labelBoxes = [];
   const zoomReveal = threeVis.mode === 'neural' ? Math.max(0, Math.min(1, (900 - threeVis.cameraZ) / 420)) : Math.max(0, Math.min(1, (760 - threeVis.cameraZ) / 520));
-  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 7 : 11) + Math.round(zoomReveal * (rect.width < 520 ? 9 : 12))) : (rect.width < 520 ? (5 + Math.round(zoomReveal * 5)) : (8 + Math.round(zoomReveal * 7)));
+  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 14 : 24) + Math.round(zoomReveal * (rect.width < 520 ? 14 : 18))) : (rect.width < 520 ? (12 + Math.round(zoomReveal * 12)) : (20 + Math.round(zoomReveal * 18)));
   let shown = 0;
   $$('#threeLabels .three-label').forEach((el,i)=>{
     const n = threeVis.labels[i]; if(!n) return;
