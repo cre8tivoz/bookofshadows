@@ -791,19 +791,15 @@ class DashboardStore:
             for table, tier in (("working_memory", "working"), ("episodic_memory", "episodic")):
                 if table not in tables:
                     continue
-                cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
-                base_cols = "id, content, source, timestamp, session_id, importance, metadata_json, created_at, recall_count, last_recalled, valid_until, superseded_by, scope, author_id, author_type, channel_id"
-                created_sql = f"SELECT {base_cols} FROM {table} WHERE substr(COALESCE(timestamp, created_at, ''), 1, 10) = ? ORDER BY COALESCE(timestamp, created_at) DESC LIMIT ?"
+                cols = self._columns(con, table)
+                select_cols = self._memory_select_columns(cols, tier)
+                created_sql = f"SELECT {select_cols} FROM {table} WHERE substr(COALESCE(timestamp, created_at, ''), 1, 10) = ? ORDER BY COALESCE(timestamp, created_at) DESC LIMIT ?"
                 for row in con.execute(created_sql, (day, limit)):
-                    d = self._dict(row)
-                    d["tier"] = tier
-                    memories_today.append(d)
+                    memories_today.append(self._enrich_memory(self._dict(row), tier))
                 if "last_recalled" in cols:
-                    recalled_sql = f"SELECT {base_cols} FROM {table} WHERE substr(COALESCE(last_recalled, ''), 1, 10) = ? ORDER BY last_recalled DESC LIMIT ?"
+                    recalled_sql = f"SELECT {select_cols} FROM {table} WHERE substr(COALESCE(last_recalled, ''), 1, 10) = ? ORDER BY last_recalled DESC LIMIT ?"
                     for row in con.execute(recalled_sql, (day, limit)):
-                        d = self._dict(row)
-                        d["tier"] = tier
-                        recalled_today.append(d)
+                        recalled_today.append(self._enrich_memory(self._dict(row), tier))
 
             triples_today = []
             if "triples" in tables:
@@ -822,8 +818,12 @@ class DashboardStore:
         recalled_today.sort(key=lambda r: r.get("last_recalled") or "", reverse=True)
         source_counts = Counter(str(m.get("source") or "unknown") for m in memories_today)
         session_counts = Counter(str(m.get("session_id") or "default") for m in memories_today)
-        tier_counts = Counter(str(m.get("tier") or "memory") for m in memories_today)
+        tier_counts = Counter(str(m.get("memory_kind") or m.get("tier") or "memory") for m in memories_today)
         scope_counts = Counter(str(m.get("scope") or "unknown") for m in memories_today)
+        veracity_counts = Counter(str(m.get("veracity") or "unknown") for m in memories_today)
+        degradation_counts = Counter(str(m.get("degradation_label") or "not degraded") for m in memories_today if m.get("memory_kind") == "episodic")
+        contaminated_today = sum(1 for m in memories_today if m.get("contaminated"))
+        degraded_today = sum(1 for m in memories_today if m.get("degraded_at"))
         entity_values = [m.get("content") for m in memories_today[:limit]]
         for t in triples_today:
             entity_values += [t.get("subject"), t.get("object")]
@@ -834,11 +834,15 @@ class DashboardStore:
             "counts": {
                 "memories_added": len(memories_today),
                 "memories_recalled": len(recalled_today),
+                "contaminated_added": contaminated_today,
+                "degraded_added": degraded_today,
                 "triples_added": len(triples_today),
                 "consolidations": len(consolidations_today),
             },
             "breakdowns": {
                 "tiers": [{"label": k, "count": v} for k, v in tier_counts.most_common()],
+                "veracity": [{"label": k, "count": v, "weight": VERACITY_WEIGHTS.get(k, VERACITY_WEIGHTS["unknown"])} for k, v in veracity_counts.most_common()],
+                "degradation": [{"label": k, "count": v} for k, v in degradation_counts.most_common()],
                 "sources": [{"label": k, "count": v} for k, v in source_counts.most_common(8)],
                 "scopes": [{"label": k, "count": v} for k, v in scope_counts.most_common(8)],
                 "sessions": [{"label": k, "count": v} for k, v in session_counts.most_common(8)],
@@ -875,11 +879,11 @@ class DashboardStore:
         if "privacy" in hay or "local-only" in hay or "local only" in hay or "no cloud" in hay or "cannot" in hay:
             return "Privacy rule", "locked"
         if any(term in hay for term in ("specific pr", "this pr", "current pr", "temporary", "for this", "in this", "asked", "inquired", "testing", "test migrating")):
-            return "Temporary context", "review"
+            return "Short-term notes", "review"
         if any(term in hay for term in ("prefers", "preference", "wants", "expects", "avoid", "should not", "do not", "tone", "style")):
             return "Preference", "confirmed"
         if any(term in hay for term in ("project", "plugin", "dashboard", "github", "release", "migration", "server", "config")):
-            return "Project context", "project"
+            return "Project notes", "project"
         return "Fact", "fact"
 
     @staticmethod
@@ -898,7 +902,7 @@ class DashboardStore:
 
     def inferred_profile(self, limit_per_section: int = 10) -> dict[str, Any]:
         limit_per_section = max(3, min(int(limit_per_section or 10), 30))
-        section_names = ["Preference", "Temporary context", "Project context", "Privacy rule", "Health insight", "Fact", "Relationship"]
+        section_names = ["Preference", "Short-term notes", "Project notes", "Privacy rule", "Health insight", "Fact", "Relationship"]
         sections = {name: [] for name in section_names}
         all_items: list[dict[str, Any]] = []
 
@@ -924,7 +928,7 @@ class DashboardStore:
                 "tier": item.get("tier") or kind,
                 "extracted": extracted[:4],
                 "sensitive": context_type == "Health insight",
-                "needs_review": confidence_pct < 70 or context_type == "Temporary context",
+                "needs_review": confidence_pct < 70 or context_type == "Short-term notes",
             }
             all_items.append(row)
             if len(sections[context_type]) < limit_per_section:
@@ -1032,7 +1036,7 @@ class DashboardStore:
             importance = float(row.get("importance") or 0)
             recall_count = int(row.get("recall_count") or 0)
             term_score = len(matched_terms) / max(1, len(terms)) if terms else 0
-            approx_score = round((0.55 * term_score) + (0.30 * importance) + (0.15 * min(recall_count, 10) / 10), 4)
+            approx_score = round(((0.55 * term_score) + (0.30 * importance) + (0.15 * min(recall_count, 10) / 10)) * float(row.get("effective_memory_weight") or 1.0), 4)
             reasons = []
             if matched_terms:
                 reasons.append(f"Matched terms: {', '.join(matched_terms[:8])}")
@@ -1044,6 +1048,12 @@ class DashboardStore:
                 reasons.append(f"Scope: {row.get('scope')}")
             if row.get("source"):
                 reasons.append(f"Source: {row.get('source')}")
+            if row.get("veracity"):
+                reasons.append(f"Trust: {row.get('veracity')} ×{float(row.get('trust_weight') or 1):.2f}")
+            if row.get("degradation_label"):
+                reasons.append(f"Lifecycle: {row.get('degradation_label')} ×{float(row.get('degradation_weight') or 1):.2f}")
+            if row.get("effective_memory_weight") is not None:
+                reasons.append(f"Effective memory weight: ×{float(row.get('effective_memory_weight') or 1):.2f}")
             items.append({"memory": row, "approx_score": approx_score, "matched_terms": matched_terms, "reasons": reasons})
         items.sort(key=lambda x: x["approx_score"], reverse=True)
         return {

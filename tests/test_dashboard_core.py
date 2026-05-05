@@ -264,7 +264,14 @@ def test_memory_intelligence_read_only_views(tmp_path):
     assert digest['read_only'] is True
     assert digest['counts']['memories_added'] == 2
     assert digest['counts']['memories_recalled'] == 1
+    assert digest['counts']['contaminated_added'] == 2
+    assert digest['counts']['degraded_added'] == 1
     assert {m['id'] for m in digest['memories_added']} == {'w4', 'e2'}
+    by_today_veracity = {r['label']: r['count'] for r in digest['breakdowns']['veracity']}
+    assert by_today_veracity['tool'] == 1
+    assert by_today_veracity['imported'] == 1
+    by_today_degradation = {r['label']: r['count'] for r in digest['breakdowns']['degradation']}
+    assert by_today_degradation['cold'] == 1
 
     profile = store.inferred_profile(limit_per_section=5)
     sections = {s['name']: s for s in profile['sections']}
@@ -290,12 +297,19 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="memoryVeracity"' in html
     assert 'id="memoryDegradation"' in html
     assert 'id="memoryTrustPreset"' in html
+    assert 'id="todayVeracity"' in html
+    assert 'id="todayDegradation"' in html
     assert 'by_veracity' in js
     assert 'by_degradation' in js
     assert 'contaminated_only' in js
     assert 'degradation_tier' in js
     assert 'trust-strip' in js
     assert 'effective_memory_weight' in js
+    assert 'Short-term notes' in (ROOT / 'dashboard_core.py').read_text()
+    assert 'Project notes' in (ROOT / 'dashboard_core.py').read_text()
+    assert 'Temporary context' not in (ROOT / 'dashboard_core.py').read_text()
+    assert 'Project context' not in (ROOT / 'dashboard_core.py').read_text()
+    assert '#today > .cards' in css
     assert '.trust-stated' in css
     assert '.lifecycle-cold' in css
 

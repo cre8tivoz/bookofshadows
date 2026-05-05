@@ -540,7 +540,7 @@ async function loadGlobalSearch(){
 }
 function recallItem(x){
   const m = x.memory;
-  return `<div class="item" data-id="${esc(m.id)}"><div class="meta"><span class="badge">score ${esc(x.approx_score)}</span><span class="badge">${esc(m.tier)}</span><span class="badge">${esc(m.source || '')}</span><span>${esc(m.timestamp || m.created_at || '')}</span></div><div class="content">${esc(m.content)}</div><div class="reasons">${x.reasons.map(r=>`<span>${esc(r)}</span>`).join('')}</div></div>`;
+  return `<div class="item" data-id="${esc(m.id)}"><div class="meta"><span class="badge">score ${esc(x.approx_score)}</span></div>${meta(m)}<div class="content">${esc(m.content)}</div><div class="reasons">${x.reasons.map(r=>`<span>${esc(r)}</span>`).join('')}</div></div>`;
 }
 async function loadRecallDebug(){
   const q = $('#recallQuery')?.value.trim() || '';
@@ -566,8 +566,10 @@ async function loadTodayDigest(day=''){
   const suffix = day ? `&day=${encodeURIComponent(day)}` : '';
   const data = await api(`/api/digest/today?limit=80${suffix}`);
   const c = data.counts || {};
-  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Recalled', c.memories_recalled], ['Triples', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
+  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Recalled', c.memories_recalled], ['Contaminated', c.contaminated_added], ['Degraded', c.degraded_added], ['Triples', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
   $('#todayEntities').innerHTML = tinyRows(data.breakdowns?.entities || []);
+  $('#todayVeracity').innerHTML = tinyRows(data.breakdowns?.veracity || []);
+  $('#todayDegradation').innerHTML = tinyRows(data.breakdowns?.degradation || []);
   $('#todaySources').innerHTML = tinyRows(data.breakdowns?.sources || []);
   $('#todaySessions').innerHTML = tinyRows(data.breakdowns?.sessions || []);
   $('#todayAdded .memory-grid').innerHTML = (data.memories_added || []).map(memoryItem).join('') || '<p class="muted">No memories added today.</p>';
