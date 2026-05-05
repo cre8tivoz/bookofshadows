@@ -623,9 +623,20 @@ function buildNeuralMapScene(data){
   const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
   const regionCount = Math.max(1, categories.length);
   const regions = Object.fromEntries(categories.map((cat, i) => {
-    const angle = -Math.PI / 2 + (i / regionCount) * Math.PI * 2;
-    const ring = .72 + (i % 2) * .10;
-    return [cat, { label:cat, angle, cx:Math.cos(angle) * 250 * ring, cy:Math.sin(angle) * 158 * ring, spread:72 + (i % 4) * 10 }];
+    // Place category regions inside a real 3D ellipsoid rather than on a flat ring.
+    // Golden-angle distribution gives an organic brain-cloud feel while remaining deterministic.
+    const t = regionCount === 1 ? 0 : (i / Math.max(1, regionCount - 1)) * 2 - 1;
+    const angle = -Math.PI / 2 + i * 2.399963;
+    const radial = Math.sqrt(Math.max(0, 1 - t * t));
+    const side = i % 2 === 0 ? -1 : 1;
+    return [cat, {
+      label:cat,
+      angle,
+      cx:Math.cos(angle) * radial * 230,
+      cy:t * 150 + Math.sin(angle * .7) * 24,
+      cz:Math.sin(angle) * radial * 190 + side * 28,
+      spread:78 + (i % 4) * 12
+    }];
   }));
   const degree = new Map();
   edges.forEach(e => { degree.set(e.source, (degree.get(e.source) || 0) + 1); degree.set(e.target, (degree.get(e.target) || 0) + 1); });
@@ -638,7 +649,7 @@ function buildNeuralMapScene(data){
   const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
   nodes.forEach((n,i) => {
     const cat = n.category || 'Other';
-    const region = regions[cat] || regions.Other || { cx:0, cy:0, angle:0, spread:80 };
+    const region = regions[cat] || regions.Other || { cx:0, cy:0, cz:0, angle:0, spread:80 };
     const ci = catIndex[cat] || 0;
     const weight = Math.max(1, Number(n.weight || n.count || 1));
     const d = degree.get(n.id) || 0;
@@ -647,18 +658,21 @@ function buildNeuralMapScene(data){
       const parent = linked ? byId[linked.source === n.id ? linked.target : linked.source] : null;
       const parentX = parent && parent.kind !== 'memory' && Number.isFinite(parent.x) ? parent.x : region.cx;
       const parentY = parent && parent.kind !== 'memory' && Number.isFinite(parent.y) ? parent.y : region.cy;
+      const parentZ = parent && parent.kind !== 'memory' && Number.isFinite(parent.z) ? parent.z : region.cz;
       const branch = ((i * 137.5) % 360) * Math.PI / 180;
-      const dist = 54 + (i % 7) * 15 + Math.min(52, Math.sqrt(weight) * 12);
-      n.x = parentX + Math.cos(branch) * dist;
-      n.y = parentY + Math.sin(branch) * dist * .72;
-      n.z = Math.sin(branch + ci) * 36;
+      const branch2 = ((i * 91.7 + ci * 23) % 360) * Math.PI / 180;
+      const dist = 58 + (i % 7) * 15 + Math.min(56, Math.sqrt(weight) * 12);
+      n.x = parentX + Math.cos(branch) * Math.cos(branch2*.34) * dist;
+      n.y = parentY + Math.sin(branch2) * dist * .78;
+      n.z = parentZ + Math.sin(branch) * Math.cos(branch2) * dist * .92;
     } else {
       const rank = Math.max(0, (hubsByCategory[cat] || []).indexOf(n));
-      const orbit = rank === 0 ? 0 : 30 + Math.sqrt(rank) * 24;
+      const orbit = rank === 0 ? 0 : 34 + Math.sqrt(rank) * 26;
       const angle = region.angle + rank * 2.399963 + (ci % 3) * .24;
+      const zAngle = angle * 1.31 + rank * .73;
       n.x = region.cx + Math.cos(angle) * orbit;
-      n.y = region.cy + Math.sin(angle) * orbit * .68;
-      n.z = Math.sin(angle * 1.7) * 44;
+      n.y = region.cy + Math.sin(zAngle) * orbit * .62;
+      n.z = region.cz + Math.sin(angle) * orbit * .88;
     }
     n.size = Math.min(30, 8 + Math.sqrt(weight + d) * (n.kind === 'memory' ? 3.2 : 4.1));
     n.twinkle = (i % 17) / 17;
@@ -681,8 +695,17 @@ function projectNeuralNode(n, w, h){
   const xr=x*cosR - z*sinR, zr=x*sinR + z*cosR;
   const cosT=Math.cos(constellationScene.tilt || 0), sinT=Math.sin(constellationScene.tilt || 0);
   const yr=y*cosT - zr*sinT, zt=y*sinT + zr*cosT;
-  const depthScale = Math.max(.62, Math.min(1.42, 1 + zt / 850));
-  return { x:w/2 + constellationScene.panX + xr*cameraScale*depthScale, y:h/2 + constellationScene.panY + yr*cameraScale*depthScale, z:zt, scale:cameraScale*depthScale, visible:true };
+  const cameraDistance = w < 620 ? 760 : 980;
+  const perspective = Math.max(.48, Math.min(1.85, cameraDistance / Math.max(260, cameraDistance - zt)));
+  const depthAlpha = Math.max(.36, Math.min(1, .58 + zt / 620));
+  return {
+    x:w/2 + constellationScene.panX + xr*cameraScale*perspective,
+    y:h/2 + constellationScene.panY + yr*cameraScale*perspective,
+    z:zt,
+    scale:cameraScale*perspective,
+    alpha:depthAlpha,
+    visible:true
+  };
 }
 function drawSynapse(ctx, a, b, e, c, t, compactCanvas){
   const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
@@ -695,14 +718,14 @@ function drawSynapse(ctx, a, b, e, c, t, compactCanvas){
   grad.addColorStop(.55, e.kind === 'memory' ? c.memorySynapse : c.synapseHot);
   grad.addColorStop(1, c.synapse);
   ctx.strokeStyle=grad;
-  ctx.globalAlpha=compactCanvas ? .28 : .36;
+  ctx.globalAlpha=(compactCanvas ? .28 : .36) * Math.min(1, Math.max(.42, ((a.alpha || 1) + (b.alpha || 1)) / 2));
   ctx.lineWidth=compactCanvas ? .72 : .92;
   ctx.setLineDash([]);
   ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.quadraticCurveTo(cx,cy,b.x,b.y); ctx.stroke();
   const phase=((t*.00018 + ((e.id || '').length % 17)/17) % 1);
   const qx=(1-phase)*(1-phase)*a.x + 2*(1-phase)*phase*cx + phase*phase*b.x;
   const qy=(1-phase)*(1-phase)*a.y + 2*(1-phase)*phase*cy + phase*phase*b.y;
-  ctx.globalAlpha=compactCanvas ? .34 : .52;
+  ctx.globalAlpha=(compactCanvas ? .34 : .52) * Math.min(1, Math.max(.42, ((a.alpha || 1) + (b.alpha || 1)) / 2));
   ctx.fillStyle=e.kind === 'memory' ? c.memory : c.star;
   ctx.beginPath(); ctx.arc(qx,qy,compactCanvas ? 1.7 : 2.2,0,Math.PI*2); ctx.fill();
 }
@@ -717,7 +740,8 @@ function drawNeuronSoma(ctx, n, p, c, t, compactCanvas){
   glow.addColorStop(0,'rgba(255,255,255,.82)');
   glow.addColorStop(.20,base);
   glow.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.globalAlpha=c.light ? .20 : .30;
+  const depthAlpha = p.alpha || 1;
+  ctx.globalAlpha=(c.light ? .20 : .30) * depthAlpha;
   ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,halo,0,Math.PI*2); ctx.fill();
   ctx.save(); ctx.translate(p.x,p.y); ctx.rotate((n.twinkle || 0)*Math.PI*2 + t*.00004);
   ctx.strokeStyle=base; ctx.lineCap='round'; ctx.shadowColor=base; ctx.shadowBlur=compactCanvas ? 5 : 8;
@@ -725,18 +749,18 @@ function drawNeuronSoma(ctx, n, p, c, t, compactCanvas){
   for(let i=0;i<dendrites;i++){
     const a=(i/dendrites)*Math.PI*2 + Math.sin(t*.00018+i)*.10;
     const length=somaR*(n.kind === 'memory' ? 1.55 : 2.15) + (i%3)*2.5;
-    ctx.globalAlpha=c.light ? .22 : .34;
+    ctx.globalAlpha=(c.light ? .22 : .34) * depthAlpha;
     ctx.lineWidth=Math.max(.55,somaR*.10);
     ctx.beginPath(); ctx.moveTo(Math.cos(a)*somaR*.72, Math.sin(a)*somaR*.72); ctx.lineTo(Math.cos(a)*length, Math.sin(a)*length); ctx.stroke();
     if(n.kind !== 'memory'){
-      ctx.globalAlpha=c.light ? .16 : .24;
+      ctx.globalAlpha=(c.light ? .16 : .24) * depthAlpha;
       const fork=length*.72;
       ctx.beginPath(); ctx.moveTo(Math.cos(a)*fork, Math.sin(a)*fork); ctx.lineTo(Math.cos(a+.38)*length*.96, Math.sin(a+.38)*length*.96); ctx.stroke();
     }
   }
-  ctx.globalAlpha=.96; ctx.fillStyle='rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(0,0,somaR*.88,0,Math.PI*2); ctx.fill();
-  ctx.globalAlpha=.78; ctx.fillStyle=base; ctx.beginPath(); ctx.arc(0,0,somaR*.58,0,Math.PI*2); ctx.fill();
-  ctx.globalAlpha=.72; ctx.fillStyle=c.bg; ctx.beginPath(); ctx.arc(-somaR*.16,-somaR*.18,somaR*.18,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=.96 * depthAlpha; ctx.fillStyle='rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(0,0,somaR*.88,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=.78 * depthAlpha; ctx.fillStyle=base; ctx.beginPath(); ctx.arc(0,0,somaR*.58,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=.72 * depthAlpha; ctx.fillStyle=c.bg; ctx.beginPath(); ctx.arc(-somaR*.16,-somaR*.18,somaR*.18,0,Math.PI*2); ctx.fill();
   ctx.restore();
   return { r:somaR, halo };
 }
@@ -769,7 +793,7 @@ function drawNeuralFrame(t=0){
   const projected = new Map();
   constellationScene.nodes.forEach(n => projected.set(n.id, projectNeuralNode(n,w,h)));
   (constellationScene.regions || []).slice(0,10).forEach((region, i) => {
-    const rp = projectNeuralNode({x:region.cx,y:region.cy,z:0},w,h);
+    const rp = projectNeuralNode({x:region.cx,y:region.cy,z:region.cz || 0},w,h);
     const rx = (region.spread || 82) * (compactCanvas ? 1.20 : 1.55) * rp.scale;
     const ry = (region.spread || 82) * (compactCanvas ? .76 : .98) * rp.scale;
     const hue = i % 3;
@@ -833,7 +857,7 @@ function drawNeuralFrame(t=0){
       const box={x:lx-4,y:ly-14,w:tw+8,h:19};
       const onCanvas=box.x>=10 && box.x+box.w<=w-10 && box.y>=10 && box.y+box.h<=h-10;
       const collides=labelBoxes.some(b => !(box.x+box.w<b.x || b.x+b.w<box.x || box.y+box.h<b.y || b.y+b.h<box.y));
-      if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=5; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(.82,.40+p.scale*.32); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
+      if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=5; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(.82,.40+p.scale*.32) * (p.alpha || 1); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
     }
     hits.push({x:p.x,y:p.y,r:Math.max(15,drawn.halo*.75),node:n});
   });
@@ -854,7 +878,7 @@ function updateVisualiserModeUI(){
     ? '<span><i class="legend-dot entity"></i>Neuron hub</span><span><i class="legend-dot memory"></i>Memory soma</span><span><i class="legend-line"></i>Synapse</span>'
     : '<span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span>';
   const help = $('#visualiserHelp');
-  if(help) help.textContent = mode === 'neural' ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron.' : 'Drag to orbit the neural sheet · Pan mode/Shift-drag to pan · wheel/pinch to zoom.') : 'Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.';
+  if(help) help.textContent = mode === 'neural' ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron.' : 'Drag to orbit the neural cloud · Pan mode/Shift-drag to pan · wheel/pinch to zoom.') : 'Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.';
   const pause = $('#constellationPause');
   if(pause){ pause.style.display = ''; pause.textContent = constellationScene.paused ? (mode === 'neural' ? 'Resume drift' : 'Resume rotation') : (mode === 'neural' ? 'Pause drift' : 'Pause rotation'); }
   const pan = $('#constellationPanMode');
@@ -966,11 +990,11 @@ function drawConstellationFrame(t=0){
       ctx.beginPath(); ctx.moveTo(-diag,-diag); ctx.lineTo(diag,diag); ctx.moveTo(-diag,diag); ctx.lineTo(diag,-diag); ctx.stroke();
     }
     ctx.shadowBlur=compactCanvas ? 5 : 7;
-    ctx.globalAlpha=.96;
+    ctx.globalAlpha=.96 * depthAlpha;
     ctx.fillStyle='rgba(255,255,255,.98)';
     ctx.beginPath(); ctx.arc(0,0,Math.max(.62, starR*.52),0,Math.PI*2); ctx.fill();
     ctx.fillStyle=base;
-    ctx.globalAlpha=.72;
+    ctx.globalAlpha=.72 * depthAlpha;
     ctx.beginPath(); ctx.arc(0,0,Math.max(.28, starR*.20),0,Math.PI*2); ctx.fill();
     ctx.globalAlpha=1;
     ctx.restore();
