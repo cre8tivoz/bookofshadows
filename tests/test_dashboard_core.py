@@ -305,6 +305,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'degradation_tier' in js
     assert 'trust-strip' in js
     assert 'effective_memory_weight' in js
+    assert 'contextLabel' in js
+    assert "'Temporary context':'Short-term notes'" in js
+    assert "'Project context':'Project notes'" in js
     assert 'Short-term notes' in (ROOT / 'dashboard_core.py').read_text()
     assert 'Project notes' in (ROOT / 'dashboard_core.py').read_text()
     assert 'Temporary context' not in (ROOT / 'dashboard_core.py').read_text()
