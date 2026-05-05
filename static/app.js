@@ -1614,7 +1614,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; sizes[i]=Math.max(3.5, Math.min(size * 2.8, n.size || size)); });
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
   const themeColors = colorForTheme();
-  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, threeVis.mode === 'neural' ? (kind === 'memory' ? 'soma' : 'neuron') : (kind === 'memory' ? 'orb' : 'star')), alphaTest:.04, size, sizeAttenuation:true, transparent:true, opacity: threeVis.mode === 'neural' ? (kind === 'memory' ? (themeColors.light ? .88 : .98) : (themeColors.light ? .76 : .86)) : (kind === 'memory' ? .96 : .90), depthWrite:false, blending:threeVis.mode === 'neural' ? (themeColors.light ? THREE.NormalBlending : THREE.AdditiveBlending) : THREE.NormalBlending });
+  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, threeVis.mode === 'neural' ? (kind === 'memory' ? 'soma' : 'neuron') : (kind === 'memory' ? 'orb' : 'star')), alphaTest:threeVis.mode === 'neural' ? .04 : .025, size, sizeAttenuation:true, transparent:true, opacity: threeVis.mode === 'neural' ? (kind === 'memory' ? (themeColors.light ? .88 : .98) : (themeColors.light ? .76 : .86)) : (kind === 'memory' ? .98 : .96), depthWrite:false, blending:threeVis.mode === 'neural' ? (themeColors.light ? THREE.NormalBlending : THREE.AdditiveBlending) : THREE.NormalBlending });
   const points = new THREE.Points(geometry, material); points.userData.nodes = selected; scene.add(points); return points;
 }
 function buildThreeLinkSegments(THREE, edges){
@@ -1680,8 +1680,8 @@ async function renderThreeVisualiser(data){
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 48);
     addNeuralDendrites(THREE, group, nodes, colors);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 8.8));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 8.2));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 15.5));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 14.5));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
