@@ -57,7 +57,8 @@ function meta(item, opts={}){
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
 function memoryItem(item, opts={}){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="memory-check" data-id="${esc(item.id)}" ${bulkSelection.has(item.id) ? 'checked' : ''} /></label>` : ''; return `<div class="item ${role ? 'has-role' : ''} ${opts.selectable ? 'selectable' : ''}" data-id="${esc(item.id)}">${selectable}${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
-function routeTabState(tab=currentRoute.tab || 'overview'){ return { tab }; }
+function canonicalTab(tab){ return tab === 'constellation' ? 'visualiser' : (tab || 'overview'); }
+function routeTabState(tab=currentRoute.tab || 'overview'){ return { tab: canonicalTab(tab) }; }
 function routeToUrl(state){
   const params = new URLSearchParams(location.search);
   ['tab','memory','session'].forEach(k => params.delete(k));
@@ -69,7 +70,7 @@ function routeToUrl(state){
 }
 function urlToRoute(){
   const params = new URLSearchParams(location.search);
-  const route = { tab: params.get('tab') || 'overview' };
+  const route = { tab: canonicalTab(params.get('tab') || 'overview') };
   if(params.get('memory')) route.drawer = { type:'memory', id:params.get('memory') };
   else if(params.get('session')) route.drawer = { type:'session', id:params.get('session') };
   if(route.drawer && (!params.get('tab') || route.tab === 'overview')) route.tab = route.drawer.type === 'memory' ? 'memories' : 'timelineView';
@@ -94,6 +95,8 @@ async function applyRoute(state){
     else if(route.drawer?.type === 'session') await openSessionDetail(route.drawer.id, { push:false });
     else closeDetail({ push:false });
     currentRoute = route;
+    const canonicalUrl = routeToUrl(route);
+    if(location.pathname + location.search !== canonicalUrl) history.replaceState(route, '', canonicalUrl);
   } finally {
     applyingHistory = false;
   }
@@ -231,7 +234,7 @@ function showPanel(sectionId, panelId){
   section.querySelectorAll('.section-tabs button').forEach(button => button.classList.toggle('active', button.dataset.panel === panelId));
 }
 function sectionFor(name){
-  return ({ search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
+  return ({ visualiser:'constellation', constellation:'constellation', search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
 }
 function defaultPanelFor(section){
   return ({ explore:'exploreSearch', activity:'activityTimeline', graph:'graphGraph', today:'todayAdded' })[section];
@@ -244,7 +247,7 @@ function switchTab(name, opts={}){
   document.body.classList.toggle('compact-page', section !== 'overview');
   $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
   $(`#${section}`).classList.add('active');
-  const nav = document.querySelector(`nav button[data-tab="${section}"]`);
+  const nav = document.querySelector(`nav button[data-tab="${canonicalTab(name)}"]`) || document.querySelector(`nav button[data-tab="${section}"]`);
   if(nav) nav.classList.add('active');
   showPanel(section, panelFor(name));
   closeDetail({ push:false });
@@ -1348,7 +1351,7 @@ function updateThreeUI(){
   const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? 'Resume drift' : 'Pause drift';
   const pan = $('#threePanMode'); if(pan) pan.textContent = threeVis.panMode ? 'Orbit mode' : 'Pan mode';
 }
-function resetThreeCamera(){ Object.assign(threeVis, { yaw:0, pitch: threeVis.mode === 'neural' ? .24 : .38, cameraZ: threeVis.mode === 'neural' ? 760 : 820, panX:0, panY:0, lastT:0 }); }
+function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .34 : .55, pitch: threeVis.mode === 'neural' ? .38 : .78, cameraZ: threeVis.mode === 'neural' ? 760 : 840, panX:0, panY:0, lastT:0 }); }
 function clearThreeScene(){
   if(threeVis.frame) cancelAnimationFrame(threeVis.frame);
   threeVis.frame = 0;
@@ -1356,39 +1359,124 @@ function clearThreeScene(){
   $('#threeLabels').innerHTML = '';
   Object.assign(threeVis, { renderer:null, scene:null, camera:null, group:null, nodes:[], edgePairs:[], labels:[], pulses:[] });
 }
+function cssHexToInt(hex){
+  const m = String(hex || '').match(/^#([0-9a-f]{6})$/i);
+  return m ? parseInt(m[1], 16) : 0xffffff;
+}
 function colorForTheme(){
-  const light = document.documentElement.dataset.theme === 'light';
-  return light ? { bg:0xfaf8f5, entity:0x138f7a, memory:0xb8643f, link:0x5d887e, pulse:0xff8f61, text:'#2b2927' } : { bg:0x06100f, entity:0x66e8c6, memory:0xff9b6a, link:0x47bda4, pulse:0xffb37d, text:'#f6fbf7' };
+  const c = threeVis.mode === 'neural' ? neuralColors() : constellationColors();
+  return {
+    bg: cssHexToInt(c.bg),
+    entity: cssHexToInt(c.star),
+    memory: cssHexToInt(c.memory),
+    link: cssHexToInt(threeVis.mode === 'neural' ? (c.light ? '#2a7665' : '#52d6b5') : (c.light ? '#19416c' : '#c6e0ff')),
+    pulse: cssHexToInt(c.memory),
+    text: c.text,
+    light: c.light
+  };
+}
+function makePointTexture(THREE, kind){
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const cx=32, cy=32;
+  if(kind === 'star'){
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,30);
+    g.addColorStop(0,'rgba(255,255,255,1)');
+    g.addColorStop(.28,'rgba(255,255,255,.92)');
+    g.addColorStop(.58,'rgba(255,255,255,.38)');
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.72)'; ctx.lineWidth=1.3;
+    ctx.beginPath(); ctx.moveTo(32,7); ctx.lineTo(32,57); ctx.moveTo(7,32); ctx.lineTo(57,32); ctx.stroke();
+  } else {
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,30);
+    g.addColorStop(0,'rgba(255,255,255,1)');
+    g.addColorStop(.44,'rgba(255,255,255,.82)');
+    g.addColorStop(.78,'rgba(255,255,255,.22)');
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,30,0,Math.PI*2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
 }
 function buildThreePositions(data){
-  const nodes = (data.nodes || []).slice(0, threeVis.mode === 'neural' ? 220 : 180);
+  if(threeVis.mode === 'neural') return buildThreeNeuralPositions(data);
+  const nodes = (data.nodes || []).slice(0,160).map(n => ({...n}));
   const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
-  const catIndex = new Map(categories.map((c,i)=>[c,i]));
-  return nodes.map((n,i) => {
-    const cat = catIndex.get(n.category || 'Other') || 0;
-    const angle = (i * 2.399963 + cat * .55) % (Math.PI*2);
+  const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
+  nodes.forEach((n,i) => {
+    const ci = catIndex[n.category || 'Other'] || 0;
+    const angle = (i / Math.max(nodes.length,1)) * Math.PI * 2 + ci * .62;
+    const band = n.kind === 'memory' ? 1.28 : .72 + (ci % 4) * .16;
+    const radius = 250 * band + (i % 7) * 16;
     const weight = Math.max(1, Number(n.weight || n.count || 1));
-    let x,y,z;
-    if(threeVis.mode === 'neural'){
-      const band = (cat - categories.length/2) * 32;
-      const radius = 84 + (i % 17) * 9 + Math.sqrt(weight) * 7;
-      x = Math.cos(angle) * radius * (1 + (cat % 3) * .16);
-      y = band + Math.sin(angle * .73) * 118 + ((i % 9) - 4) * 7;
-      z = Math.sin(angle) * radius * .82 + Math.cos(i*.41) * 92;
-    } else {
-      const shell = 180 + (cat % 5) * 24 + Math.sqrt(weight) * 5;
-      const phi = Math.acos(2 * (((i*37)%101)/100) - 1);
-      x = shell * Math.sin(phi) * Math.cos(angle);
-      y = shell * Math.cos(phi) * .72;
-      z = shell * Math.sin(phi) * Math.sin(angle);
-    }
-    return {...n, x, y, z, _degree:0, _weight:weight};
+    n.x = Math.cos(angle) * radius;
+    n.y = Math.sin(angle * 1.23) * (100 + (ci % 5) * 24);
+    n.z = Math.sin(angle) * radius * .82;
+    n.size = Math.min(22, 4 + Math.sqrt(weight)*3.4) * (n.kind === 'memory' ? 1.08 : 1);
+    n._degree = 0; n._weight = weight;
   });
+  return nodes;
+}
+function buildThreeNeuralPositions(data){
+  const nodes = (data.nodes || []).slice(0,170).map(n => ({...n}));
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const edges = (data.edges || []).filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)).slice(0,340);
+  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
+  const regionCount = Math.max(1, categories.length);
+  const regions = Object.fromEntries(categories.map((cat, i) => {
+    const t = regionCount === 1 ? 0 : (i / Math.max(1, regionCount - 1)) * 2 - 1;
+    const angle = -Math.PI / 2 + i * 2.399963;
+    const radial = Math.sqrt(Math.max(0, 1 - t * t));
+    const side = i % 2 === 0 ? -1 : 1;
+    return [cat, { label:cat, angle, cx:Math.cos(angle) * radial * 230, cy:t * 150 + Math.sin(angle * .7) * 24, cz:Math.sin(angle) * radial * 190 + side * 28, spread:78 + (i % 4) * 12 }];
+  }));
+  const degree = new Map();
+  edges.forEach(e => { degree.set(e.source, (degree.get(e.source) || 0) + 1); degree.set(e.target, (degree.get(e.target) || 0) + 1); });
+  const hubsByCategory = {};
+  nodes.filter(n => n.kind !== 'memory').sort((a,b)=>(Number(b.weight || b.count || 0)+ (degree.get(b.id)||0)) - (Number(a.weight || a.count || 0)+(degree.get(a.id)||0))).forEach(n => {
+    const cat = n.category || 'Other'; if(!hubsByCategory[cat]) hubsByCategory[cat] = []; hubsByCategory[cat].push(n);
+  });
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  nodes.forEach((n,i) => {
+    const cat = n.category || 'Other';
+    const region = regions[cat] || regions.Other || { cx:0, cy:0, cz:0, angle:0, spread:80 };
+    const ci = catIndex[cat] || 0;
+    const weight = Math.max(1, Number(n.weight || n.count || 1));
+    const d = degree.get(n.id) || 0;
+    if(n.kind === 'memory'){
+      const linked = edges.find(e => e.source === n.id || e.target === n.id);
+      const parent = linked ? byId[linked.source === n.id ? linked.target : linked.source] : null;
+      const parentX = parent && parent.kind !== 'memory' && Number.isFinite(parent.x) ? parent.x : region.cx;
+      const parentY = parent && parent.kind !== 'memory' && Number.isFinite(parent.y) ? parent.y : region.cy;
+      const parentZ = parent && parent.kind !== 'memory' && Number.isFinite(parent.z) ? parent.z : region.cz;
+      const branch = ((i * 137.5) % 360) * Math.PI / 180;
+      const branch2 = ((i * 91.7 + ci * 23) % 360) * Math.PI / 180;
+      const dist = 58 + (i % 7) * 15 + Math.min(56, Math.sqrt(weight) * 12);
+      n.x = parentX + Math.cos(branch) * Math.cos(branch2*.34) * dist;
+      n.y = parentY + Math.sin(branch2) * dist * .78;
+      n.z = parentZ + Math.sin(branch) * Math.cos(branch2) * dist * .92;
+    } else {
+      const rank = Math.max(0, (hubsByCategory[cat] || []).indexOf(n));
+      const orbit = rank === 0 ? 0 : 34 + Math.sqrt(rank) * 26;
+      const angle = region.angle + rank * 2.399963 + (ci % 3) * .24;
+      const zAngle = angle * 1.31 + rank * .73;
+      n.x = region.cx + Math.cos(angle) * orbit;
+      n.y = region.cy + Math.sin(zAngle) * orbit * .62;
+      n.z = region.cz + Math.sin(angle) * orbit * .88;
+    }
+    n.size = Math.min(30, 8 + Math.sqrt(weight + d) * (n.kind === 'memory' ? 3.2 : 4.1));
+    n._degree = d; n._weight = weight;
+  });
+  return nodes;
 }
 function limitedThreeEdges(data, byId){
   const degree = new Map(); const out=[];
-  const limit = threeVis.mode === 'neural' ? 260 : 170;
-  const degreeLimit = threeVis.mode === 'neural' ? 7 : 5;
+  const limit = threeVis.mode === 'neural' ? 132 : 260;
+  const degreeLimit = threeVis.mode === 'neural' ? 5 : 999;
   for(const e of (data.edges || [])){
     const a=byId.get(e.source), b=byId.get(e.target); if(!a || !b) continue;
     const da=degree.get(e.source)||0, db=degree.get(e.target)||0; if(da>=degreeLimit || db>=degreeLimit) continue;
@@ -1400,9 +1488,10 @@ function limitedThreeEdges(data, byId){
 function addPoints(THREE, scene, nodes, kind, color, size){
   const selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
   const positions = new Float32Array(selected.length * 3);
-  selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; });
+  const sizes = new Float32Array(selected.length);
+  selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; sizes[i]=Math.max(3.5, Math.min(size * 2.8, n.size || size)); });
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
-  const material = new THREE.PointsMaterial({ color, size, sizeAttenuation:true, transparent:true, opacity:.92, depthWrite:false, blending:THREE.AdditiveBlending });
+  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, kind === 'memory' ? 'orb' : 'star'), alphaTest:.04, size, sizeAttenuation:true, transparent:true, opacity: threeVis.mode === 'neural' ? .88 : .96, depthWrite:false, blending:THREE.AdditiveBlending });
   const points = new THREE.Points(geometry, material); points.userData.nodes = selected; scene.add(points); return points;
 }
 async function renderThreeVisualiser(data){
@@ -1438,10 +1527,10 @@ async function renderThreeVisualiser(data){
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
   const starGeom = new THREE.BufferGeometry(); starGeom.setAttribute('position', new THREE.BufferAttribute(starPositions,3));
-  scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, size:1.6, transparent:true, opacity:.38, depthWrite:false })));
+  scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:1.6, transparent:true, opacity:.38, depthWrite:false })));
   const pulseEdges = edges.slice(0, threeVis.mode === 'neural' ? 90 : 45);
   const pulseGeom = new THREE.BufferGeometry(); const pulsePositions = new Float32Array(pulseEdges.length*3); pulseGeom.setAttribute('position', new THREE.BufferAttribute(pulsePositions,3));
-  const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, size:5.2, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
+  const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'orb'), alphaTest:.04, size:5.2, transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending })); group.add(pulsePoints);
   const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 28 : 22);
   $('#threeLabels').innerHTML = labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
