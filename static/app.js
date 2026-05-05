@@ -1601,7 +1601,12 @@ function addHaloPoints(THREE, scene, nodes, kind, color, size){
   const positions = new Float32Array(selected.length * 3);
   selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; });
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
-  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, 'orb'), alphaTest:.02, size, sizeAttenuation:true, transparent:true, opacity: kind === 'memory' ? (colorForTheme().light ? .16 : .28) : (colorForTheme().light ? .18 : .34), depthWrite:false, blending:colorForTheme().light ? THREE.NormalBlending : THREE.AdditiveBlending });
+  const themeColors = colorForTheme();
+  const isNeural = threeVis.mode === 'neural';
+  const opacity = isNeural
+    ? (kind === 'memory' ? (themeColors.light ? .16 : .28) : (themeColors.light ? .18 : .34))
+    : (kind === 'memory' ? (themeColors.light ? .18 : .42) : (themeColors.light ? .20 : .46));
+  const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, 'orb'), alphaTest:.015, size, sizeAttenuation:true, transparent:true, opacity, depthWrite:false, blending:themeColors.light ? THREE.NormalBlending : THREE.AdditiveBlending });
   const points = new THREE.Points(geometry, material); scene.add(points); return points;
 }
 function addNeuralDendrites(THREE, group, nodes, colors){
@@ -1642,7 +1647,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   selected.forEach((n,i)=>{
     const weight = Math.max(1, Number(n.weight || n.count || 1));
     positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z;
-    sizes[i]=Math.max(size, Math.min(size * 2.45, (n.size || size) * 1.28));
+    sizes[i]=Math.max(size, Math.min(size * 2.8, (n.size || size) * 1.42));
     phases[i]=(n.twinkle || 0) * Math.PI * 2;
     freqs[i]=n.twinkleFreq || .0012;
     amps[i]=n.twinkleAmp || .12;
@@ -1683,7 +1688,7 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           float wave = sin(uTime * aFreq + aPhase) + sin(uTime * aFreq * 0.43 + aPhase * 1.71) * 0.45;
           vPulse = 1.0 + wave * aAmp;
           vMajor = aMajor;
-          gl_PointSize = aSize * vPulse * (uScale / max(260.0, -mvPosition.z));
+          gl_PointSize = aSize * vPulse * (uScale / max(72.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -1782,9 +1787,12 @@ async function renderThreeVisualiser(data){
     addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 50);
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 48);
     addNeuralDendrites(THREE, group, nodes, colors);
+  } else {
+    addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 86);
+    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 82);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 38));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 36));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 48));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 46));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
@@ -1880,10 +1888,12 @@ async function loadThreeVisualiser(){ renderThreeVisualiser(await api('/api/cons
 function switchThreeMode(mode){ threeVis.mode = mode === 'neural' ? 'neural' : 'constellation'; if(threeVis.data) renderThreeVisualiser(threeVis.data); else loadThreeVisualiser(); }
 function clampThreeCamera(){
   const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
-  threeVis.cameraZ = Math.max(260, Math.min(1800, Number.isFinite(threeVis.cameraZ) ? threeVis.cameraZ : (threeVis.mode === 'neural' ? 600 : 760)));
+  const fallbackZ = threeVis.mode === 'neural' ? 600 : 760;
+  const minCameraZ = fallbackZ / 10;
+  threeVis.cameraZ = Math.max(minCameraZ, Math.min(1800, Number.isFinite(threeVis.cameraZ) ? threeVis.cameraZ : fallbackZ));
   threeVis.yaw = Number.isFinite(threeVis.yaw) ? threeVis.yaw : 0;
   threeVis.pitch = Math.max(-1.15, Math.min(1.15, Number.isFinite(threeVis.pitch) ? threeVis.pitch : .32));
-  const zoomFactor = 900 / Math.max(320, threeVis.cameraZ);
+  const zoomFactor = 900 / Math.max(80, threeVis.cameraZ);
   const panLimitX = Math.max(120, rect.width * (.45 + zoomFactor * .18));
   const panLimitY = Math.max(120, rect.height * (.34 + zoomFactor * .12));
   threeVis.panX = Math.max(-panLimitX, Math.min(panLimitX, Number.isFinite(threeVis.panX) ? threeVis.panX : 0));
