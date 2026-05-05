@@ -1452,16 +1452,36 @@ function buildThreePositions(data){
   const nodes = (data.nodes || []).slice(0,160).map(n => ({...n}));
   const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
   const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
+  const categoryRank = {};
+  const categoryCount = Object.fromEntries(categories.map(c => [c, nodes.filter(n => (n.category || 'Other') === c).length]));
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const categoryCenters = Object.fromEntries(categories.map((cat, ci) => {
+    const t = categories.length <= 1 ? 0 : ((ci + .5) / categories.length) * 2 - 1;
+    const radial = Math.sqrt(Math.max(0, 1 - t * t));
+    const angle = ci * golden + .45;
+    return [cat, {
+      x:Math.cos(angle) * radial * 250,
+      y:t * 205,
+      z:Math.sin(angle) * radial * 310,
+      angle
+    }];
+  }));
   nodes.forEach((n,i) => {
-    const ci = catIndex[n.category || 'Other'] || 0;
-    const angle = (i / Math.max(nodes.length,1)) * Math.PI * 2 + ci * .62;
-    const band = n.kind === 'memory' ? 1.18 : .72 + (ci % 4) * .17;
-    const radius = 235 * band + (i % 7) * 17;
+    const cat = n.category || 'Other';
+    const ci = catIndex[cat] || 0;
+    const rank = categoryRank[cat] || 0; categoryRank[cat] = rank + 1;
+    const count = Math.max(1, categoryCount[cat] || 1);
+    const center = categoryCenters[cat] || {x:0,y:0,z:0,angle:0};
     const weight = Math.max(1, Number(n.weight || n.count || 1));
-    n.x = Math.cos(angle) * radius;
-    n.y = Math.sin(angle * 1.23) * (128 + (ci % 5) * 30) + (((i * 53) % 131) - 65) * 1.05;
-    n.z = Math.sin(angle) * radius * .98 + (((i * 97) % 181) - 90) * 1.9 + ((ci % 5) - 2) * 58;
-    n.size = Math.min(22, 4 + Math.sqrt(weight)*3.4) * (n.kind === 'memory' ? 1.08 : 1);
+    const t = count <= 1 ? 0 : ((rank + .5) / count) * 2 - 1;
+    const radial = Math.sqrt(Math.max(0, 1 - t * t));
+    const angle = rank * golden + ci * .73;
+    const shell = (n.kind === 'memory' ? 118 : 82) + Math.min(58, Math.sqrt(weight) * 11) + (rank % 5) * 9;
+    const wobble = ((i * 97) % 41 - 20);
+    n.x = center.x + Math.cos(angle) * radial * shell * 1.18 + Math.cos(center.angle + rank) * wobble;
+    n.y = center.y + t * shell * 1.08 + (((i * 53) % 67) - 33) * .55;
+    n.z = center.z + Math.sin(angle) * radial * shell * 1.42 + Math.sin(center.angle - rank * .5) * wobble * 1.35;
+    n.size = Math.min(32, 8 + Math.sqrt(weight)*4.8) * (n.kind === 'memory' ? 1.12 : 1);
     n._degree = 0; n._weight = weight;
   });
   return nodes;
@@ -1680,8 +1700,8 @@ async function renderThreeVisualiser(data){
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 48);
     addNeuralDendrites(THREE, group, nodes, colors);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 15.5));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 14.5));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 31));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 29));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
