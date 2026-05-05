@@ -242,8 +242,19 @@ function defaultPanelFor(section){
 function panelFor(name){
   return ({ search:'exploreSearch', memories:'exploreMemories', recall:'exploreRecall', timelineView:'activityTimeline', consolidations:'activityConsolidations', graph:'graphGraph', triples:'graphTriples', today:'todayAdded', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[name] || defaultPanelFor(name);
 }
+function stopCanvasVisualiserLoop(){
+  if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
+  constellationScene.frame = 0;
+  constellationScene.drag = null;
+  constellationScene.pointers?.clear?.();
+  constellationScene.lastFrameTime = 0;
+  constellationScene.renderLastTime = 0;
+}
+function isCanvasVisualiserActive(){ return $('#constellation')?.classList.contains('active'); }
 function switchTab(name, opts={}){
   const section = sectionFor(name);
+  if(section !== 'constellation') stopCanvasVisualiserLoop();
+  if(section !== 'visualiser3d' && threeVis?.renderer) clearThreeScene();
   document.body.classList.toggle('compact-page', section !== 'overview');
   $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
   $(`#${section}`).classList.add('active');
@@ -890,7 +901,7 @@ function drawNeuralFrame(t=0){
     hits.push({x:p.x,y:p.y,r:Math.max(15,drawn.halo*.75),node:n});
   });
   constellationScene.hits=hits;
-  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches && isCanvasVisualiserActive()) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
 }
 function neuralColors(){
   const light = document.documentElement.dataset.theme === 'light';
@@ -922,10 +933,11 @@ function switchVisualiserMode(mode){
   if(constellationScene.data) drawConstellation(constellationScene.data);
 }
 function drawVisualiserFrame(t=0){
+  if(!isCanvasVisualiserActive()){ stopCanvasVisualiserLoop(); return; }
   const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
   const interval = 16;
   if(t && constellationScene.renderLastTime && t - constellationScene.renderLastTime < interval){
-    constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
+    constellationScene.frame = isCanvasVisualiserActive() ? requestAnimationFrame(drawVisualiserFrame) : 0;
     return;
   }
   constellationScene.renderLastTime = t || 0;
@@ -1066,7 +1078,7 @@ function drawConstellationFrame(t=0){
     hits.push({x:p.x,y:p.y,r:Math.max(14,flare+8),node:n});
   });
   constellationScene.hits=hits;
-  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches && isCanvasVisualiserActive()) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
 }
 function clampConstellationCamera(w, h){
   constellationScene.zoom = Math.max(CONSTELLATION_MIN_ZOOM, Math.min(CONSTELLATION_MAX_ZOOM, Number.isFinite(constellationScene.zoom) ? constellationScene.zoom : 1));
@@ -1179,6 +1191,7 @@ function bindConstellationControls(canvas){
   canvas.addEventListener('pointercancel', endPointer);
 }
 function drawConstellation(data){
+  if(!isCanvasVisualiserActive()) return;
   if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
   constellationScene.frame = 0;
   constellationScene.renderLastTime = 0;
