@@ -541,7 +541,7 @@ function inspectConstellationNode(node){
 }
 function constellationColors(){
   const light = document.documentElement.dataset.theme === 'light';
-  return light ? { bg:'#fbf8f3', nebula:'rgba(101,214,255,.16)', star:'#146b8f', memory:'#c4821f', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(160,119,88,.20)' } : { bg:'#050711', nebula:'rgba(101,214,255,.18)', star:'#65d6ff', memory:'#ffd166', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(183,168,255,.18)' };
+  return light ? { light:true, bg:'#fbf8f3', nebula:'rgba(101,214,255,.13)', star:'#0d6f92', memory:'#a96d00', text:'#2b2927', muted:'rgba(66,58,52,.62)', edge:'rgba(18,48,94,.88)', memoryEdge:'rgba(104,52,0,.92)' } : { light:false, bg:'#050711', nebula:'rgba(101,214,255,.14)', star:'#65d6ff', memory:'#ffd166', text:'#f7f8ff', muted:'rgba(213,219,239,.64)', edge:'rgba(198,224,255,.40)', memoryEdge:'rgba(255,209,102,.52)' };
 }
 function projectConstellationNode(n, w, h, t){
   const rot = constellationScene.rotation;
@@ -602,11 +602,21 @@ function drawConstellationFrame(t=0){
   const bg = ctx.createRadialGradient(w*.52,h*.44,20,w*.52,h*.44,Math.max(w,h)*.72);
   bg.addColorStop(0, compactCanvas ? 'rgba(101,214,255,.08)' : c.nebula); bg.addColorStop(.45, compactCanvas ? 'rgba(124,124,255,.035)' : 'rgba(124,124,255,.08)'); bg.addColorStop(1,c.bg);
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
-  constellationScene.stars.forEach((s,i)=>{ const pulse=.55 + Math.sin(t*.001 + i)*.45; ctx.globalAlpha=s.a*pulse; ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r, 0, Math.PI*2); ctx.fill(); });
+  constellationScene.stars.forEach((s,i)=>{ const pulse=.55 + Math.sin(t*.001 + i)*.45; ctx.globalAlpha=s.a*pulse*(c.light ? .48 : .78); ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r*(c.light ? .72 : .9), 0, Math.PI*2); ctx.fill(); });
   ctx.globalAlpha=1;
   const projected = new Map();
   constellationScene.nodes.forEach(n => projected.set(n.id, projectConstellationNode(n,w,h,t)));
-  constellationScene.edges.forEach(e => { const a=projected.get(e.source), b=projected.get(e.target); if(!a || !b) return; const alpha=Math.max(.05, Math.min(.28, (a.scale+b.scale)/8)); ctx.strokeStyle=e.kind === 'memory' ? `rgba(255,209,102,${alpha})` : c.edge; ctx.lineWidth=.7 + Math.max(a.scale,b.scale)*.45; ctx.setLineDash(e.kind === 'memory' ? [2,8] : [1,10]); ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); });
+  constellationScene.edges.forEach(e => {
+    const a=projected.get(e.source), b=projected.get(e.target);
+    if(!a || !b) return;
+    const depthAlpha = Math.min(c.light ? .92 : .54, Math.max(c.light ? .52 : .20, (a.scale+b.scale) / (c.light ? 3.2 : 5.4)));
+    ctx.strokeStyle = e.kind === 'memory' ? c.memoryEdge : c.edge;
+    ctx.globalAlpha = depthAlpha;
+    ctx.lineWidth = (c.light ? 1.35 : .95) + Math.max(a.scale,b.scale) * (c.light ? .68 : .48);
+    ctx.setLineDash(c.light ? (e.kind === 'memory' ? [7,4] : []) : (e.kind === 'memory' ? [5,4] : [5,5]));
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  });
+  ctx.globalAlpha=1;
   ctx.setLineDash([]);
   const hits=[];
   const labelBoxes=[];
@@ -616,47 +626,49 @@ function drawConstellationFrame(t=0){
     const base=n.kind === 'memory' ? c.memory : c.star;
     const pulse=.88 + Math.sin(t*.0022 + n.twinkle*6.28)*.12;
     const weight = Math.max(1, Number(n.weight || n.count || 1));
-    const starR = Math.min(compactCanvas ? 3.4 : 5.4, Math.max(compactCanvas ? .9 : 1.1, (1 + Math.sqrt(weight)) * p.scale * (compactCanvas ? .46 : .62))) * pulse;
-    const flare = starR * (compactCanvas ? 3.1 : 3.6);
-    const halo = starR * (compactCanvas ? 2.8 : 3.4);
-    ctx.globalAlpha=Math.max(.08, Math.min(compactCanvas ? .30 : .42, p.scale * (compactCanvas ? .22 : .34)));
+    const starR = Math.min(compactCanvas ? 4.2 : 6.0, Math.max(compactCanvas ? 1.1 : 1.35, (1 + Math.sqrt(weight)) * p.scale * (compactCanvas ? .58 : .70))) * pulse;
+    const important = weight > 2.7 || n.kind === 'memory';
+    const flare = Math.min(compactCanvas ? 11.5 : 15.5, starR * (important ? 2.85 : 2.15));
+    const halo = Math.max(2.6, starR * (important ? 2.7 : 2.0));
+    ctx.globalAlpha=Math.max(c.light ? .16 : .08, Math.min(compactCanvas ? .34 : .40, p.scale * (compactCanvas ? .24 : .30)));
     const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,halo);
-    glow.addColorStop(0,'rgba(255,255,255,.62)'); glow.addColorStop(.18,base); glow.addColorStop(1,'rgba(0,0,0,0)');
+    glow.addColorStop(0,'rgba(255,255,255,.76)'); glow.addColorStop(.28,base); glow.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,halo,0,Math.PI*2); ctx.fill();
     ctx.save();
     ctx.translate(p.x,p.y);
-    ctx.rotate(t*.00022 + n.twinkle*Math.PI);
-    ctx.globalAlpha=Math.max(.32, Math.min(.95, p.scale*.72));
-    ctx.strokeStyle=base;
-    ctx.lineWidth=compactCanvas ? .85 : 1.05;
+    ctx.rotate(t*.00018 + n.twinkle*Math.PI);
     ctx.shadowColor=base;
-    ctx.shadowBlur=compactCanvas ? 3 : 5;
+    ctx.shadowBlur=compactCanvas ? 2 : 4;
+    ctx.globalAlpha=Math.max(.62, Math.min(1, p.scale*.86));
+    ctx.fillStyle=base;
     ctx.beginPath();
-    ctx.moveTo(-flare,0); ctx.lineTo(flare,0);
-    ctx.moveTo(0,-flare); ctx.lineTo(0,flare);
-    if(!compactCanvas || weight > 2.8){
-      ctx.moveTo(-flare*.42,-flare*.42); ctx.lineTo(flare*.42,flare*.42);
-      ctx.moveTo(-flare*.42,flare*.42); ctx.lineTo(flare*.42,-flare*.42);
+    const outer = flare, inner = Math.max(.45, starR*.38);
+    for(let i=0;i<8;i++){
+      const a = -Math.PI/2 + i*Math.PI/4;
+      const r = i % 2 === 0 ? outer : inner;
+      const x = Math.cos(a)*r, y = Math.sin(a)*r;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
-    ctx.stroke();
+    ctx.closePath(); ctx.fill();
     ctx.shadowBlur=0;
     ctx.globalAlpha=1;
-    ctx.fillStyle='#fff';
-    ctx.beginPath(); ctx.arc(0,0,Math.max(.75, starR*.34),0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.96)';
+    ctx.beginPath(); ctx.arc(0,0,Math.max(.72, starR*.48),0,Math.PI*2); ctx.fill();
     ctx.fillStyle=base;
-    ctx.beginPath(); ctx.arc(0,0,starR,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,.78)'; ctx.lineWidth=.55; ctx.stroke();
+    ctx.globalAlpha=.78;
+    ctx.beginPath(); ctx.arc(0,0,Math.max(.55, starR*.26),0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
     ctx.restore();
-    const showLabel = compactLabels ? (p.scale > 1.03 || (n.kind === 'memory' && Number(n.weight || 0) > 3.2)) : (p.scale > .72 || n.kind === 'memory');
+    const showLabel = compactLabels ? (p.scale > 1.15 || weight > 4.6) : (p.scale > .98 || weight > 4.2 || (n.kind === 'memory' && weight > 3.4));
     if(showLabel){
       const label=(n.label || '').replace(/^memory:/,'mem ');
       const short=label.length>24?label.slice(0,21)+'…':label;
-      ctx.font=`${Math.round((compactLabels ? 9 : 10) + p.scale*3)}px Inter, system-ui, sans-serif`;
+      ctx.font=`${Math.round((compactLabels ? 9 : 10) + p.scale*2.5)}px Inter, system-ui, sans-serif`;
       const lx=p.x+flare+6, ly=p.y+4, tw=ctx.measureText(short).width;
       const box={x:lx-3,y:ly-13,w:tw+6,h:17};
       const onCanvas=box.x>=10 && box.x+box.w<=w-10 && box.y>=10 && box.y+box.h<=h-10;
       const collides=labelBoxes.some(b => !(box.x+box.w<b.x || b.x+b.w<box.x || box.y+box.h<b.y || b.y+b.h<box.y));
-      if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=4; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(1,.42+p.scale*.58); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
+      if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=4; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(.92,.36+p.scale*.48); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
     }
     hits.push({x:p.x,y:p.y,r:Math.max(14,flare+8),node:n});
   });
