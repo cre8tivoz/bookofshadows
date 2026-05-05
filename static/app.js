@@ -1597,7 +1597,16 @@ function addNeuralAuraOvals(THREE, group, regions, colors){
   });
 }
 function addHaloPoints(THREE, scene, nodes, kind, color, size){
-  const selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
+  let selected = nodes.filter(n => (n.kind === 'memory') === (kind === 'memory'));
+  if(threeVis.mode !== 'neural'){
+    selected = selected
+      .filter(n => {
+        const weight = Math.max(1, Number(n.weight || n.count || 1));
+        return weight > (kind === 'memory' ? 3.6 : 4.4) || Number(n._degree || 0) > 3;
+      })
+      .sort((a,b)=>(Math.max(1, Number(b.weight || b.count || 1)) + Number(b._degree || 0)) - (Math.max(1, Number(a.weight || a.count || 1)) + Number(a._degree || 0)))
+      .slice(0, kind === 'memory' ? 30 : 44);
+  }
   const positions = new Float32Array(selected.length * 3);
   selected.forEach((n,i)=>{ positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z; });
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
@@ -1605,7 +1614,7 @@ function addHaloPoints(THREE, scene, nodes, kind, color, size){
   const isNeural = threeVis.mode === 'neural';
   const opacity = isNeural
     ? (kind === 'memory' ? (themeColors.light ? .16 : .28) : (themeColors.light ? .18 : .34))
-    : (kind === 'memory' ? (themeColors.light ? .18 : .42) : (themeColors.light ? .20 : .46));
+    : (kind === 'memory' ? (themeColors.light ? .12 : .24) : (themeColors.light ? .13 : .26));
   const material = new THREE.PointsMaterial({ color, map:makePointTexture(THREE, 'orb'), alphaTest:.015, size, sizeAttenuation:true, transparent:true, opacity, depthWrite:false, blending:themeColors.light ? THREE.NormalBlending : THREE.AdditiveBlending });
   const points = new THREE.Points(geometry, material); scene.add(points); return points;
 }
@@ -1702,9 +1711,9 @@ function addPoints(THREE, scene, nodes, kind, color, size){
           vec2 p = gl_PointCoord - vec2(0.5);
           float d = length(p);
           if(d > 0.5) discard;
-          float core = 1.0 - smoothstep(0.030, 0.075, d);
-          float body = 1.0 - smoothstep(0.070, 0.155, d);
-          float halo = (1.0 - smoothstep(0.16, 0.47, d)) * 0.16;
+          float core = 1.0 - smoothstep(0.040, 0.095, d);
+          float body = 1.0 - smoothstep(0.095, 0.230, d);
+          float halo = (1.0 - smoothstep(0.24, 0.48, d)) * 0.10;
           float rayH = max(0.0, 1.0 - abs(p.y) / 0.012) * (1.0 - smoothstep(0.08, 0.46, abs(p.x)));
           float rayV = max(0.0, 1.0 - abs(p.x) / 0.012) * (1.0 - smoothstep(0.08, 0.46, abs(p.y)));
           float diag1 = max(0.0, 1.0 - abs(p.x - p.y) / 0.014) * (1.0 - smoothstep(0.07, 0.28, d));
@@ -1771,6 +1780,7 @@ async function renderThreeVisualiser(data){
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(colors.bg, 0);
   viewport.prepend(renderer.domElement);
   const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(colors.bg, threeVis.mode === 'neural' ? .0011 : .0009);
+  const mobileThree = (viewport.getBoundingClientRect?.().width || 650) < 520;
   const camera = new THREE.PerspectiveCamera(48, 1, 1, 5000);
   const group = new THREE.Group(); scene.add(group);
   const ambient = new THREE.AmbientLight(0xffffff, .55); scene.add(ambient);
@@ -1779,7 +1789,7 @@ async function renderThreeVisualiser(data){
   const linkGeom = buildThreeLinkSegments(THREE, edges);
   const linkMaterial = threeVis.mode === 'neural'
     ? new THREE.LineBasicMaterial({ color:colors.link, transparent:true, opacity:colors.light ? .30 : .40, blending:colors.light ? THREE.NormalBlending : THREE.AdditiveBlending, depthWrite:false })
-    : new THREE.LineDashedMaterial({ color:colors.link, transparent:true, opacity:colors.light ? .16 : .13, dashSize:10, gapSize:8, blending:THREE.NormalBlending, depthWrite:false });
+    : new THREE.LineDashedMaterial({ color:colors.link, transparent:true, opacity:colors.light ? (mobileThree ? .07 : .13) : (mobileThree ? .045 : .09), dashSize:10, gapSize:10, blending:THREE.NormalBlending, depthWrite:false });
   const linkLines = new THREE.LineSegments(linkGeom, linkMaterial);
   if(threeVis.mode !== 'neural') linkLines.computeLineDistances();
   group.add(linkLines);
@@ -1788,11 +1798,11 @@ async function renderThreeVisualiser(data){
     addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 48);
     addNeuralDendrites(THREE, group, nodes, colors);
   } else {
-    addHaloPoints(THREE, group, nodes, 'entity', colors.entity, 86);
-    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, 82);
+    addHaloPoints(THREE, group, nodes, 'entity', colors.entity, mobileThree ? 58 : 68);
+    addHaloPoints(THREE, group, nodes, 'memory', colors.memory, mobileThree ? 56 : 66);
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 48));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 46));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 52));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 50));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
@@ -1840,8 +1850,8 @@ function updateThreeLabels(){
   const viewport = $('#threeViewport'); const rect = viewport.getBoundingClientRect(); const v = new threeVis.THREE.Vector3();
   updateThreeAuras(rect, v);
   const labelBoxes = [];
-  const zoomReveal = threeVis.mode === 'neural' ? Math.max(0, Math.min(1, (900 - threeVis.cameraZ) / 420)) : 0;
-  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 7 : 11) + Math.round(zoomReveal * (rect.width < 520 ? 9 : 12))) : 22;
+  const zoomReveal = threeVis.mode === 'neural' ? Math.max(0, Math.min(1, (900 - threeVis.cameraZ) / 420)) : Math.max(0, Math.min(1, (760 - threeVis.cameraZ) / 520));
+  const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 7 : 11) + Math.round(zoomReveal * (rect.width < 520 ? 9 : 12))) : ((rect.width < 520 ? 4 : 9) + Math.round(zoomReveal * (rect.width < 520 ? 5 : 8)));
   let shown = 0;
   $$('#threeLabels .three-label').forEach((el,i)=>{
     const n = threeVis.labels[i]; if(!n) return;
