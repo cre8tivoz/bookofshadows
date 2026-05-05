@@ -1358,7 +1358,7 @@ function updateThreeUI(){
   const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? 'Resume drift' : 'Pause drift';
   const pan = $('#threePanMode'); if(pan) pan.textContent = threeVis.panMode ? 'Orbit mode' : 'Pan mode';
 }
-function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .12 : .55, pitch: threeVis.mode === 'neural' ? .10 : .78, cameraZ: threeVis.mode === 'neural' ? 860 : 840, panX:0, panY:0, lastT:0 }); }
+function resetThreeCamera(){ Object.assign(threeVis, { yaw: threeVis.mode === 'neural' ? .12 : .55, pitch: threeVis.mode === 'neural' ? .10 : .78, cameraZ: threeVis.mode === 'neural' ? 600 : 840, panX:0, panY: threeVis.mode === 'neural' ? -10 : 0, lastT:0 }); }
 function clearThreeScene(){
   if(threeVis.frame) cancelAnimationFrame(threeVis.frame);
   threeVis.frame = 0;
@@ -1765,7 +1765,7 @@ async function loadThreeVisualiser(){ renderThreeVisualiser(await api('/api/cons
 function switchThreeMode(mode){ threeVis.mode = mode === 'neural' ? 'neural' : 'constellation'; if(threeVis.data) renderThreeVisualiser(threeVis.data); else loadThreeVisualiser(); }
 function clampThreeCamera(){
   const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
-  threeVis.cameraZ = Math.max(260, Math.min(1800, Number.isFinite(threeVis.cameraZ) ? threeVis.cameraZ : (threeVis.mode === 'neural' ? 860 : 840)));
+  threeVis.cameraZ = Math.max(260, Math.min(1800, Number.isFinite(threeVis.cameraZ) ? threeVis.cameraZ : (threeVis.mode === 'neural' ? 600 : 840)));
   threeVis.yaw = Number.isFinite(threeVis.yaw) ? threeVis.yaw : 0;
   threeVis.pitch = Math.max(-1.15, Math.min(1.15, Number.isFinite(threeVis.pitch) ? threeVis.pitch : .32));
   const zoomFactor = 900 / Math.max(320, threeVis.cameraZ);
