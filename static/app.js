@@ -581,19 +581,20 @@ function drawConstellationFrame(t=0){
   const canvas = $('#constellationCanvas');
   if(!canvas) return;
   const wrap = canvas.parentElement;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   // Use content-box dimensions only. getBoundingClientRect() includes the
   // wrapper border; writing that value back to canvas.style.height creates a
   // per-frame growth loop on mobile.
   const w = Math.max(320, wrap.clientWidth || canvas.clientWidth || 1000);
   const h = Math.max(430, wrap.clientHeight || canvas.clientHeight || 680);
+  const compactCanvas = w < 620;
   if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); }
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const c = constellationColors();
   ctx.clearRect(0,0,w,h);
   const bg = ctx.createRadialGradient(w*.52,h*.44,20,w*.52,h*.44,Math.max(w,h)*.72);
-  bg.addColorStop(0,c.nebula); bg.addColorStop(.45,'rgba(124,124,255,.08)'); bg.addColorStop(1,c.bg);
+  bg.addColorStop(0, compactCanvas ? 'rgba(101,214,255,.08)' : c.nebula); bg.addColorStop(.45, compactCanvas ? 'rgba(124,124,255,.035)' : 'rgba(124,124,255,.08)'); bg.addColorStop(1,c.bg);
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
   constellationScene.stars.forEach((s,i)=>{ const pulse=.55 + Math.sin(t*.001 + i)*.45; ctx.globalAlpha=s.a*pulse; ctx.fillStyle=c.text; ctx.beginPath(); ctx.arc(s.x*w, s.y*h, s.r, 0, Math.PI*2); ctx.fill(); });
   ctx.globalAlpha=1;
@@ -603,31 +604,55 @@ function drawConstellationFrame(t=0){
   ctx.setLineDash([]);
   const hits=[];
   const labelBoxes=[];
-  const compactLabels = w < 620;
+  const compactLabels = compactCanvas;
   [...constellationScene.nodes].sort((a,b)=>projected.get(a.id).z-projected.get(b.id).z).forEach(n => {
     const p=projected.get(n.id); if(!p?.visible) return;
     const base=n.kind === 'memory' ? c.memory : c.star;
-    const pulse=.86 + Math.sin(t*.0022 + n.twinkle*6.28)*.14;
-    const r=Math.max(2.5,n.size*p.scale)*pulse;
-    ctx.globalAlpha=Math.max(.28,Math.min(1,p.scale*.9));
-    const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3.8);
-    glow.addColorStop(0,'rgba(255,255,255,.95)'); glow.addColorStop(.22,base); glow.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,r*3.8,0,Math.PI*2); ctx.fill();
-    if(n.kind === 'memory' || Number(n.weight || 0) > 2.8){ ctx.globalAlpha=.20*p.scale; ctx.strokeStyle=base; ctx.lineWidth=1; ctx.beginPath(); ctx.ellipse(p.x,p.y,r*2.2,r*1.05, t*.00025+n.twinkle,0,Math.PI*2); ctx.stroke(); }
-    ctx.globalAlpha=1; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(p.x-r*.2,p.y-r*.24,Math.max(1.1,r*.24),0,Math.PI*2); ctx.fill();
-    ctx.fillStyle=base; ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill();
+    const pulse=.88 + Math.sin(t*.0022 + n.twinkle*6.28)*.12;
+    const weight = Math.max(1, Number(n.weight || n.count || 1));
+    const starR = Math.min(compactCanvas ? 3.4 : 5.4, Math.max(compactCanvas ? .9 : 1.1, (1 + Math.sqrt(weight)) * p.scale * (compactCanvas ? .46 : .62))) * pulse;
+    const flare = starR * (compactCanvas ? 3.1 : 3.6);
+    const halo = starR * (compactCanvas ? 2.8 : 3.4);
+    ctx.globalAlpha=Math.max(.08, Math.min(compactCanvas ? .30 : .42, p.scale * (compactCanvas ? .22 : .34)));
+    const glow=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,halo);
+    glow.addColorStop(0,'rgba(255,255,255,.62)'); glow.addColorStop(.18,base); glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,halo,0,Math.PI*2); ctx.fill();
+    ctx.save();
+    ctx.translate(p.x,p.y);
+    ctx.rotate(t*.00022 + n.twinkle*Math.PI);
+    ctx.globalAlpha=Math.max(.32, Math.min(.95, p.scale*.72));
+    ctx.strokeStyle=base;
+    ctx.lineWidth=compactCanvas ? .85 : 1.05;
+    ctx.shadowColor=base;
+    ctx.shadowBlur=compactCanvas ? 3 : 5;
+    ctx.beginPath();
+    ctx.moveTo(-flare,0); ctx.lineTo(flare,0);
+    ctx.moveTo(0,-flare); ctx.lineTo(0,flare);
+    if(!compactCanvas || weight > 2.8){
+      ctx.moveTo(-flare*.42,-flare*.42); ctx.lineTo(flare*.42,flare*.42);
+      ctx.moveTo(-flare*.42,flare*.42); ctx.lineTo(flare*.42,-flare*.42);
+    }
+    ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(0,0,Math.max(.75, starR*.34),0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=base;
+    ctx.beginPath(); ctx.arc(0,0,starR,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.78)'; ctx.lineWidth=.55; ctx.stroke();
+    ctx.restore();
     const showLabel = compactLabels ? (p.scale > 1.03 || (n.kind === 'memory' && Number(n.weight || 0) > 3.2)) : (p.scale > .72 || n.kind === 'memory');
     if(showLabel){
       const label=(n.label || '').replace(/^memory:/,'mem ');
       const short=label.length>24?label.slice(0,21)+'…':label;
       ctx.font=`${Math.round((compactLabels ? 9 : 10) + p.scale*3)}px Inter, system-ui, sans-serif`;
-      const lx=p.x+r+6, ly=p.y+4, tw=ctx.measureText(short).width;
+      const lx=p.x+flare+6, ly=p.y+4, tw=ctx.measureText(short).width;
       const box={x:lx-3,y:ly-13,w:tw+6,h:17};
       const onCanvas=box.x>=10 && box.x+box.w<=w-10 && box.y>=10 && box.y+box.h<=h-10;
       const collides=labelBoxes.some(b => !(box.x+box.w<b.x || b.x+b.w<box.x || box.y+box.h<b.y || b.y+b.h<box.y));
       if(onCanvas && !collides){ labelBoxes.push(box); ctx.lineWidth=4; ctx.strokeStyle=c.bg; ctx.fillStyle=c.text; ctx.globalAlpha=Math.min(1,.42+p.scale*.58); ctx.strokeText(short,lx,ly); ctx.fillText(short,lx,ly); ctx.globalAlpha=1; }
     }
-    hits.push({x:p.x,y:p.y,r:Math.max(12,r+8),node:n});
+    hits.push({x:p.x,y:p.y,r:Math.max(14,flare+8),node:n});
   });
   constellationScene.hits=hits;
   if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches) constellationScene.frame=requestAnimationFrame(drawConstellationFrame);
