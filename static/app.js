@@ -1470,7 +1470,8 @@ function buildThreePositions(data){
     n.x = Math.cos(longitude) * radial * radius;
     n.y = Math.sin(latitude) * radius * .92 + orbitBias;
     n.z = Math.sin(longitude) * radial * radius * 1.12 + Math.cos(longitude * 1.7 + ci) * 54;
-    n.size = Math.min(22, 4 + Math.sqrt(weight)*3.4) * (n.kind === 'memory' ? 1.08 : 1);
+    const sizeJitter = 1 + (((i * 37) % 11) - 5) * .035;
+    n.size = Math.min(42, 9 + Math.sqrt(weight)*6.2 + (n.kind === 'memory' ? 3.5 : 4.5)) * sizeJitter;
     n.twinkle = (i % 23) / 23;
     const twinkleTier = i % 17 === 0 ? 2 : (i % 5 === 0 ? 1 : 0);
     n.twinkleFreq = twinkleTier === 2 ? .0048 + ((i * 41) % 130) / 100000 : (twinkleTier === 1 ? .0024 + ((i * 47) % 120) / 100000 : .00125 + ((i * 53) % 110) / 100000);
@@ -1645,7 +1646,9 @@ function addPoints(THREE, scene, nodes, kind, color, size){
   selected.forEach((n,i)=>{
     const weight = Math.max(1, Number(n.weight || n.count || 1));
     positions[i*3]=n.x; positions[i*3+1]=n.y; positions[i*3+2]=n.z;
-    sizes[i]=Math.max(size * .72, Math.min(size * 1.85, (n.size || size) * 1.18));
+    const degreeBoost = Math.min(10, Number(n._degree || 0) * 1.9);
+    const variedSize = (n.size || size) + degreeBoost;
+    sizes[i]=Math.max(size * .88, Math.min(size * 2.65, variedSize * 1.55));
     phases[i]=(n.twinkle || 0) * Math.PI * 2;
     freqs[i]=n.twinkleFreq || .0012;
     amps[i]=n.twinkleAmp || .12;
@@ -1790,8 +1793,8 @@ async function renderThreeVisualiser(data){
     // Constellation already has per-star shader halos. A separate halo layer made
     // the mobile view read like blurry particles instead of the original star map.
   }
-  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 24 : 38));
-  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 20 : 36));
+  group.add(addPoints(THREE, group, nodes, 'entity', colors.entity, threeVis.mode === 'neural' ? 28 : 46));
+  group.add(addPoints(THREE, group, nodes, 'memory', colors.memory, threeVis.mode === 'neural' ? 24 : 44));
   const starCount = threeVis.mode === 'neural' ? 360 : 420;
   const starPositions = new Float32Array(starCount*3);
   for(let i=0;i<starCount;i++){ const r=600+((i*37)%480), a=i*2.17, b=((i*53)%180-90)*Math.PI/180; starPositions.set([Math.cos(a)*Math.cos(b)*r, Math.sin(b)*r, Math.sin(a)*Math.cos(b)*r], i*3); }
