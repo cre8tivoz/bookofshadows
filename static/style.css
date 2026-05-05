@@ -246,3 +246,9 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 [data-theme="light"] .trust-unknown,[data-theme="light"] .lifecycle-none{color:#6b6560;background:#faf8f5;border-color:#e2dbd3}
 [data-theme="light"] .lifecycle-cold{color:#9a4f31;background:#fff0eb;border-color:#e0bba9}
 @media(max-width:760px),(max-width:940px) and (max-height:520px){.trust-strip{gap:6px}.trust-chip{font-size:11px;padding:6px 8px}.toolbar select#memoryVeracity,.toolbar select#memoryDegradation,.toolbar select#memoryTrustPreset{min-width:100%}}
+
+/* Overview metric grid: six cards should be either one clean row or a balanced 3×2. */
+#overview > .cards{grid-template-columns:repeat(6,minmax(150px,1fr))}
+@media(max-width:1380px){#overview > .cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px),(max-width:940px) and (max-height:520px){#overview > .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:380px){#overview > .cards{grid-template-columns:1fr}}
