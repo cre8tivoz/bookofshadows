@@ -206,6 +206,33 @@ function askReplacement(content){
     validate: (v) => v ? '' : 'Replacement content cannot be empty.'
   });
 }
+function askVeracity(current){
+  const value = String(current || 'unknown').toLowerCase();
+  return openActionModal({
+    title: 'Set trust / veracity',
+    description: 'Use this only after human review. Lifecycle hot/warm/cold stays automatic.',
+    confirmText: 'Save trust',
+    bodyHtml: `<label class="modal-field"><span>Trust / veracity</span><select id="modalVeracity">
+      ${['stated','inferred','tool','imported','unknown'].map(v => `<option value="${v}"${v === value ? ' selected' : ''}>${v}</option>`).join('')}
+    </select></label>`,
+    readValue: () => $('#modalVeracity').value,
+    validate: (v) => ['stated','inferred','tool','imported','unknown'].includes(v) ? '' : 'Choose a valid trust value.'
+  });
+}
+function askExpiry(current){
+  return openActionModal({
+    title: 'Set expiry',
+    description: 'Set valid_until as an ISO timestamp, or leave blank to clear expiry. Expire now remains the safer one-click option for wrong memories.',
+    confirmText: 'Save expiry',
+    bodyHtml: `<label class="modal-field"><span>Valid until</span><input id="modalExpiry" type="text" placeholder="2026-06-01T00:00:00" value="${esc(current || '')}" /></label><p class="muted">Blank means no scheduled expiry.</p>`,
+    readValue: () => $('#modalExpiry').value.trim(),
+    validate: (v) => {
+      if(!v) return '';
+      const d = Date.parse(v);
+      return Number.isFinite(d) ? '' : 'Enter an ISO timestamp like 2026-06-01T00:00:00, or leave blank.';
+    }
+  });
+}
 
 function fmtBytes(n){
   n = Number(n || 0);
@@ -468,17 +495,15 @@ async function openMemoryDetail(memoryId, opts={}){
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#editVeracity').onclick = async () => {
-    const current = String(item.veracity || 'unknown').toLowerCase();
-    const v = prompt('Set trust/veracity: stated, inferred, tool, imported, unknown', current);
+    const v = await askVeracity(item.veracity || 'unknown');
     if(v === null) return;
-    try { const r = await postJson('/api/admin/memory/veracity', {memory_id:item.id, veracity:v.trim().toLowerCase(), backup: backup()}); $('#memoryActionStatus').textContent = `Trust updated to ${r.veracity}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    try { const r = await postJson('/api/admin/memory/veracity', {memory_id:item.id, veracity:v, backup: backup()}); $('#memoryActionStatus').textContent = `Trust updated to ${r.veracity}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#editExpiry').onclick = async () => {
-    const current = item.valid_until || '';
-    const v = prompt('Set expiry / valid_until ISO timestamp. Leave blank to clear expiry.', current);
+    const v = await askExpiry(item.valid_until || '');
     if(v === null) return;
-    try { const r = await postJson('/api/admin/memory/expiry', {memory_id:item.id, valid_until:v.trim(), backup: backup()}); $('#memoryActionStatus').textContent = `Expiry ${r.valid_until ? `set to ${r.valid_until}` : 'cleared'}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    try { const r = await postJson('/api/admin/memory/expiry', {memory_id:item.id, valid_until:v, backup: backup()}); $('#memoryActionStatus').textContent = `Expiry ${r.valid_until ? `set to ${r.valid_until}` : 'cleared'}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#supersedeMemory').onclick = async () => {

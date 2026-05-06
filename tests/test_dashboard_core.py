@@ -369,8 +369,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'lifecycleQueueHtml' in js
     assert 'editVeracity' in js
     assert 'editExpiry' in js
+    assert 'askVeracity' in js
+    assert 'askExpiry' in js
     assert '/api/admin/memory/veracity' in js
     assert '/api/admin/memory/expiry' in js
+    assert 'prompt(' not in js
     assert 'contextLabel' in js
     assert "'Temporary context':'Short-term notes'" in js
     assert "'Project context':'Project notes'" in js
