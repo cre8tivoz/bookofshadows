@@ -764,6 +764,10 @@ class DashboardStore:
         return [label for label, _ in counter.most_common(limit)]
 
     @staticmethod
+    def _context_category_names() -> list[str]:
+        return ["Preferences", "People", "Home setup", "Work / business", "Health / wearables", "Devices", "Projects", "Privacy rules", "Other"]
+
+    @staticmethod
     def _category_for_text(text: str) -> str:
         hay = text.lower()
         buckets = [
@@ -902,7 +906,7 @@ class DashboardStore:
 
     def inferred_profile(self, limit_per_section: int = 10) -> dict[str, Any]:
         limit_per_section = max(3, min(int(limit_per_section or 10), 30))
-        section_names = ["Preference", "Short-term notes", "Project notes", "Privacy rule", "Health insight", "Fact", "Relationship"]
+        section_names = self._context_category_names()
         sections = {name: [] for name in section_names}
         all_items: list[dict[str, Any]] = []
 
@@ -931,8 +935,8 @@ class DashboardStore:
                 "needs_review": confidence_pct < 70 or context_type == "Short-term notes",
             }
             all_items.append(row)
-            if len(sections[context_type]) < limit_per_section:
-                sections[context_type].append(row)
+            if len(sections[category]) < limit_per_section:
+                sections[category].append(row)
 
         memories = self.list_memories(kind="all", status="active", sort="importance", limit=500)
         for m in memories:
@@ -948,8 +952,8 @@ class DashboardStore:
             items = sections[name]
             if items:
                 ordered.append({"name": name, "count": len(items), "items": items[:limit_per_section]})
-        type_counts = Counter(row["context_type"] for row in all_items)
-        top_types = type_counts.most_common(4)
+        category_counts = Counter(row["category"] for row in all_items)
+        top_types = category_counts.most_common(4)
         remainder = len(all_items) - sum(v for _, v in top_types)
         type_summary = [{"label": k, "count": v} for k, v in top_types]
         if remainder > 0:

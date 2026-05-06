@@ -275,8 +275,9 @@ def test_memory_intelligence_read_only_views(tmp_path):
 
     profile = store.inferred_profile(limit_per_section=5)
     sections = {s['name']: s for s in profile['sections']}
-    assert 'Health insight' in sections
-    assert any('WHOOP' in item['label'] for item in sections['Health insight']['items'])
+    assert 'Health / wearables' in sections
+    assert any('WHOOP' in item['label'] for item in sections['Health / wearables']['items'])
+    assert 'Home setup' in DashboardStore._context_category_names()
     assert profile['summary']['indexed_signals'] >= 1
     assert profile['summary']['sensitive'] >= 1
 
