@@ -265,6 +265,11 @@ function closeMobileMenu(){
     menuToggle.textContent = '☰';
   }
 }
+function closeMobileMenuForViewportChange(){
+  const activeElement = document.activeElement;
+  if(activeElement && activeElement.closest('.menu-search')) return;
+  closeMobileMenu();
+}
 function showPanel(sectionId, panelId){
   const section = $(`#${sectionId}`);
   if(!section || !panelId) return;
@@ -2211,8 +2216,8 @@ $('#mobileMenuToggle').onclick = () => {
   $('#mobileMenuToggle').textContent = isOpen ? '×' : '☰';
   $('#mobileMenuToggle').setAttribute('aria-expanded', String(isOpen));
 };
-window.addEventListener('resize', closeMobileMenu, { passive: true });
-window.addEventListener('orientationchange', closeMobileMenu, { passive: true });
+window.addEventListener('resize', closeMobileMenuForViewportChange, { passive: true });
+window.addEventListener('orientationchange', closeMobileMenuForViewportChange, { passive: true });
 $('#memorySearch').onclick = loadMemories;
 $('#bulkSelectAll').onchange = () => { latestMemoryItems.forEach(x => $('#bulkSelectAll').checked ? bulkSelection.add(x.id) : bulkSelection.delete(x.id)); loadMemories(); };
 $('#bulkClear').onclick = () => { bulkSelection.clear(); loadMemories(); };

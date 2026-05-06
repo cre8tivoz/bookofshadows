@@ -390,6 +390,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Confirm shown' not in js
     assert 'menuSearch' in js
     assert 'switchTab(\'search\')' in js
+    assert "activeElement.closest('.menu-search')" in js
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js
     assert 'lifecycleQueueHtml' in js
@@ -411,6 +412,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Project notes' in (ROOT / 'dashboard_core.py').read_text()
     assert 'Temporary context' not in (ROOT / 'dashboard_core.py').read_text()
     assert 'Project context' not in (ROOT / 'dashboard_core.py').read_text()
+    assert '.menu-search{display:flex' in css
+    assert '.menu-search{display:none' not in css
     assert '#today > .cards' in css
     assert '.trust-stated' in css
     assert '.lifecycle-cold' in css
