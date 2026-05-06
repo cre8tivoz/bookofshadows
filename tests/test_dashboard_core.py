@@ -356,6 +356,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="reviewExpiry"' in html
     assert 'id="reviewExpire"' in html
     assert 'data-tab="memories"' in html
+    assert 'data-tab="explore"' not in html
     assert '>History<' in html
     assert '>Knowledge Graph<' in html
     assert 'Bulk actions are allowed only for selected active memories' in html
