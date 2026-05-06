@@ -355,8 +355,15 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="reviewVeracity"' in html
     assert 'id="reviewExpiry"' in html
     assert 'id="reviewExpire"' in html
-    assert 'data-tab="search"' in html
-    assert '>Explore<' in html
+    assert 'data-tab="memories"' in html
+    assert '>Memories<' in html
+    assert '>Explore<' not in html
+    assert 'data-tab="search"' not in html
+    assert 'id="search"' in html
+    assert 'id="globalSearchQuery"' in html
+    assert 'id="globalSearchButton"' in html
+    assert 'id="exploreSearch"' not in html
+    assert 'data-panel="exploreSearch"' not in html
     assert 'id="headerSearchQuery"' not in html
     assert 'id="headerSearchButton"' not in html
     assert 'id="menuSearchQuery"' in html
@@ -392,6 +399,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'headerSearch' not in js
     assert 'menuSearch' in js
     assert 'switchTab(\'search\')' in js
+    assert "search:'explore'" not in js
+    assert "exploreSearch:'search'" not in js
+    assert "exploreMemories:'memories'" in js
     assert "activeElement.closest('.menu-search')" in js
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js

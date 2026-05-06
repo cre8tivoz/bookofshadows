@@ -277,13 +277,13 @@ function showPanel(sectionId, panelId){
   section.querySelectorAll('.section-tabs button').forEach(button => button.classList.toggle('active', button.dataset.panel === panelId));
 }
 function sectionFor(name){
-  return ({ visualiser:'visualiser3d', visualiserlegacy:'constellation', constellation:'constellation', search:'explore', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
+  return ({ visualiser:'visualiser3d', visualiserlegacy:'constellation', constellation:'constellation', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
 }
 function defaultPanelFor(section){
-  return ({ explore:'exploreSearch', activity:'activityTimeline', graph:'graphGraph', today:'todayAdded' })[section];
+  return ({ explore:'exploreMemories', activity:'activityTimeline', graph:'graphGraph', today:'todayAdded' })[section];
 }
 function panelFor(name){
-  return ({ search:'exploreSearch', memories:'exploreMemories', recall:'exploreRecall', timelineView:'activityTimeline', consolidations:'activityConsolidations', graph:'graphGraph', triples:'graphTriples', today:'todayAdded', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[name] || defaultPanelFor(name);
+  return ({ memories:'exploreMemories', recall:'exploreRecall', timelineView:'activityTimeline', consolidations:'activityConsolidations', graph:'graphGraph', triples:'graphTriples', today:'todayAdded', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[name] || defaultPanelFor(name);
 }
 function stopCanvasVisualiserLoop(){
   if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
@@ -312,7 +312,7 @@ function switchTab(name, opts={}){
   if(name==='triples') loadTriples();
   if(name==='consolidations') loadConsolidations();
   if(name==='memories') loadMemories();
-  if(name==='search' || section==='explore') loadGlobalSearch();
+  if(name==='search') loadGlobalSearch();
   if(name==='recall') loadRecallDebug();
   if(name==='timelineView' || section==='activity') loadTimeline();
   if(section==='today') loadTodayDigest();
@@ -2203,7 +2203,7 @@ function pickThreeNode(e){
 
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 $$('.section-tabs button').forEach(b => b.onclick = () => {
-  const panelRoute = ({ exploreSearch:'search', exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[b.dataset.panel];
+  const panelRoute = ({ exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[b.dataset.panel];
   if(panelRoute) { switchTab(panelRoute); return; }
   const section = b.closest('.tab')?.id;
   showPanel(section, b.dataset.panel);

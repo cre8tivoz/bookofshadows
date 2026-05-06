@@ -44,7 +44,7 @@
         <button data-tab="visualiser"><span>✹</span>Visualiser</button>
         <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
         <button data-tab="review"><span>⚑</span>Review</button>
-        <button data-tab="search"><span>⌕</span>Explore</button>
+        <button data-tab="memories"><span>▦</span>Memories</button>
         <button data-tab="profile"><span>◌</span>Context Bank</button>
         <button data-tab="lifecycle"><span>◴</span>Lifecycle</button>
         <button data-tab="graph"><span>◎</span>Knowledge Graph</button>
@@ -191,19 +191,19 @@
           <div id="threeClusters" class="cluster-row"></div>
         </section>
 
+        <section id="search" class="tab">
+          <div class="section-head"><h2>Search</h2><span>results from memories, triples, and consolidations</span></div>
+          <div class="toolbar glass"><input id="globalSearchQuery" placeholder="Search everything…" /><button id="globalSearchButton" class="primary">Search</button></div>
+          <div id="globalSearchResults" class="search-results"></div>
+        </section>
+
         <section id="explore" class="tab">
-          <div class="section-head"><h2>Explore</h2><span>search + memory browser + recall debug</span></div>
+          <div class="section-head"><h2>Memories</h2><span>memory browser + recall debug</span></div>
           <div class="section-tabs glass" data-section="explore">
-            <button data-panel="exploreSearch" class="active">Search</button>
-            <button data-panel="exploreMemories">Memories</button>
+            <button data-panel="exploreMemories" class="active">Memories</button>
             <button data-panel="exploreRecall">Recall debug</button>
           </div>
-          <div id="exploreSearch" class="subpanel active">
-            <div class="section-head mini"><h2>Global search</h2><span>memories + triples + consolidations</span></div>
-            <div class="toolbar glass"><input id="globalSearchQuery" placeholder="Search everything…" /><button id="globalSearchButton" class="primary">Search</button></div>
-            <div id="globalSearchResults" class="search-results"></div>
-          </div>
-          <div id="exploreMemories" class="subpanel">
+          <div id="exploreMemories" class="subpanel active">
             <div class="section-head mini"><h2>Memory browser</h2><span>working + episodic</span></div>
             <div class="toolbar glass">
               <input id="memoryQuery" placeholder="Search memory content…" />
