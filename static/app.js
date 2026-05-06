@@ -588,6 +588,13 @@ function searchMemoryCard(m){ return memoryItem(m); }
 function tripleCard(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">triple</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
 function consolidationCard(c){ return `<div class="item" data-json='${esc(JSON.stringify(c))}'><div class="meta"><span class="badge">consolidation</span><span class="badge">${esc(c.items_consolidated)} items</span><span>${esc(c.created_at)}</span></div><div class="content">${esc(c.session_id || '')}: ${esc(c.summary_preview || '')}</div></div>`; }
 function bindJsonCards(root, title){ root.querySelectorAll('[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), title)); }
+async function headerSearch(){
+  const q = $('#headerSearchQuery')?.value.trim() || '';
+  if(!q) return;
+  $('#globalSearchQuery').value = q;
+  switchTab('search');
+  await loadGlobalSearch();
+}
 async function loadGlobalSearch(){
   const q = $('#globalSearchQuery')?.value.trim() || '';
   if(!q){ $('#globalSearchResults').innerHTML = '<p class="muted">Type a query to search memories, triples, and consolidations.</p>'; return; }
@@ -689,11 +696,11 @@ function applyReviewFilter(filter={}){
   switchTab('memories');
 }
 function reviewQueueHtml(key, queue, opts={}){
-  const items = (queue.items || []).slice(0, 6);
+  const items = queue.items || [];
   const selectAction = opts.triage ? `<button class="tiny review-select-visible" data-review-key="${esc(key)}">Select visible</button>` : '';
   const renderedItems = opts.triage ? items.map(item => memoryItem(item, {selectable:true, selectedSet:reviewSelection, checkClass:'review-check'})).join('') : items.map(memoryItem).join('');
   return `<section class="review-queue glass" data-review-key="${esc(key)}">
-    <div class="section-head mini"><h2>${esc(queue.title || key)}</h2><span>${items.length} shown</span></div>
+    <div class="section-head mini"><h2>${esc(queue.title || key)}</h2><span>${items.length} listed</span></div>
     <p class="muted">${esc(queue.description || '')}</p>
     <div class="review-actions"><button class="tiny primary review-filter" data-review-key="${esc(key)}">Open filtered browser</button>${selectAction}</div>
     <div class="list memory-grid">${renderedItems || '<p class="muted">No items in this queue.</p>'}</div>
@@ -717,7 +724,7 @@ function updateReviewBulkBar(){
 }
 function bindReviewControls(queues){
   $$('#review .review-check').forEach(chk => chk.onchange = e => { e.stopPropagation(); chk.checked ? reviewSelection.add(chk.dataset.id) : reviewSelection.delete(chk.dataset.id); updateReviewBulkBar(); });
-  $$('#review .review-select-visible').forEach(el => el.onclick = e => { e.stopPropagation(); const items = (queues[el.dataset.reviewKey]?.items || []).slice(0, 6); items.forEach(x => reviewSelection.add(x.id)); loadReview(); });
+  $$('#review .review-select-visible').forEach(el => el.onclick = e => { e.stopPropagation(); const items = queues[el.dataset.reviewKey]?.items || []; items.forEach(x => reviewSelection.add(x.id)); loadReview(); });
 }
 async function confirmSelectedReviewMemories(){
   const ids = reviewActionableIds();
@@ -756,10 +763,10 @@ async function expireSelectedReviewMemories(){
   reviewSelection.clear(); await loadStats(); await loadReview();
 }
 async function loadReview(){
-  const data = await api('/api/review?limit=40');
+  const data = await api('/api/review?limit=80');
   const queues = data.queues || {};
   $('#reviewCards').innerHTML = (data.cards || []).map(card => `<button class="card review-card" data-review-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
-  latestReviewItems = [...new Map(Object.values(queues).flatMap(queue => (queue.items || []).slice(0, 6)).map(item => [item.id, item])).values()];
+  latestReviewItems = [...new Map(Object.values(queues).flatMap(queue => queue.items || []).map(item => [item.id, item])).values()];
   $('#reviewQueues').innerHTML = Object.entries(queues).map(([key, queue]) => reviewQueueHtml(key, queue, {triage:true})).join('') || '<p class="muted">No review queues available.</p>';
   bindMemoryClicks($('#review'));
   bindReviewControls(queues);
@@ -773,7 +780,7 @@ function lifecycleQueueHtml(key, queue){
   return reviewQueueHtml(key, queue).replace('review-queue glass', 'review-queue lifecycle-queue glass').replace('Open filtered browser', 'Open lifecycle filter');
 }
 async function loadLifecycle(){
-  const data = await api('/api/lifecycle?limit=40');
+  const data = await api('/api/lifecycle?limit=80');
   const queues = data.queues || {};
   const t = data.thresholds || {};
   const weights = t.weights || {};
@@ -2218,6 +2225,7 @@ $('#reviewVeracity').onclick = setSelectedReviewVeracity;
 $('#reviewExpiry').onclick = setSelectedReviewExpiry;
 $('#reviewExpire').onclick = expireSelectedReviewMemories;
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
+$('#headerSearchButton').onclick = headerSearch; $('#headerSearchQuery').onkeydown = e => { if(e.key==='Enter') headerSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
 $('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
 $('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; loadMemories(); };

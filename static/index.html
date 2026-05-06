@@ -40,7 +40,7 @@
         <button data-tab="visualiser"><span>✹</span>Visualiser</button>
         <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
         <button data-tab="review"><span>⚑</span>Review</button>
-        <button data-tab="memories"><span>▦</span>Memories</button>
+        <button data-tab="search"><span>⌕</span>Explore</button>
         <button data-tab="profile"><span>◌</span>Context Bank</button>
         <button data-tab="lifecycle"><span>◴</span>Lifecycle</button>
         <button data-tab="graph"><span>◎</span>Knowledge Graph</button>
@@ -60,6 +60,10 @@
           <div class="eyebrow">Local memory visualiser</div>
           <h1>Your agent’s memory, finally visible.</h1>
           <p>Browse working memories, episodic summaries, triples, and consolidation history from one private dashboard.</p>
+          <div class="header-search glass-mini">
+            <input id="headerSearchQuery" placeholder="Global search…" />
+            <button id="headerSearchButton" class="primary">Search</button>
+          </div>
         </div>
         <div class="status-card">
           <div class="status-label">Database</div>
@@ -235,7 +239,7 @@
         </section>
 
         <section id="activity" class="tab">
-          <div class="section-head"><h2>History</h2><span>timeline + consolidation history</span></div>
+          <div class="section-head"><h2>History</h2><span>chronological memory events + consolidation history, not a memory browser</span></div>
           <div class="section-tabs glass" data-section="activity">
             <button data-panel="activityTimeline" class="active">Timeline</button>
             <button data-panel="activityConsolidations">Consolidations</button>

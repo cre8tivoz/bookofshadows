@@ -355,7 +355,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="reviewVeracity"' in html
     assert 'id="reviewExpiry"' in html
     assert 'id="reviewExpire"' in html
-    assert 'data-tab="memories"' in html
+    assert 'data-tab="search"' in html
+    assert '>Explore<' in html
+    assert 'id="headerSearchQuery"' in html
+    assert 'id="headerSearchButton"' in html
     assert 'data-tab="explore"' not in html
     assert '>History<' in html
     assert '>Knowledge Graph<' in html
@@ -383,7 +386,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'confirmSelectedReviewMemories' in js
     assert 'reviewQueueCorrection' not in js
     assert 'Confirm shown' not in js
-    assert 'Expire shown' not in js
+    assert 'headerSearch' in js
+    assert 'switchTab(\'search\')' in js
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js
     assert 'lifecycleQueueHtml' in js
