@@ -588,13 +588,15 @@ function searchMemoryCard(m){ return memoryItem(m); }
 function tripleCard(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">triple</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
 function consolidationCard(c){ return `<div class="item" data-json='${esc(JSON.stringify(c))}'><div class="meta"><span class="badge">consolidation</span><span class="badge">${esc(c.items_consolidated)} items</span><span>${esc(c.created_at)}</span></div><div class="content">${esc(c.session_id || '')}: ${esc(c.summary_preview || '')}</div></div>`; }
 function bindJsonCards(root, title){ root.querySelectorAll('[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), title)); }
-async function headerSearch(){
-  const q = $('#headerSearchQuery')?.value.trim() || '';
+async function runSearchFromInput(inputId){
+  const q = $(inputId)?.value.trim() || '';
   if(!q) return;
   $('#globalSearchQuery').value = q;
   switchTab('search');
   await loadGlobalSearch();
 }
+async function headerSearch(){ await runSearchFromInput('#headerSearchQuery'); }
+async function menuSearch(){ await runSearchFromInput('#menuSearchQuery'); }
 async function loadGlobalSearch(){
   const q = $('#globalSearchQuery')?.value.trim() || '';
   if(!q){ $('#globalSearchResults').innerHTML = '<p class="muted">Type a query to search memories, triples, and consolidations.</p>'; return; }
@@ -2226,6 +2228,7 @@ $('#reviewExpiry').onclick = setSelectedReviewExpiry;
 $('#reviewExpire').onclick = expireSelectedReviewMemories;
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
 $('#headerSearchButton').onclick = headerSearch; $('#headerSearchQuery').onkeydown = e => { if(e.key==='Enter') headerSearch(); };
+$('#menuSearchButton').onclick = menuSearch; $('#menuSearchQuery').onkeydown = e => { if(e.key==='Enter') menuSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
 $('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
 $('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; loadMemories(); };

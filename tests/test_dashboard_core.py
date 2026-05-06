@@ -359,6 +359,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '>Explore<' in html
     assert 'id="headerSearchQuery"' in html
     assert 'id="headerSearchButton"' in html
+    assert 'id="menuSearchQuery"' in html
+    assert 'id="menuSearchButton"' in html
     assert 'data-tab="explore"' not in html
     assert '>History<' in html
     assert '>Knowledge Graph<' in html
@@ -386,7 +388,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'confirmSelectedReviewMemories' in js
     assert 'reviewQueueCorrection' not in js
     assert 'Confirm shown' not in js
-    assert 'headerSearch' in js
+    assert 'menuSearch' in js
     assert 'switchTab(\'search\')' in js
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js
