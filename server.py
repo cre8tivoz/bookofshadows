@@ -259,6 +259,14 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._require_admin():
                     return
                 return self._send_json(self.store.set_memory_importance(str(body.get("memory_id") or ""), body.get("importance"), backup=bool(body.get("backup", True))))
+            if path == "/api/admin/memory/veracity":
+                if not self._require_admin():
+                    return
+                return self._send_json(self.store.set_memory_veracity(str(body.get("memory_id") or ""), str(body.get("veracity") or ""), backup=bool(body.get("backup", True))))
+            if path == "/api/admin/memory/expiry":
+                if not self._require_admin():
+                    return
+                return self._send_json(self.store.set_memory_expiry(str(body.get("memory_id") or ""), str(body.get("valid_until") or ""), backup=bool(body.get("backup", True))))
             if path == "/api/admin/memory/supersede":
                 if not self._require_admin():
                     return

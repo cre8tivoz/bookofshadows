@@ -171,6 +171,24 @@ def test_admin_memory_mutation_endpoints_allow_localhost_admin_without_auth_and_
         assert payload["config"]["memory_admin_enabled"] is True
 
         status, _headers, body = _request(
+            f"{server.base}/api/admin/memory/veracity",
+            method="POST",
+            body={"memory_id": "w2", "veracity": "stated"},
+        )
+        payload = json.loads(body)
+        assert status == 200
+        assert payload["item"]["veracity"] == "stated"
+
+        status, _headers, body = _request(
+            f"{server.base}/api/admin/memory/expiry",
+            method="POST",
+            body={"memory_id": "w3", "valid_until": "2026-06-01T00:00:00"},
+        )
+        payload = json.loads(body)
+        assert status == 200
+        assert payload["item"]["valid_until"] == "2026-06-01T00:00:00"
+
+        status, _headers, body = _request(
             f"{server.base}/api/admin/memory/supersede",
             method="POST",
             body={"memory_id": "w1", "content": "YC prefers private local memory", "importance": 0.91},

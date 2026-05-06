@@ -408,7 +408,7 @@ function whyMemoryHtml(item){
 function memoryDetailHtml(item){
   const admin = canAdmin();
   const mutable = isMutableMemory(item);
-  const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : '';
+  const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editVeracity" class="drawer-action">Set trust</button><button id="editExpiry" class="drawer-action">Set expiry</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : '';
   const actionNote = admin ? (mutable ? '' : `<span class="muted">This memory is ${esc(item.status || 'not active')}; mutation actions are disabled.</span>`) : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>';
   const trust = String(item.veracity || 'unknown').toLowerCase();
   const lifecycle = item.degradation_label ? `${item.degradation_label} · tier ${item.degradation_tier}` : 'not degraded';
@@ -465,6 +465,20 @@ async function openMemoryDetail(memoryId, opts={}){
     const v = await askImportance(item.importance ?? 0.5);
     if(v === null) return;
     try { const r = await postJson('/api/admin/memory/importance', {memory_id:item.id, importance:Number(v), backup: backup()}); $('#memoryActionStatus').textContent = `Importance updated to ${r.importance}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    catch(e){ $('#memoryActionStatus').textContent = e.message; }
+  };
+  $('#editVeracity').onclick = async () => {
+    const current = String(item.veracity || 'unknown').toLowerCase();
+    const v = prompt('Set trust/veracity: stated, inferred, tool, imported, unknown', current);
+    if(v === null) return;
+    try { const r = await postJson('/api/admin/memory/veracity', {memory_id:item.id, veracity:v.trim().toLowerCase(), backup: backup()}); $('#memoryActionStatus').textContent = `Trust updated to ${r.veracity}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    catch(e){ $('#memoryActionStatus').textContent = e.message; }
+  };
+  $('#editExpiry').onclick = async () => {
+    const current = item.valid_until || '';
+    const v = prompt('Set expiry / valid_until ISO timestamp. Leave blank to clear expiry.', current);
+    if(v === null) return;
+    try { const r = await postJson('/api/admin/memory/expiry', {memory_id:item.id, valid_until:v.trim(), backup: backup()}); $('#memoryActionStatus').textContent = `Expiry ${r.valid_until ? `set to ${r.valid_until}` : 'cleared'}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#supersedeMemory').onclick = async () => {

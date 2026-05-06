@@ -256,6 +256,14 @@ def test_memory_status_filter_and_safe_mutations(tmp_path, monkeypatch):
     updated = store.set_memory_importance('w1', 0.33)
     assert updated['item']['importance'] == 0.33
 
+    trust = store.set_memory_veracity('w2', 'stated')
+    assert trust['ok'] is True
+    assert trust['item']['veracity'] == 'stated'
+
+    expiry = store.set_memory_expiry('w3', '2026-06-01T00:00:00')
+    assert expiry['ok'] is True
+    assert expiry['item']['valid_until'] == '2026-06-01T00:00:00'
+
     superseded = store.supersede_memory('w1', 'YC prefers local-only private memory', importance=0.95)
     assert superseded['item']['status'] == 'superseded'
     assert superseded['replacement']['content'] == 'YC prefers local-only private memory'
@@ -263,7 +271,7 @@ def test_memory_status_filter_and_safe_mutations(tmp_path, monkeypatch):
     assert superseded['replacement_id'] in {r['id'] for r in store.list_memories(kind='working', status='active', limit=20)}
 
     audit = store.audit_log()
-    assert [row['action'] for row in audit[:3]] == ['supersede', 'importance', 'invalidate']
+    assert [row['action'] for row in audit[:5]] == ['supersede', 'expiry', 'veracity', 'importance', 'invalidate']
     assert Path(superseded['backup']['path']).exists()
 
 
@@ -359,6 +367,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js
     assert 'lifecycleQueueHtml' in js
+    assert 'editVeracity' in js
+    assert 'editExpiry' in js
+    assert '/api/admin/memory/veracity' in js
+    assert '/api/admin/memory/expiry' in js
     assert 'contextLabel' in js
     assert "'Temporary context':'Short-term notes'" in js
     assert "'Project context':'Project notes'" in js

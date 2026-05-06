@@ -757,6 +757,58 @@ class DashboardStore:
         self._audit("importance", memory_id, before, after, {"importance": importance, "backup": backup_info})
         return {"ok": updated > 0, "memory_id": memory_id, "importance": importance, "backup": backup_info, "item": after}
 
+    def set_memory_veracity(self, memory_id: str, veracity: str, backup: bool = True) -> dict[str, Any]:
+        memory_id = (memory_id or "").strip()
+        veracity = (veracity or "").strip().lower()
+        if not memory_id:
+            raise ValueError("memory_id is required")
+        if veracity not in VERACITY_WEIGHTS:
+            raise ValueError("veracity must be one of: " + ", ".join(VERACITY_WEIGHTS))
+        before = self.get_memory(memory_id)
+        if not before:
+            raise ValueError("memory not found")
+        backup_info = self.backup_database() if backup else None
+        with self.connect_rw() as con:
+            updated = 0
+            for table in ("working_memory", "episodic_memory", "memories"):
+                if table in self._tables(con):
+                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+                    if "veracity" in cols:
+                        cur = con.execute(f"UPDATE {table} SET veracity = ? WHERE id = ?", (veracity, memory_id))
+                        updated += cur.rowcount
+            con.commit()
+        after = self.get_memory(memory_id)
+        self._audit("veracity", memory_id, before, after, {"veracity": veracity, "backup": backup_info})
+        return {"ok": updated > 0, "memory_id": memory_id, "veracity": veracity, "backup": backup_info, "item": after}
+
+    def set_memory_expiry(self, memory_id: str, valid_until: str, backup: bool = True) -> dict[str, Any]:
+        memory_id = (memory_id or "").strip()
+        valid_until = (valid_until or "").strip()
+        if not memory_id:
+            raise ValueError("memory_id is required")
+        if valid_until:
+            try:
+                datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("valid_until must be an ISO timestamp or empty") from exc
+        before = self.get_memory(memory_id)
+        if not before:
+            raise ValueError("memory not found")
+        backup_info = self.backup_database() if backup else None
+        value = valid_until or None
+        with self.connect_rw() as con:
+            updated = 0
+            for table in ("working_memory", "episodic_memory", "memories"):
+                if table in self._tables(con):
+                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+                    if "valid_until" in cols:
+                        cur = con.execute(f"UPDATE {table} SET valid_until = ? WHERE id = ?", (value, memory_id))
+                        updated += cur.rowcount
+            con.commit()
+        after = self.get_memory(memory_id)
+        self._audit("expiry", memory_id, before, after, {"valid_until": value, "backup": backup_info})
+        return {"ok": updated > 0, "memory_id": memory_id, "valid_until": value, "backup": backup_info, "item": after}
+
     def supersede_memory(self, memory_id: str, content: str, importance: float | None = None, backup: bool = True) -> dict[str, Any]:
         memory_id = (memory_id or "").strip()
         content = (content or "").strip()
