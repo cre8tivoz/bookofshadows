@@ -357,10 +357,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="reviewExpire"' in html
     assert 'data-tab="search"' in html
     assert '>Explore<' in html
-    assert 'id="headerSearchQuery"' in html
-    assert 'id="headerSearchButton"' in html
+    assert 'id="headerSearchQuery"' not in html
+    assert 'id="headerSearchButton"' not in html
     assert 'id="menuSearchQuery"' in html
     assert 'id="menuSearchButton"' in html
+    assert html.index('id="menuSearchQuery"') < html.index('<nav>')
     assert 'data-tab="explore"' not in html
     assert '>History<' in html
     assert '>Knowledge Graph<' in html
@@ -388,6 +389,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'confirmSelectedReviewMemories' in js
     assert 'reviewQueueCorrection' not in js
     assert 'Confirm shown' not in js
+    assert 'headerSearch' not in js
     assert 'menuSearch' in js
     assert 'switchTab(\'search\')' in js
     assert "activeElement.closest('.menu-search')" in js

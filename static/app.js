@@ -600,7 +600,6 @@ async function runSearchFromInput(inputId){
   switchTab('search');
   await loadGlobalSearch();
 }
-async function headerSearch(){ await runSearchFromInput('#headerSearchQuery'); }
 async function menuSearch(){ await runSearchFromInput('#menuSearchQuery'); }
 async function loadGlobalSearch(){
   const q = $('#globalSearchQuery')?.value.trim() || '';
@@ -2232,7 +2231,6 @@ $('#reviewVeracity').onclick = setSelectedReviewVeracity;
 $('#reviewExpiry').onclick = setSelectedReviewExpiry;
 $('#reviewExpire').onclick = expireSelectedReviewMemories;
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
-$('#headerSearchButton').onclick = headerSearch; $('#headerSearchQuery').onkeydown = e => { if(e.key==='Enter') headerSearch(); };
 $('#menuSearchButton').onclick = menuSearch; $('#menuSearchQuery').onkeydown = e => { if(e.key==='Enter') menuSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
 $('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
