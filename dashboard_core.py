@@ -461,6 +461,58 @@ class DashboardStore:
                     return self._enrich_memory(self._dict(row), memory_kind)
         return None
 
+    def review_queues(self, limit: int = 50) -> dict[str, Any]:
+        """Read-only trust/lifecycle review queues for Mnemosyne 2.3 metadata."""
+        limit = max(1, min(int(limit or 50), 200))
+        contaminated = self.list_memories(kind="all", status="active", contaminated_only=True, sort="importance", limit=limit)
+        high_importance = [m for m in contaminated if float(m.get("importance") or 0) > 0.5][:limit]
+        degraded = self.list_memories(kind="episodic", status="active", degraded_only=True, sort="recent", limit=limit)
+        due = self.list_memories(kind="episodic", status="active", due_for_degradation=True, sort="oldest", limit=limit)
+        stats = self.stats()
+        counts = {
+            "contaminated": int(stats.get("contamination", {}).get("total") or len(contaminated)),
+            "high_importance_contaminated": int(stats.get("contamination", {}).get("high_importance") or len(high_importance)),
+            "degraded": int(stats.get("degradation", {}).get("degraded") or len(degraded)),
+            "due_for_degradation": int(stats.get("degradation", {}).get("due_tier2") or 0) + int(stats.get("degradation", {}).get("due_tier3") or 0),
+        }
+        queues = {
+            "contaminated": {
+                "title": "Needs confirmation",
+                "description": "Non-stated memories that may need human review before they are trusted as durable facts.",
+                "filter": {"contaminated_only": "1", "sort": "importance"},
+                "items": contaminated,
+            },
+            "high_importance_contaminated": {
+                "title": "High-importance non-stated",
+                "description": "Important memories that are inferred, tool-derived, imported, or unknown veracity.",
+                "filter": {"contaminated_only": "1", "sort": "importance"},
+                "items": high_importance,
+            },
+            "degraded": {
+                "title": "Already degraded",
+                "description": "Episodic memories that have moved down the lifecycle and may carry reduced recall weight.",
+                "filter": {"kind": "episodic", "degraded_only": "1", "sort": "recent"},
+                "items": degraded,
+            },
+            "due_for_degradation": {
+                "title": "Due for degradation",
+                "description": "Hot or warm episodic memories old enough to be compressed into the next lifecycle tier.",
+                "filter": {"kind": "episodic", "due_for_degradation": "1", "sort": "oldest"},
+                "items": due,
+            },
+        }
+        cards = [
+            {"key": key, "title": queue["title"], "count": counts[key], "description": queue["description"]}
+            for key, queue in queues.items()
+        ]
+        return {
+            "read_only": True,
+            "generated_at": _utc_now(),
+            "counts": counts,
+            "cards": cards,
+            "queues": queues,
+        }
+
     def triples(self, q: str = "", subject: str = "", predicate: str = "", object_: str = "", limit: int = 200) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit or 200), 1000))
         where = []

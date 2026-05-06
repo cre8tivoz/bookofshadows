@@ -40,6 +40,7 @@
         <button data-tab="visualiser"><span>✹</span>Visualiser</button>
         <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
         <button data-tab="profile"><span>◌</span>Context Bank</button>
+        <button data-tab="review"><span>⚑</span>Review</button>
         <button data-tab="explore"><span>⌕</span>Explore</button>
         <button data-tab="activity"><span>◷</span>Activity</button>
         <button data-tab="graph"><span>◎</span>Graph</button>
@@ -110,6 +111,12 @@
         <section id="profile" class="tab">
           <div class="section-head"><h2>Context Bank</h2><span>inferred context from active memory</span></div>
           <div id="profileGrid" class="profile-grid"></div>
+        </section>
+
+        <section id="review" class="tab">
+          <div class="section-head"><h2>Trust Review</h2><span>read-only queues for Mnemosyne 2.3 trust + lifecycle signals</span></div>
+          <div id="reviewCards" class="cards review-cards"></div>
+          <div id="reviewQueues" class="review-queues"></div>
         </section>
 
         <section id="constellation" class="tab">

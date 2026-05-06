@@ -128,6 +128,25 @@ def test_list_memories_filters_v23_veracity_and_degradation(tmp_path):
     assert [r['id'] for r in store.list_memories(kind='episodic', degraded_only=True, limit=10)] == ['e2', 'e1']
 
 
+def test_review_queues_surface_trust_lifecycle_work(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    review = store.review_queues(limit=10)
+    assert review['read_only'] is True
+    assert [card['key'] for card in review['cards']] == ['contaminated', 'high_importance_contaminated', 'degraded', 'due_for_degradation']
+    assert review['counts']['contaminated'] == 5
+    assert review['counts']['high_importance_contaminated'] == 2
+    assert review['counts']['degraded'] == 2
+    assert 'due_for_degradation' in review['counts']
+    assert [item['id'] for item in review['queues']['high_importance_contaminated']['items']] == ['w4', 'e1']
+    assert [item['id'] for item in review['queues']['degraded']['items']] == ['e2', 'e1']
+    assert review['queues']['contaminated']['filter']['contaminated_only'] == '1'
+    assert review['queues']['degraded']['filter']['degraded_only'] == '1'
+    assert review['queues']['due_for_degradation']['filter']['due_for_degradation'] == '1'
+
+
 def test_search_uses_token_prefix_not_mid_word_substring(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
@@ -298,6 +317,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="memoryVeracity"' in html
     assert 'id="memoryDegradation"' in html
     assert 'id="memoryTrustPreset"' in html
+    assert 'id="review"' in html
+    assert 'id="reviewCards"' in html
+    assert 'id="reviewQueues"' in html
     assert 'id="todayVeracity"' in html
     assert 'id="todayDegradation"' in html
     assert 'by_veracity' in js
@@ -306,6 +328,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'degradation_tier' in js
     assert 'trust-strip' in js
     assert 'effective_memory_weight' in js
+    assert '/api/review' in js
+    assert 'loadReview' in js
+    assert 'applyReviewFilter' in js
     assert 'contextLabel' in js
     assert "'Temporary context':'Short-term notes'" in js
     assert "'Project context':'Project notes'" in js

@@ -283,6 +283,7 @@ function switchTab(name, opts={}){
   if(name==='timelineView' || section==='activity') loadTimeline();
   if(section==='today') loadTodayDigest();
   if(section==='profile') loadProfile();
+  if(section==='review') loadReview();
   if(section==='constellation') loadConstellation();
   if(section==='visualiser3d') loadThreeVisualiser();
   if(section==='settings') { loadAuthStatus(); loadDiagnostics(); }
@@ -614,6 +615,40 @@ async function loadProfile(){
   $$('#profileGrid .profile-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
   $$('#profileGrid .profile-item[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail'));
 }
+function applyReviewFilter(filter={}){
+  $('#memoryKind').value = filter.kind || 'all';
+  $('#memoryQuery').value = '';
+  $('#memorySource').value = '';
+  $('#memoryScope').value = '';
+  $('#memorySession').value = '';
+  $('#memoryVeracity').value = filter.veracity || '';
+  $('#memoryDegradation').value = filter.degradation_tier || '';
+  $('#memoryTrustPreset').value = filter.contaminated_only ? 'contaminated' : filter.degraded_only ? 'degraded' : filter.due_for_degradation ? 'due' : '';
+  $('#memoryStatus').value = filter.status || 'active';
+  $('#memorySort').value = filter.sort || 'importance';
+  switchTab('memories');
+}
+function reviewQueueHtml(key, queue){
+  const items = (queue.items || []).slice(0, 6);
+  return `<section class="review-queue glass" data-review-key="${esc(key)}">
+    <div class="section-head mini"><h2>${esc(queue.title || key)}</h2><span>${items.length} shown</span></div>
+    <p class="muted">${esc(queue.description || '')}</p>
+    <div class="review-actions"><button class="tiny primary review-filter" data-review-key="${esc(key)}">Open filtered browser</button></div>
+    <div class="list memory-grid">${items.map(memoryItem).join('') || '<p class="muted">No items in this queue.</p>'}</div>
+  </section>`;
+}
+async function loadReview(){
+  const data = await api('/api/review?limit=40');
+  const queues = data.queues || {};
+  $('#reviewCards').innerHTML = (data.cards || []).map(card => `<button class="card review-card" data-review-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
+  $('#reviewQueues').innerHTML = Object.entries(queues).map(([key, queue]) => reviewQueueHtml(key, queue)).join('') || '<p class="muted">No review queues available.</p>';
+  $$('#review .memory-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
+  $$('#review [data-review-key]').forEach(el => {
+    if(!el.classList.contains('review-card') && !el.classList.contains('review-filter')) return;
+    el.onclick = e => { e.stopPropagation(); const key = el.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); };
+  });
+}
+
 function constellationInspectorDefault(){
   const neural = constellationScene.visualiserMode === 'neural';
   $('#constellationInspector').innerHTML = neural
