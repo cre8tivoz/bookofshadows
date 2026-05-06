@@ -349,6 +349,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="review"' in html
     assert 'id="reviewCards"' in html
     assert 'id="reviewQueues"' in html
+    assert 'id="bulkVeracity"' in html
+    assert 'id="bulkExpiry"' in html
     assert 'id="lifecycle"' in html
     assert 'id="lifecycleCards"' in html
     assert 'id="lifecycleQueues"' in html
@@ -369,6 +371,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'lifecycleQueueHtml' in js
     assert 'editVeracity' in js
     assert 'editExpiry' in js
+    assert 'bulkVeracity' in js
+    assert 'bulkExpiry' in js
+    assert 'setSelectedVeracity' in js
+    assert 'setSelectedExpiry' in js
     assert 'askVeracity' in js
     assert 'askExpiry' in js
     assert '/api/admin/memory/veracity' in js

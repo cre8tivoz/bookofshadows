@@ -376,6 +376,8 @@ function updateBulkBar(){
   const actionable = latestMemoryItems.filter(x => bulkSelection.has(x.id) && isMutableMemory(x)).length;
   $('#bulkSelectionStatus').textContent = `${bulkSelection.size} selected · ${actionable} active`;
   $('#bulkExpire').disabled = !admin || !actionable;
+  $('#bulkVeracity').disabled = !admin || !actionable;
+  $('#bulkExpiry').disabled = !admin || !actionable;
   $('#bulkImportance').disabled = !admin || !actionable;
   $('#bulkSelectAll').checked = latestMemoryItems.length > 0 && latestMemoryItems.every(x => bulkSelection.has(x.id));
   $('#bulkSelectAll').disabled = !latestMemoryItems.length;
@@ -397,6 +399,22 @@ async function setSelectedImportance(){
   const v = await askImportance(0.5);
   if(v === null) return;
   for(const id of ids) await postJson('/api/admin/memory/importance', {memory_id:id, importance:Number(v), backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
+  bulkSelection.clear(); await loadStats(); await loadMemories();
+}
+async function setSelectedVeracity(){
+  const ids = latestMemoryItems.filter(x => bulkSelection.has(x.id) && isMutableMemory(x)).map(x => x.id);
+  if(!ids.length) return;
+  const v = await askVeracity('stated');
+  if(v === null) return;
+  for(const id of ids) await postJson('/api/admin/memory/veracity', {memory_id:id, veracity:v, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
+  bulkSelection.clear(); await loadStats(); await loadMemories();
+}
+async function setSelectedExpiry(){
+  const ids = latestMemoryItems.filter(x => bulkSelection.has(x.id) && isMutableMemory(x)).map(x => x.id);
+  if(!ids.length) return;
+  const v = await askExpiry('');
+  if(v === null) return;
+  for(const id of ids) await postJson('/api/admin/memory/expiry', {memory_id:id, valid_until:v, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
   bulkSelection.clear(); await loadStats(); await loadMemories();
 }
 function bindMemoryClicks(root){
@@ -2127,6 +2145,8 @@ $('#memorySearch').onclick = loadMemories;
 $('#bulkSelectAll').onchange = () => { latestMemoryItems.forEach(x => $('#bulkSelectAll').checked ? bulkSelection.add(x.id) : bulkSelection.delete(x.id)); loadMemories(); };
 $('#bulkClear').onclick = () => { bulkSelection.clear(); loadMemories(); };
 $('#bulkExpire').onclick = expireSelectedMemories;
+$('#bulkVeracity').onclick = setSelectedVeracity;
+$('#bulkExpiry').onclick = setSelectedExpiry;
 $('#bulkImportance').onclick = setSelectedImportance; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') loadMemories(); };
 $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
