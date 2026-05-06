@@ -686,25 +686,55 @@ function applyReviewFilter(filter={}){
   $('#memorySort').value = filter.sort || 'importance';
   switchTab('memories');
 }
-function reviewQueueHtml(key, queue){
+function reviewQueueHtml(key, queue, opts={}){
   const items = (queue.items || []).slice(0, 6);
+  const correctionActions = opts.corrections ? `<button class="tiny review-confirm-stated" data-review-key="${esc(key)}">Confirm shown</button><button class="tiny review-set-trust" data-review-key="${esc(key)}">Set trust</button><button class="tiny review-set-expiry" data-review-key="${esc(key)}">Set expiry</button><button class="tiny warn review-expire" data-review-key="${esc(key)}">Expire shown</button>` : '';
   return `<section class="review-queue glass" data-review-key="${esc(key)}">
     <div class="section-head mini"><h2>${esc(queue.title || key)}</h2><span>${items.length} shown</span></div>
     <p class="muted">${esc(queue.description || '')}</p>
-    <div class="review-actions"><button class="tiny primary review-filter" data-review-key="${esc(key)}">Open filtered browser</button></div>
+    <div class="review-actions"><button class="tiny primary review-filter" data-review-key="${esc(key)}">Open filtered browser</button>${correctionActions}</div>
     <div class="list memory-grid">${items.map(memoryItem).join('') || '<p class="muted">No items in this queue.</p>'}</div>
   </section>`;
+}
+function reviewQueueIds(queue){ return (queue?.items || []).filter(isMutableMemory).slice(0, 6).map(x => x.id); }
+async function reviewQueueCorrection(kind, queue){
+  const ids = reviewQueueIds(queue);
+  if(!ids.length) return;
+  const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
+  if(kind === 'confirm'){
+    const ok = await confirmAction({title:'Confirm shown memories?', description:`Mark ${ids.length} shown active memories as stated. Use only after reviewing this queue.`, confirmText:'Confirm as stated'});
+    if(!ok) return;
+    for(const id of ids) await postJson('/api/admin/memory/veracity', {memory_id:id, veracity:'stated', backup});
+  } else if(kind === 'trust'){
+    const v = await askVeracity('stated');
+    if(v === null) return;
+    for(const id of ids) await postJson('/api/admin/memory/veracity', {memory_id:id, veracity:v, backup});
+  } else if(kind === 'expiry'){
+    const v = await askExpiry('');
+    if(v === null) return;
+    for(const id of ids) await postJson('/api/admin/memory/expiry', {memory_id:id, valid_until:v, backup});
+  } else if(kind === 'expire'){
+    const ok = await confirmAction({title:'Expire shown memories?', description:`Expire ${ids.length} shown active memories. Originals stay in history and audit.`, confirmText:'Expire shown', tone:'warn'});
+    if(!ok) return;
+    for(const id of ids) await postJson('/api/admin/memory/invalidate', {memory_id:id, backup});
+  }
+  await loadStats();
+  await loadReview();
 }
 async function loadReview(){
   const data = await api('/api/review?limit=40');
   const queues = data.queues || {};
   $('#reviewCards').innerHTML = (data.cards || []).map(card => `<button class="card review-card" data-review-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
-  $('#reviewQueues').innerHTML = Object.entries(queues).map(([key, queue]) => reviewQueueHtml(key, queue)).join('') || '<p class="muted">No review queues available.</p>';
-  $$('#review .memory-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
+  $('#reviewQueues').innerHTML = Object.entries(queues).map(([key, queue]) => reviewQueueHtml(key, queue, {corrections: canAdmin()})).join('') || '<p class="muted">No review queues available.</p>';
+  bindMemoryClicks($('#review'));
   $$('#review [data-review-key]').forEach(el => {
     if(!el.classList.contains('review-card') && !el.classList.contains('review-filter')) return;
     el.onclick = e => { e.stopPropagation(); const key = el.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); };
   });
+  $$('#review .review-confirm-stated').forEach(el => el.onclick = e => { e.stopPropagation(); reviewQueueCorrection('confirm', queues[el.dataset.reviewKey]); });
+  $$('#review .review-set-trust').forEach(el => el.onclick = e => { e.stopPropagation(); reviewQueueCorrection('trust', queues[el.dataset.reviewKey]); });
+  $$('#review .review-set-expiry').forEach(el => el.onclick = e => { e.stopPropagation(); reviewQueueCorrection('expiry', queues[el.dataset.reviewKey]); });
+  $$('#review .review-expire').forEach(el => el.onclick = e => { e.stopPropagation(); reviewQueueCorrection('expire', queues[el.dataset.reviewKey]); });
 }
 function lifecycleQueueHtml(key, queue){
   return reviewQueueHtml(key, queue).replace('review-queue glass', 'review-queue lifecycle-queue glass').replace('Open filtered browser', 'Open lifecycle filter');
@@ -722,7 +752,7 @@ async function loadLifecycle(){
   ].map(x => `<span>${esc(x)}</span>`).join('');
   $('#lifecycleCards').innerHTML = (data.cards || []).map(card => `<button class="card review-card lifecycle-card" data-lifecycle-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
   $('#lifecycleQueues').innerHTML = Object.entries(queues).map(([key, queue]) => lifecycleQueueHtml(key, queue)).join('') || '<p class="muted">No lifecycle queues available.</p>';
-  $$('#lifecycle .memory-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
+  bindMemoryClicks($('#lifecycle'));
   $$('#lifecycle [data-lifecycle-key]').forEach(el => el.onclick = e => { e.stopPropagation(); applyReviewFilter(queues[el.dataset.lifecycleKey]?.filter || {}); });
   $$('#lifecycle .review-filter').forEach(el => el.onclick = e => { e.stopPropagation(); const key = el.closest('[data-review-key]')?.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); });
 }

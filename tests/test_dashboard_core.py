@@ -366,6 +366,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/api/review' in js
     assert 'loadReview' in js
     assert 'applyReviewFilter' in js
+    assert 'reviewQueueCorrection' in js
+    assert 'review-confirm-stated' in js
+    assert 'review-set-trust' in js
+    assert 'review-set-expiry' in js
+    assert 'review-expire' in js
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js
     assert 'lifecycleQueueHtml' in js
