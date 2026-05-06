@@ -349,6 +349,16 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="review"' in html
     assert 'id="reviewCards"' in html
     assert 'id="reviewQueues"' in html
+    assert 'id="reviewBulkBar"' in html
+    assert 'id="reviewSelectAll"' in html
+    assert 'id="reviewConfirm"' in html
+    assert 'id="reviewVeracity"' in html
+    assert 'id="reviewExpiry"' in html
+    assert 'id="reviewExpire"' in html
+    assert 'data-tab="memories"' in html
+    assert '>History<' in html
+    assert '>Knowledge Graph<' in html
+    assert 'Bulk actions are allowed only for selected active memories' in html
     assert 'id="bulkVeracity"' in html
     assert 'id="bulkExpiry"' in html
     assert 'id="lifecycle"' in html
@@ -366,11 +376,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/api/review' in js
     assert 'loadReview' in js
     assert 'applyReviewFilter' in js
-    assert 'reviewQueueCorrection' in js
-    assert 'review-confirm-stated' in js
-    assert 'review-set-trust' in js
-    assert 'review-set-expiry' in js
-    assert 'review-expire' in js
+    assert 'reviewSelection' in js
+    assert 'bindReviewControls' in js
+    assert 'updateReviewBulkBar' in js
+    assert 'confirmSelectedReviewMemories' in js
+    assert 'reviewQueueCorrection' not in js
+    assert 'Confirm shown' not in js
+    assert 'Expire shown' not in js
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js
     assert 'lifecycleQueueHtml' in js

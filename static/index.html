@@ -37,14 +37,15 @@
       <nav>
         <button data-tab="overview" class="active"><span>⌘</span>Overview</button>
         <button data-tab="today"><span>✦</span>Today</button>
-        <button data-tab="visualiser"><span>✹</span>Visualiser</button>
-        <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
-        <button data-tab="profile"><span>◌</span>Context Bank</button>
         <button data-tab="review"><span>⚑</span>Review</button>
+        <button data-tab="memories"><span>▦</span>Memories</button>
+        <button data-tab="profile"><span>◌</span>Context Bank</button>
         <button data-tab="lifecycle"><span>◴</span>Lifecycle</button>
         <button data-tab="explore"><span>⌕</span>Explore</button>
-        <button data-tab="activity"><span>◷</span>Activity</button>
-        <button data-tab="graph"><span>◎</span>Graph</button>
+        <button data-tab="graph"><span>◎</span>Knowledge Graph</button>
+        <button data-tab="visualiser"><span>✹</span>Visualiser</button>
+        <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
+        <button data-tab="activity"><span>◷</span>History</button>
         <button data-tab="settings"><span>⚙</span>Settings</button>
       </nav>
       <div class="theme-switch glass-mini">
@@ -115,8 +116,17 @@
         </section>
 
         <section id="review" class="tab">
-          <div class="section-head"><h2>Trust Review</h2><span>read-only queues for Mnemosyne 2.3 trust + lifecycle signals</span></div>
+          <div class="section-head"><h2>Trust Review</h2><span>triage selected memories — confirm, correct, or expire only what you choose</span></div>
           <div id="reviewCards" class="cards review-cards"></div>
+          <div id="reviewBulkBar" class="bulk-bar review-bulk-bar glass hidden">
+            <label class="bulk-select-control"><input id="reviewSelectAll" type="checkbox" /> <span>Select visible</span></label>
+            <span id="reviewSelectionStatus" class="bulk-selection-status muted">0 selected</span>
+            <button id="reviewConfirm" class="drawer-action primary">Confirm selected</button>
+            <button id="reviewVeracity" class="drawer-action">Set trust</button>
+            <button id="reviewExpiry" class="drawer-action">Set expiry</button>
+            <button id="reviewExpire" class="drawer-action warn">Expire selected</button>
+            <button id="reviewClear" class="drawer-action">Clear selection</button>
+          </div>
           <div id="reviewQueues" class="review-queues"></div>
         </section>
 
@@ -226,7 +236,7 @@
         </section>
 
         <section id="activity" class="tab">
-          <div class="section-head"><h2>Activity</h2><span>timeline + consolidation history</span></div>
+          <div class="section-head"><h2>History</h2><span>timeline + consolidation history</span></div>
           <div class="section-tabs glass" data-section="activity">
             <button data-panel="activityTimeline" class="active">Timeline</button>
             <button data-panel="activityConsolidations">Consolidations</button>
@@ -252,7 +262,7 @@
         </section>
 
         <section id="graph" class="tab">
-          <div class="section-head"><h2>Graph</h2><span>relationships + triple table</span></div>
+          <div class="section-head"><h2>Knowledge Graph</h2><span>relationships + triple table</span></div>
           <div class="section-tabs glass" data-section="graph">
             <button data-panel="graphGraph" class="active">Relationship graph</button>
             <button data-panel="graphTriples">Triples table</button>
@@ -315,7 +325,7 @@
             </div>
             <div class="glass settings-card danger-card">
               <div class="breakdown-title">Memory maintenance</div>
-              <p class="muted">Safe correction actions for the agent brain. This enables expire, supersede, trust/veracity, expiry, and importance edits only — no lifecycle-tier edits, raw content overwrite, hard delete, or bulk destructive actions.</p>
+              <p class="muted">Safe correction actions for the agent brain. Bulk actions are allowed only for selected active memories. This enables expire, supersede, trust/veracity, expiry, and importance edits only — no lifecycle-tier edits, raw content overwrite, or hard delete.</p>
               <label class="check-row"><input id="memoryAdminEnabled" type="checkbox" /> Enable admin maintenance mode</label>
               <label class="check-row"><input id="backupBeforeMutation" type="checkbox" checked /> Backup database before every mutation</label>
               <div class="item-actions"><button id="saveMemoryAdmin" class="primary">Save admin mode</button><button id="createBackup">Create backup now</button><button id="viewAuditLog">View audit log</button></div>
