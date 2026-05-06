@@ -147,6 +147,27 @@ def test_review_queues_surface_trust_lifecycle_work(tmp_path):
     assert review['queues']['due_for_degradation']['filter']['due_for_degradation'] == '1'
 
 
+def test_lifecycle_dashboard_surfaces_degradation_queues(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    lifecycle = store.lifecycle_dashboard(limit=10)
+    assert lifecycle['read_only'] is True
+    assert lifecycle['thresholds']['tier2_days'] == 30
+    assert lifecycle['thresholds']['tier3_days'] == 180
+    assert [card['key'] for card in lifecycle['cards']] == ['hot', 'warm', 'cold', 'due_for_degradation', 'recently_degraded', 'high_importance_degraded']
+    assert lifecycle['counts']['hot'] == 0
+    assert lifecycle['counts']['warm'] == 1
+    assert lifecycle['counts']['cold'] == 1
+    assert lifecycle['counts']['recently_degraded'] == 2
+    assert lifecycle['counts']['high_importance_degraded'] == 1
+    assert [item['id'] for item in lifecycle['queues']['recently_degraded']['items']] == ['e2', 'e1']
+    assert [item['id'] for item in lifecycle['queues']['high_importance_degraded']['items']] == ['e1']
+    assert lifecycle['queues']['cold']['filter']['degradation_tier'] == '3'
+    assert lifecycle['queues']['due_for_degradation']['filter']['due_for_degradation'] == '1'
+
+
 def test_search_uses_token_prefix_not_mid_word_substring(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
@@ -320,6 +341,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="review"' in html
     assert 'id="reviewCards"' in html
     assert 'id="reviewQueues"' in html
+    assert 'id="lifecycle"' in html
+    assert 'id="lifecycleCards"' in html
+    assert 'id="lifecycleQueues"' in html
+    assert 'id="lifecycleThresholds"' in html
     assert 'id="todayVeracity"' in html
     assert 'id="todayDegradation"' in html
     assert 'by_veracity' in js
@@ -331,6 +356,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/api/review' in js
     assert 'loadReview' in js
     assert 'applyReviewFilter' in js
+    assert '/api/lifecycle' in js
+    assert 'loadLifecycle' in js
+    assert 'lifecycleQueueHtml' in js
     assert 'contextLabel' in js
     assert "'Temporary context':'Short-term notes'" in js
     assert "'Project context':'Project notes'" in js

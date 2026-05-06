@@ -284,6 +284,7 @@ function switchTab(name, opts={}){
   if(section==='today') loadTodayDigest();
   if(section==='profile') loadProfile();
   if(section==='review') loadReview();
+  if(section==='lifecycle') loadLifecycle();
   if(section==='constellation') loadConstellation();
   if(section==='visualiser3d') loadThreeVisualiser();
   if(section==='settings') { loadAuthStatus(); loadDiagnostics(); }
@@ -647,6 +648,26 @@ async function loadReview(){
     if(!el.classList.contains('review-card') && !el.classList.contains('review-filter')) return;
     el.onclick = e => { e.stopPropagation(); const key = el.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); };
   });
+}
+function lifecycleQueueHtml(key, queue){
+  return reviewQueueHtml(key, queue).replace('review-queue glass', 'review-queue lifecycle-queue glass').replace('Open filtered browser', 'Open lifecycle filter');
+}
+async function loadLifecycle(){
+  const data = await api('/api/lifecycle?limit=40');
+  const queues = data.queues || {};
+  const t = data.thresholds || {};
+  const weights = t.weights || {};
+  $('#lifecycleThresholds').innerHTML = [
+    `Tier 2 after ${Number(t.tier2_days || 30).toLocaleString()} days`,
+    `Tier 3 after ${Number(t.tier3_days || 180).toLocaleString()} days`,
+    `Weights: hot ×${Number(weights['1'] || 1).toFixed(2)} · warm ×${Number(weights['2'] || .5).toFixed(2)} · cold ×${Number(weights['3'] || .25).toFixed(2)}`,
+    'Read-only: no degradation is triggered from this page'
+  ].map(x => `<span>${esc(x)}</span>`).join('');
+  $('#lifecycleCards').innerHTML = (data.cards || []).map(card => `<button class="card review-card lifecycle-card" data-lifecycle-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
+  $('#lifecycleQueues').innerHTML = Object.entries(queues).map(([key, queue]) => lifecycleQueueHtml(key, queue)).join('') || '<p class="muted">No lifecycle queues available.</p>';
+  $$('#lifecycle .memory-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
+  $$('#lifecycle [data-lifecycle-key]').forEach(el => el.onclick = e => { e.stopPropagation(); applyReviewFilter(queues[el.dataset.lifecycleKey]?.filter || {}); });
+  $$('#lifecycle .review-filter').forEach(el => el.onclick = e => { e.stopPropagation(); const key = el.closest('[data-review-key]')?.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); });
 }
 
 function constellationInspectorDefault(){

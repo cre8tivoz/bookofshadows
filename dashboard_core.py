@@ -513,6 +513,48 @@ class DashboardStore:
             "queues": queues,
         }
 
+    def lifecycle_dashboard(self, limit: int = 50) -> dict[str, Any]:
+        """Read-only lifecycle dashboard for Mnemosyne degradation tiers."""
+        limit = max(1, min(int(limit or 50), 200))
+        try:
+            tier2_days = int(os.environ.get("MNEMOSYNE_TIER2_DAYS", "30"))
+            tier3_days = int(os.environ.get("MNEMOSYNE_TIER3_DAYS", "180"))
+        except ValueError:
+            tier2_days, tier3_days = 30, 180
+        hot = self.list_memories(kind="episodic", status="active", degradation_tier=1, sort="oldest", limit=limit)
+        warm = self.list_memories(kind="episodic", status="active", degradation_tier=2, sort="oldest", limit=limit)
+        cold = self.list_memories(kind="episodic", status="active", degradation_tier=3, sort="oldest", limit=limit)
+        due = self.list_memories(kind="episodic", status="active", due_for_degradation=True, sort="oldest", limit=limit)
+        recently_degraded = self.list_memories(kind="episodic", status="active", degraded_only=True, sort="recent", limit=limit)
+        high_importance_degraded = [m for m in recently_degraded if float(m.get("importance") or 0) > 0.5][:limit]
+        stats = self.stats()
+        degradation_counts = {row["degradation_label"]: int(row["count"] or 0) for row in stats.get("by_degradation", [])}
+        counts = {
+            "hot": degradation_counts.get("hot", len(hot)),
+            "warm": degradation_counts.get("warm", len(warm)),
+            "cold": degradation_counts.get("cold", len(cold)),
+            "due_for_degradation": int(stats.get("degradation", {}).get("due_tier2") or 0) + int(stats.get("degradation", {}).get("due_tier3") or 0),
+            "recently_degraded": int(stats.get("degradation", {}).get("degraded") or len(recently_degraded)),
+            "high_importance_degraded": len(high_importance_degraded),
+        }
+        queues = {
+            "hot": {"title": "Hot memories", "description": "Tier 1 episodic memories retain full detail and full lifecycle weight.", "filter": {"kind": "episodic", "degradation_tier": "1", "sort": "oldest"}, "items": hot},
+            "warm": {"title": "Warm memories", "description": "Tier 2 episodic memories are compressed and carry reduced recall weight.", "filter": {"kind": "episodic", "degradation_tier": "2", "sort": "oldest"}, "items": warm},
+            "cold": {"title": "Cold memories", "description": "Tier 3 episodic memories keep key signal only and carry the lowest lifecycle weight.", "filter": {"kind": "episodic", "degradation_tier": "3", "sort": "oldest"}, "items": cold},
+            "due_for_degradation": {"title": "Due for degradation", "description": "Hot or warm episodic memories old enough to move to the next lifecycle tier.", "filter": {"kind": "episodic", "due_for_degradation": "1", "sort": "oldest"}, "items": due},
+            "recently_degraded": {"title": "Recently degraded", "description": "Memories already compressed into a lower lifecycle tier.", "filter": {"kind": "episodic", "degraded_only": "1", "sort": "recent"}, "items": recently_degraded},
+            "high_importance_degraded": {"title": "High-importance degraded", "description": "Important degraded memories worth checking before further lifecycle compression.", "filter": {"kind": "episodic", "degraded_only": "1", "sort": "importance"}, "items": high_importance_degraded},
+        }
+        cards = [{"key": key, "title": queue["title"], "count": counts[key], "description": queue["description"]} for key, queue in queues.items()]
+        return {
+            "read_only": True,
+            "generated_at": _utc_now(),
+            "thresholds": {"tier2_days": tier2_days, "tier3_days": tier3_days, "weights": {str(k): v for k, v in DEGRADATION_WEIGHTS.items()}},
+            "counts": counts,
+            "cards": cards,
+            "queues": queues,
+        }
+
     def triples(self, q: str = "", subject: str = "", predicate: str = "", object_: str = "", limit: int = 200) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit or 200), 1000))
         where = []

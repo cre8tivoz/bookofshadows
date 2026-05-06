@@ -182,6 +182,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(self.store.today_digest(day=q.get("day", ""), limit=_safe_int(q.get("limit"), 80, maximum=300)))
             if path == "/api/review":
                 return self._send_json(self.store.review_queues(limit=_safe_int(q.get("limit"), 50, maximum=200)))
+            if path == "/api/lifecycle":
+                return self._send_json(self.store.lifecycle_dashboard(limit=_safe_int(q.get("limit"), 50, maximum=200)))
             if path == "/api/profile/inferred":
                 return self._send_json(self.store.inferred_profile(limit_per_section=_safe_int(q.get("limit"), 10, maximum=30)))
             if path == "/api/constellation":
