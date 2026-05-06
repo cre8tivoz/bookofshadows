@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import tomllib
 import urllib.parse
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,6 +16,14 @@ from dashboard_core import DashboardStore, default_db_path
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
 MAX_JSON_BODY_BYTES = 64 * 1024
+
+
+def _project_version() -> str:
+    with (ROOT / "pyproject.toml").open("rb") as fh:
+        return tomllib.load(fh)["project"]["version"]
+
+
+VERSION = _project_version()
 
 
 def _safe_int(value: str | None, default: int, minimum: int = 1, maximum: int = 1000) -> int:
@@ -31,7 +40,7 @@ def _json_bytes(obj: Any) -> bytes:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MnemosyneDashboard/0.3"
+    server_version = f"MnemosyneDashboard/{VERSION}"
 
     def log_message(self, fmt, *args):
         return

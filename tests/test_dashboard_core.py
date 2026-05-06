@@ -1,5 +1,6 @@
 import sqlite3
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from config import default_db_path, effective_config, load_config, public_config, save_config
 from dashboard_core import DashboardStore
+from server import Handler
 
 
 def make_db(path: Path):
@@ -68,6 +70,16 @@ def make_db(path: Path):
     con.execute("UPDATE episodic_memory SET veracity = 'imported', tier = 3, degraded_at = '2026-05-05T01:00:00' WHERE id = 'e2'")
     con.commit()
     con.close()
+
+
+def test_release_version_is_consistent():
+    pyproject = tomllib.loads((ROOT / 'pyproject.toml').read_text())
+    project_version = pyproject['project']['version']
+    plugin_text = (ROOT / 'plugin.yaml').read_text()
+
+    assert project_version == '0.9.1'
+    assert f'version: "{project_version}"' in plugin_text
+    assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
 
 def test_stats_counts_memory_tables(tmp_path):

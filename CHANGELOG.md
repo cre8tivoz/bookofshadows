@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1
+
+- Bump package/plugin release version to `0.9.1`.
+- Keep the HTTP server header aligned with the project version (`MnemosyneDashboard/0.9.1`) instead of the old hardcoded `0.3` value.
+- Refresh the GitHub screenshot gallery after the dashboard IA, search, review, lifecycle, and copy polish pass.
+- Polish the dashboard for release: selected-item Review triage, sidebar command search, clearer Search results, empty/loading/error states, Facts wording, and shorter History copy.
+
 ## 0.6.1
 
 - Polish the public dashboard UI for GitHub release quality: balanced mobile brand lockup, larger sidebar nav icons, softer theme switch styling, and refined hero headline spacing.
