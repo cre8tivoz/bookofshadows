@@ -370,7 +370,7 @@ async function loadMemories(){
   });
   const data = await api(`/api/memories?${params.toString()}`);
   latestMemoryItems = data.items || [];
-  $('#memoryList').innerHTML = latestMemoryItems.map(item => memoryItem(item, {selectable:true})).join('') || '<p class="muted">No memories found.</p>';
+  $('#memoryList').innerHTML = latestMemoryItems.map(item => memoryItem(item, {selectable:true})).join('') || stateHtml('empty', 'No memories found.', 'Try clearing filters or broadening the memory content search.');
   bindMemoryClicks($('#memoryList'));
   bindBulkMemoryControls();
   updateBulkBar();
@@ -590,9 +590,13 @@ async function loadConsolidations(){
 }
 
 function searchMemoryCard(m){ return memoryItem(m); }
-function tripleCard(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">triple</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
+function tripleCard(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">fact</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
 function consolidationCard(c){ return `<div class="item" data-json='${esc(JSON.stringify(c))}'><div class="meta"><span class="badge">consolidation</span><span class="badge">${esc(c.items_consolidated)} items</span><span>${esc(c.created_at)}</span></div><div class="content">${esc(c.session_id || '')}: ${esc(c.summary_preview || '')}</div></div>`; }
 function bindJsonCards(root, title){ root.querySelectorAll('[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), title)); }
+function stateHtml(kind, title, body=''){
+  return `<div class="state-card state-${esc(kind)}"><strong>${esc(title)}</strong>${body ? `<p>${esc(body)}</p>` : ''}</div>`;
+}
+function countLabel(n, noun){ return `${Number(n || 0).toLocaleString()} ${noun}${Number(n || 0) === 1 ? '' : 's'}`; }
 async function runSearchFromInput(inputId){
   const q = $(inputId)?.value.trim() || '';
   if(!q) return;
@@ -603,14 +607,25 @@ async function runSearchFromInput(inputId){
 async function menuSearch(){ await runSearchFromInput('#menuSearchQuery'); }
 async function loadGlobalSearch(){
   const q = $('#globalSearchQuery')?.value.trim() || '';
-  if(!q){ $('#globalSearchResults').innerHTML = '<p class="muted">Type a query to search memories, triples, and consolidations.</p>'; return; }
-  const data = await api(`/api/search?q=${encodeURIComponent(q)}&limit=30`);
-  $('#globalSearchResults').innerHTML = `
-    <div class="result-section"><h3>Memories <span>${data.memories.length}</span></h3><div class="memory-grid">${data.memories.map(searchMemoryCard).join('') || '<p class="muted">No memories</p>'}</div></div>
-    <div class="result-section"><h3>Triples <span>${data.triples.length}</span></h3><div class="memory-grid">${data.triples.map(tripleCard).join('') || '<p class="muted">No triples</p>'}</div></div>
-    <div class="result-section"><h3>Consolidations <span>${data.consolidations.length}</span></h3><div class="memory-grid">${data.consolidations.map(consolidationCard).join('') || '<p class="muted">No consolidations</p>'}</div></div>`;
-  bindMemoryClicks($('#globalSearchResults'));
-  bindJsonCards($('#globalSearchResults'), 'Search result detail');
+  if(!q){ $('#globalSearchResults').innerHTML = stateHtml('empty', 'Search from the sidebar or type a query above.', 'Search looks across memories, facts, and consolidations.'); return; }
+  $('#globalSearchResults').innerHTML = stateHtml('loading', 'Searching memory…', q);
+  try{
+    const data = await api(`/api/search?q=${encodeURIComponent(q)}&limit=30`);
+    const memories = data.memories || [];
+    const triples = data.triples || [];
+    const consolidations = data.consolidations || [];
+    const total = memories.length + triples.length + consolidations.length;
+    $('#globalSearchResults').innerHTML = `
+      <div class="search-summary glass"><h3>Search results for “${esc(q)}”</h3><p>${countLabel(total, 'result')} · ${countLabel(memories.length, 'memory')} · ${countLabel(triples.length, 'fact')} · ${countLabel(consolidations.length, 'consolidation')}</p></div>
+      ${total ? '' : stateHtml('empty', 'No results found.', 'Try broader terms, a person/project name, or search inside Memories for record-only filters.')}
+      <div class="result-section"><h3>Memories <span>${memories.length}</span></h3><div class="memory-grid">${memories.map(searchMemoryCard).join('') || stateHtml('empty', 'No memory records matched.')}</div></div>
+      <div class="result-section"><h3>Facts <span>${triples.length}</span></h3><div class="memory-grid">${triples.map(tripleCard).join('') || stateHtml('empty', 'No graph facts matched.')}</div></div>
+      <div class="result-section"><h3>Consolidations <span>${consolidations.length}</span></h3><div class="memory-grid">${consolidations.map(consolidationCard).join('') || stateHtml('empty', 'No consolidation summaries matched.')}</div></div>`;
+    bindMemoryClicks($('#globalSearchResults'));
+    bindJsonCards($('#globalSearchResults'), 'Search result detail');
+  }catch(e){
+    $('#globalSearchResults').innerHTML = stateHtml('error', 'Search failed.', e.message || 'The dashboard could not load search results.');
+  }
 }
 function recallItem(x){
   const m = x.memory;
@@ -635,12 +650,12 @@ async function loadTimeline(){
   $$('#timelineResults .open-session').forEach(btn => btn.onclick = () => openSessionDetail(btn.dataset.session || ''));
 }
 function tinyRows(rows, key='label'){ return (rows || []).map(r => `<div class="break-row"><span>${esc(r[key] || r.label || 'unknown')}</span><strong>${Number(r.count || 0).toLocaleString()}</strong></div>`).join('') || '<p class="muted">No data</p>'; }
-function tripleItem(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">triple</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
+function tripleItem(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">fact</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
 async function loadTodayDigest(day=''){
   const suffix = day ? `&day=${encodeURIComponent(day)}` : '';
   const data = await api(`/api/digest/today?limit=80${suffix}`);
   const c = data.counts || {};
-  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Recalled', c.memories_recalled], ['Contaminated', c.contaminated_added], ['Degraded', c.degraded_added], ['Triples', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
+  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Retrieved', c.memories_recalled], ['Needs confirmation', c.contaminated_added], ['Lifecycle changes', c.degraded_added], ['Facts', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
   $('#todayEntities').innerHTML = tinyRows(data.breakdowns?.entities || []);
   $('#todayVeracity').innerHTML = tinyRows(data.breakdowns?.veracity || []);
   $('#todayDegradation').innerHTML = tinyRows(data.breakdowns?.degradation || []);
@@ -648,7 +663,7 @@ async function loadTodayDigest(day=''){
   $('#todaySessions').innerHTML = tinyRows(data.breakdowns?.sessions || []);
   $('#todayAdded .memory-grid').innerHTML = (data.memories_added || []).map(memoryItem).join('') || '<p class="muted">No memories added today.</p>';
   $('#todayRecalled .memory-grid').innerHTML = (data.memories_recalled || []).map(memoryItem).join('') || '<p class="muted">No memories recalled today.</p>';
-  $('#todayTriples .memory-grid').innerHTML = (data.triples_added || []).map(tripleItem).join('') || '<p class="muted">No triples added today.</p>';
+  $('#todayTriples .memory-grid').innerHTML = (data.triples_added || []).map(tripleItem).join('') || stateHtml('empty', 'No facts added today.');
   $('#todayConsolidations .memory-grid').innerHTML = (data.consolidations || []).map(consolidationCard).join('') || '<p class="muted">No consolidations today.</p>';
   ['todayAdded','todayRecalled'].forEach(id => bindMemoryClicks($(`#${id}`)));
   bindJsonCards($('#todayTriples'), 'Triple detail');
@@ -701,15 +716,27 @@ function applyReviewFilter(filter={}){
   $('#memorySort').value = filter.sort || 'importance';
   switchTab('memories');
 }
+function reviewReasonBadges(key, item={}){
+  const reasons = [];
+  if(key === 'contaminated' || item.veracity && item.veracity !== 'stated') reasons.push('Needs confirmation');
+  if(key === 'important_contaminated' || Number(item.importance || 0) >= 0.75) reasons.push('High importance');
+  if(key === 'degraded' || Number(item.degradation_tier || 1) > 1) reasons.push('Already compressed');
+  if(key === 'due_degradation') reasons.push('Due for lifecycle compression');
+  return [...new Set(reasons)].map(reason => `<span>${esc(reason)}</span>`).join('');
+}
+function reviewMemoryItem(key, item, opts={}){
+  const reasons = reviewReasonBadges(key, item);
+  return `<div class="review-memory-wrap">${memoryItem(item, opts)}${reasons ? `<div class="review-reasons" aria-label="Review reasons">${reasons}</div>` : ''}</div>`;
+}
 function reviewQueueHtml(key, queue, opts={}){
   const items = queue.items || [];
   const selectAction = opts.triage ? `<button class="tiny review-select-visible" data-review-key="${esc(key)}">Select visible</button>` : '';
-  const renderedItems = opts.triage ? items.map(item => memoryItem(item, {selectable:true, selectedSet:reviewSelection, checkClass:'review-check'})).join('') : items.map(memoryItem).join('');
+  const renderedItems = opts.triage ? items.map(item => reviewMemoryItem(key, item, {selectable:true, selectedSet:reviewSelection, checkClass:'review-check'})).join('') : items.map(item => reviewMemoryItem(key, item)).join('');
   return `<section class="review-queue glass" data-review-key="${esc(key)}">
     <div class="section-head mini"><h2>${esc(queue.title || key)}</h2><span>${items.length} listed</span></div>
     <p class="muted">${esc(queue.description || '')}</p>
     <div class="review-actions"><button class="tiny primary review-filter" data-review-key="${esc(key)}">Open filtered browser</button>${selectAction}</div>
-    <div class="list memory-grid">${renderedItems || '<p class="muted">No items in this queue.</p>'}</div>
+    <div class="list memory-grid">${renderedItems || stateHtml('empty', 'No items in this queue.', 'This queue is clear for now.')}</div>
   </section>`;
 }
 function reviewActionableIds(){ return [...new Set(latestReviewItems.filter(x => reviewSelection.has(x.id) && isMutableMemory(x)).map(x => x.id))]; }

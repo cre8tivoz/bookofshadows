@@ -383,6 +383,17 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="todayDegradation"' in html
     assert 'by_veracity' in js
     assert 'by_degradation' in js
+    assert 'stateHtml' in js
+    assert 'state-empty' in css
+    assert 'state-loading' in css
+    assert 'state-error' in css
+    assert 'Search results for' in js
+    assert 'reviewReasonBadges' in js
+    assert 'review-reasons' in js
+    assert 'Needs confirmation' in js
+    assert 'Lifecycle changes' in js
+    assert '>Facts table<' in html
+    assert '>Triples table<' not in html
     assert 'contaminated_only' in js
     assert 'degradation_tier' in js
     assert 'trust-strip' in js
