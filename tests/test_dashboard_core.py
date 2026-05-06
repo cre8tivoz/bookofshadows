@@ -371,6 +371,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert html.index('id="menuSearchQuery"') < html.index('<nav>')
     assert 'data-tab="explore"' not in html
     assert '>History<' in html
+    assert 'chronological memory events + consolidation history' in html
+    assert 'not a memory browser' not in html
     assert '>Knowledge Graph<' in html
     assert 'Bulk actions are allowed only for selected active memories' in html
     assert 'id="bulkVeracity"' in html
