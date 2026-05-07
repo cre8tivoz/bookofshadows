@@ -337,7 +337,7 @@ class DashboardStore:
         degraded_only: bool | str = False,
         due_for_degradation: bool | str = False,
     ) -> list[dict[str, Any]]:
-        limit = max(1, min(int(limit or 100), 500))
+        limit = max(1, min(int(limit or 100), 10000))
         offset = max(0, int(offset or 0))
         q = (q or "").strip()
         source = (source or "").strip()
@@ -463,17 +463,16 @@ class DashboardStore:
 
     def review_queues(self, limit: int = 50) -> dict[str, Any]:
         """Read-only trust/lifecycle review queues for Mnemosyne 2.3 metadata."""
-        limit = max(1, min(int(limit or 50), 200))
+        limit = max(1, min(int(limit or 50), 10000))
         contaminated = self.list_memories(kind="all", status="active", contaminated_only=True, sort="importance", limit=limit)
         high_importance = [m for m in contaminated if float(m.get("importance") or 0) > 0.5][:limit]
         degraded = self.list_memories(kind="episodic", status="active", degraded_only=True, sort="recent", limit=limit)
         due = self.list_memories(kind="episodic", status="active", due_for_degradation=True, sort="oldest", limit=limit)
-        stats = self.stats()
         counts = {
-            "contaminated": int(stats.get("contamination", {}).get("total") or len(contaminated)),
-            "high_importance_contaminated": int(stats.get("contamination", {}).get("high_importance") or len(high_importance)),
-            "degraded": int(stats.get("degradation", {}).get("degraded") or len(degraded)),
-            "due_for_degradation": int(stats.get("degradation", {}).get("due_tier2") or 0) + int(stats.get("degradation", {}).get("due_tier3") or 0),
+            "contaminated": len(contaminated),
+            "high_importance_contaminated": len(high_importance),
+            "degraded": len(degraded),
+            "due_for_degradation": len(due),
         }
         queues = {
             "contaminated": {
@@ -507,6 +506,7 @@ class DashboardStore:
         ]
         return {
             "read_only": True,
+            "limit": limit,
             "generated_at": _utc_now(),
             "counts": counts,
             "cards": cards,

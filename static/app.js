@@ -9,6 +9,7 @@ let currentRoute = { tab: 'overview' };
 let applyingHistory = false;
 let bulkSelection = new Set();
 let reviewSelection = new Set();
+let selectedReviewQueue = 'contaminated';
 let latestMemoryItems = [];
 let latestReviewItems = [];
 let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
@@ -757,7 +758,35 @@ function updateReviewBulkBar(){
 }
 function bindReviewControls(queues){
   $$('#review .review-check').forEach(chk => chk.onchange = e => { e.stopPropagation(); chk.checked ? reviewSelection.add(chk.dataset.id) : reviewSelection.delete(chk.dataset.id); updateReviewBulkBar(); });
-  $$('#review .review-select-visible').forEach(el => el.onclick = e => { e.stopPropagation(); const items = queues[el.dataset.reviewKey]?.items || []; items.forEach(x => reviewSelection.add(x.id)); loadReview(); });
+  $$('#review .review-select-visible').forEach(el => el.onclick = e => { e.stopPropagation(); const items = queues[el.dataset.reviewKey]?.items || []; items.forEach(x => reviewSelection.add(x.id)); updateReviewBulkBar(); });
+}
+function renderSelectedReviewQueue(data){
+  const queues = data.queues || {};
+  const cards = data.cards || [];
+  const keys = cards.map(card => card.key).filter(key => queues[key]);
+  if(!keys.length){
+    latestReviewItems = [];
+    $('#reviewCards').innerHTML = '';
+    $('#reviewQueueSelect').innerHTML = '';
+    $('#reviewQueueCount').textContent = '0 listed';
+    $('#reviewQueues').innerHTML = '<p class="muted">No review queues available.</p>';
+    updateReviewBulkBar();
+    return;
+  }
+  if(!queues[selectedReviewQueue]) selectedReviewQueue = keys[0];
+  const selectedCard = cards.find(card => card.key === selectedReviewQueue) || {count: queues[selectedReviewQueue]?.items?.length || 0};
+  $('#reviewCards').innerHTML = '';
+  $('#reviewQueueSelect').innerHTML = cards.map(card => `<option value="${esc(card.key)}" ${card.key === selectedReviewQueue ? 'selected' : ''}>${esc(card.title)} (${Number(card.count || 0).toLocaleString()})</option>`).join('');
+  $('#reviewQueueCount').textContent = `${Number(selectedCard.count || 0).toLocaleString()} total · ${(queues[selectedReviewQueue]?.items || []).length.toLocaleString()} listed`;
+  latestReviewItems = [...new Map((queues[selectedReviewQueue]?.items || []).map(item => [item.id, item])).values()];
+  $('#reviewQueues').innerHTML = reviewQueueHtml(selectedReviewQueue, queues[selectedReviewQueue], {triage:true});
+  bindMemoryClicks($('#review'));
+  bindReviewControls(queues);
+  updateReviewBulkBar();
+  $('#reviewQueueSelect').onchange = e => { selectedReviewQueue = e.target.value; reviewSelection.clear(); renderSelectedReviewQueue(data); };
+  $$('#review .review-filter').forEach(el => {
+    el.onclick = e => { e.stopPropagation(); const key = el.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); };
+  });
 }
 async function confirmSelectedReviewMemories(){
   const ids = reviewActionableIds();
@@ -796,18 +825,8 @@ async function expireSelectedReviewMemories(){
   reviewSelection.clear(); await loadStats(); await loadReview();
 }
 async function loadReview(){
-  const data = await api('/api/review?limit=80');
-  const queues = data.queues || {};
-  $('#reviewCards').innerHTML = (data.cards || []).map(card => `<button class="card review-card" data-review-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
-  latestReviewItems = [...new Map(Object.values(queues).flatMap(queue => queue.items || []).map(item => [item.id, item])).values()];
-  $('#reviewQueues').innerHTML = Object.entries(queues).map(([key, queue]) => reviewQueueHtml(key, queue, {triage:true})).join('') || '<p class="muted">No review queues available.</p>';
-  bindMemoryClicks($('#review'));
-  bindReviewControls(queues);
-  updateReviewBulkBar();
-  $$('#review [data-review-key]').forEach(el => {
-    if(!el.classList.contains('review-card') && !el.classList.contains('review-filter')) return;
-    el.onclick = e => { e.stopPropagation(); const key = el.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); };
-  });
+  const data = await api('/api/review?limit=10000');
+  renderSelectedReviewQueue(data);
 }
 function lifecycleQueueHtml(key, queue){
   return reviewQueueHtml(key, queue).replace('review-queue glass', 'review-queue lifecycle-queue glass').replace('Open filtered browser', 'Open lifecycle filter');

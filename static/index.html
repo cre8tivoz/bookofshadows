@@ -121,8 +121,13 @@
         <section id="review" class="tab">
           <div class="section-head"><h2>Trust Review</h2><span>triage selected memories — confirm, correct, or expire only what you choose</span></div>
           <div id="reviewCards" class="cards review-cards"></div>
+          <div class="toolbar glass review-selector-bar">
+            <label for="reviewQueueSelect" class="muted">Review queue</label>
+            <select id="reviewQueueSelect"></select>
+            <span id="reviewQueueCount" class="muted">0 listed</span>
+          </div>
           <div id="reviewBulkBar" class="bulk-bar review-bulk-bar glass hidden">
-            <label class="bulk-select-control"><input id="reviewSelectAll" type="checkbox" /> <span>Select visible</span></label>
+            <label class="bulk-select-control"><input id="reviewSelectAll" type="checkbox" /> <span>Select listed</span></label>
             <span id="reviewSelectionStatus" class="bulk-selection-status muted">0 selected</span>
             <button id="reviewConfirm" class="drawer-action primary">Confirm selected</button>
             <button id="reviewVeracity" class="drawer-action">Set trust</button>

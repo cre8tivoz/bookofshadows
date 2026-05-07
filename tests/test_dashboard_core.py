@@ -162,6 +162,28 @@ def test_review_queues_surface_trust_lifecycle_work(tmp_path):
     assert review['queues']['due_for_degradation']['filter']['due_for_degradation'] == '1'
 
 
+def test_review_queues_can_return_all_items_beyond_preview_cap(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    con = sqlite3.connect(db)
+    con.executemany(
+        "INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,veracity) VALUES (?,?,?,?,?,?,?,?)",
+        [
+            (f'bulk{i:03d}', f'Bulk contaminated memory {i}', 'test', '2026-05-06T00:00:00', 'bulk', 0.1, 'global', 'unknown')
+            for i in range(650)
+        ],
+    )
+    con.commit()
+    con.close()
+
+    review = DashboardStore(db).review_queues(limit=10000)
+
+    assert review['limit'] == 10000
+    assert review['counts']['contaminated'] == 655
+    assert len(review['queues']['contaminated']['items']) == 655
+    assert review['counts']['contaminated'] == len(review['queues']['contaminated']['items'])
+
+
 def test_lifecycle_dashboard_surfaces_degradation_queues(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
@@ -363,6 +385,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="memoryTrustPreset"' in html
     assert 'id="review"' in html
     assert 'id="reviewCards"' in html
+    assert 'id="reviewQueueSelect"' in html
+    assert 'id="reviewQueueCount"' in html
     assert 'id="reviewQueues"' in html
     assert 'id="reviewBulkBar"' in html
     assert 'id="reviewSelectAll"' in html
@@ -407,6 +431,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Search results for' in js
     assert 'reviewReasonBadges' in js
     assert 'review-reasons' in js
+    assert 'selectedReviewQueue' in js
+    assert 'renderSelectedReviewQueue' in js
+    assert '/api/review?limit=10000' in js
+    assert "Object.entries(queues).map(([key, queue]) => reviewQueueHtml" not in js
     assert 'Contaminated' in js
     assert 'Needs confirmation' not in js
     assert 'review non-stated' not in html
