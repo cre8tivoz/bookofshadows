@@ -2601,7 +2601,7 @@ function palaceNearestMemory(maxDist=170){
 function updatePalaceNearbyPrompt(){
   const near = palaceNearestMemory(155);
   if(near) $('#palaceHudStatus').textContent = `tap to scan memory: ${String(near.label || '').replace(/^memory:/,'').slice(0,30)}`;
-  else if($('#palaceHudStatus').textContent.startsWith('tap to scan memory:')) $('#palaceHudStatus').textContent = 'walk forward — memory books line the path';
+  else if($('#palaceHudStatus').textContent.startsWith('tap to scan memory:')) $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by topic';
 }
 function palaceApplyVisibilityCulling(){
   if(!memoryPalace.scene || !memoryPalace.pos) return;
@@ -2625,10 +2625,11 @@ function palaceApplyVisibilityCulling(){
 }
 function updatePalaceZoneBadge(){
   const badge = $('.palace-zone-badge');
-  if(!badge || !memoryPalace.pos || !memoryPalace.rooms?.length) return;
-  let best = memoryPalace.rooms[0], bestD = Infinity;
-  memoryPalace.rooms.forEach(r => { const d = Math.hypot(memoryPalace.pos.x - r.x, memoryPalace.pos.z - r.z); if(d < bestD){ bestD = d; best = r; } });
-  badge.textContent = best.label || 'The Archive Gate';
+  if(!badge || !memoryPalace.pos) return;
+  let best = null, bestD = Infinity;
+  const zones = (memoryPalace.pathSections?.length ? memoryPalace.pathSections : memoryPalace.rooms) || [];
+  zones.forEach(r => { const d = Math.hypot(memoryPalace.pos.x - r.x, memoryPalace.pos.z - r.z); if(d < bestD){ bestD = d; best = r; } });
+  badge.textContent = best?.label || 'The Archive Gate';
 }
 function animateMemoryPalace(t=0){
   if(!memoryPalace.renderer) return;
@@ -2873,8 +2874,10 @@ function animateMemoryPalace(t=0){
 function palaceFpsRooms(data){
   const raw = (data.nodes || []).map(n => ({...n}));
   const memoryNodes = raw.filter(n => n.kind === 'memory' || n.memory_id);
-  const nodes = (memoryNodes.length ? memoryNodes : raw).slice(0,40);
-  const cats = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const source = (memoryNodes.length ? memoryNodes : raw).slice(0,40);
+  const countByCat = source.reduce((m,n)=>{ const c=String(n.category || 'Other'); m[c]=(m[c]||0)+1; return m; }, {});
+  const cats = Object.keys(countByCat).sort((a,b)=>countByCat[b]-countByCat[a] || a.localeCompare(b));
+  const nodes = cats.flatMap(cat => source.filter(n => String(n.category || 'Other') === cat)).slice(0,40);
   const rooms = [
     { label:'Archive Gate', x:0, z:0, w:420, d:360, color:0xffd166 },
     { label:String(cats[0] || 'Episodic Vault').slice(0,20), x:-520, z:-520, w:380, d:340, color:0x65d6ff },
@@ -2883,18 +2886,27 @@ function palaceFpsRooms(data){
     { label:String(cats[3] || 'Cold Storage').slice(0,20), x:520, z:-1120, w:380, d:340, color:0x8aa0c9 },
     { label:'Corrupted Wing', x:0, z:-1680, w:430, d:360, color:0xff5f87 }
   ];
+  const sectionColors = [0xffd166,0x65d6ff,0x52d6b5,0xb9a6ff,0xff9f6e,0x8aa0c9];
+  const pathSections = cats.slice(0,6).map((cat,i)=>({
+    label:String(cat || 'Other').slice(0,20), category:cat, x:0, y:150, z:245 - i*330,
+    kind:'section', chunkId:Math.floor((245 - i*330 + 1600) / 350), color:sectionColors[i % sectionColors.length], count:countByCat[cat] || 0
+  }));
+  const seenInSection = {};
   let featured = 0;
   nodes.forEach((n,i)=>{
     const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
     let room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
-    if(!contaminated && n.kind === 'memory' && featured < 12){
-      // The first walk must immediately show real memories, not generic graph/entity circles.
+    if(!contaminated && n.kind === 'memory' && featured < 24){
+      // Group the first playable walk by memory category/topic so the idea is judgeable, not random books.
+      const cat = String(n.category || 'Other');
+      const section = pathSections.find(s => s.category === cat) || pathSections[0] || { label:'Archive Gate', z:245 };
+      const within = seenInSection[cat] || 0; seenInSection[cat] = within + 1;
       room = rooms[0];
-      const side = featured % 2 === 0 ? -1 : 1;
-      const row = Math.floor(featured / 2);
-      n.x = side * (row < 2 ? 58 : 82);
-      n.z = 245 - row * 175;
-      n.y = 34; n.room = 'Archive Gate'; n.featuredPath = true;
+      const side = within % 2 === 0 ? -1 : 1;
+      const row = Math.floor(within / 2);
+      n.x = side * (row < 2 ? 58 : 86);
+      n.z = section.z - row * 105;
+      n.y = 34; n.room = section.label; n.pathGroup = section.label; n.featuredPath = true;
       featured += 1;
     } else {
       const col = i % 4, row = Math.floor((i % 20) / 4);
@@ -2906,6 +2918,7 @@ function palaceFpsRooms(data){
     n.size = Math.min(28, 10 + Math.sqrt(Math.max(1, Number(n.weight || n.count || 1))) * 4);
     n.chunkId = Math.floor((n.z + 1600) / 350);
   });
+  nodes.pathSections = pathSections;
   nodes.rooms = rooms;
   return nodes;
 }
@@ -3011,6 +3024,16 @@ function palaceFpsAddRoom(THREE, scene, room, i){
     const endLight = new THREE.PointLight(0xffd166, 1.1, 360); endLight.position.set(room.x, 92, room.z-1420); scene.add(endLight);
   }
 }
+function palaceFpsAddPathSections(THREE, scene, sections){
+  const markerMat = color => new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.82 });
+  (sections || []).forEach(section=>{
+    const mat = markerMat(section.color || 0xffd166);
+    palaceFpsBox(THREE, scene, [250, 8, 18], [0, 12, section.z + 42], mat);
+    palaceFpsBox(THREE, scene, [18, 92, 18], [-138, 48, section.z + 42], mat);
+    palaceFpsBox(THREE, scene, [18, 92, 18], [138, 48, section.z + 42], mat);
+    const glow = new THREE.PointLight(section.color || 0xffd166, .55, 300); glow.position.set(0, 86, section.z + 42); scene.add(glow);
+  });
+}
 function palaceFpsAddCorridor(THREE, scene, a, b){
   const dx=b.x-a.x, dz=b.z-a.z, len=Math.hypot(dx,dz), midX=(a.x+b.x)/2, midZ=(a.z+b.z)/2;
   const mat = palaceFpsMat(THREE, 0x372a46, { emissive:0xffd166, emissiveIntensity:.025 });
@@ -3081,15 +3104,16 @@ async function renderMemoryPalace(data){
   const camera = new THREE.PerspectiveCamera(72, 1, 1, 4200);
   scene.add(new THREE.HemisphereLight(0xcdbaff, 0x07030c, .78));
   const key = new THREE.DirectionalLight(0xffe8c4, .78); key.position.set(260,520,380); scene.add(key);
-  const nodes = palaceFpsRooms(data); const rooms = nodes.rooms || [];
+  const nodes = palaceFpsRooms(data); const rooms = nodes.rooms || [], pathSections = nodes.pathSections || [];
   rooms.slice(1).forEach(room => palaceFpsAddCorridor(THREE, scene, rooms[0], room));
   rooms.forEach((room,i)=>palaceFpsAddRoom(THREE, scene, room, i));
+  palaceFpsAddPathSections(THREE, scene, pathSections);
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, colors, streamedChunks:new Map(), labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,14)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, pathSections, colors, streamedChunks:new Map(), labels:pathSections.map(s=>({ label:`${s.label} (${s.count})`, x:s.x, y:s.y, z:s.z, kind:'section' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,18)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
   palaceStreamRelicChunks(true);
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
-  $('#palaceHudStatus').textContent = 'walk forward — memory books line the path';
+  $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by topic';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
 }
 function resizeMemoryPalace(){

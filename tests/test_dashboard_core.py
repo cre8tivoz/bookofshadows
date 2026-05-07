@@ -471,13 +471,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="palaceJoystick"' in html
     assert 'WASD' in html
     assert 'Memory Diver' in html
-    assert 'LAB v21' in html
+    assert 'LAB v22' in html
     assert 'palace-build' in html
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v21' in html
-    assert '/static/style.css?v=labyrinth-v21' in html
+    assert '/static/app.js?v=labyrinth-v22' in html
+    assert '/static/style.css?v=labyrinth-v22' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -504,7 +504,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'palaceFpsRooms' in js
     assert 'palaceFpsAddRoom' in js
     assert 'PerspectiveCamera(72' in js
-    assert 'walk forward — memory books line the path' in js
+    assert 'walk forward — memories are grouped by topic' in js
     assert 'new THREE.PlaneGeometry(126, 104)' in js
     assert 'function palaceFpsTexture' in js
     assert 'new THREE.CanvasTexture' in js
@@ -512,14 +512,14 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "palaceFpsTexturedBasic(THREE, 'gold'" in js
     assert 'Mobile Chrome crushes subtle StandardMaterial lighting' in js
     assert 'walking straight never drops into blank space' in js
-    assert 'The first walk must immediately show real memories' in js
+    assert 'Group the first playable walk by memory category/topic' in js
     assert 'featuredPath' in js
     assert 'Performance-first FPS: shadows and high DPR made desktop unplayably laggy' in js
-    assert 'walk forward — memory books line the path' in js
+    assert 'walk forward — memories are grouped by topic' in js
     assert 'tap to scan memory:' in js
     assert 'palaceNearestMemory' in js
     assert 'walk nearer to a memory book, then tap to scan' in js
-    assert 'not generic graph/entity circles' in js
+    assert 'generic graph/entity circles' not in js
     assert 'new THREE.BoxGeometry(44, 54, 8)' in js
     assert 'renderer.shadowMap.enabled = false' in js
     assert 'Spatial streaming-lite' in js
@@ -532,6 +532,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'lastVisibleObjectCount' in js
     assert 'cullTick % 8' in js
     assert 'slice(0,40)' in js
+    assert 'countByCat' in js
+    assert 'pathSections' in js
+    assert 'Group the first playable walk by memory category/topic' in js
+    assert 'palaceFpsAddPathSections' in js
+    assert 'pathGroup' in js
+    assert 'kind:\'section\'' in js
+    assert 'pathSections.map' in js
     assert 'dead = .16' in js
     assert 'move.lengthSq() > 1' in js
     assert 'rings read as bullseyes' in js
@@ -541,7 +548,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Math.min(720, memoryPalace.pos.z)' in js
     assert 'Math.max(-1500, Math.min(720, memoryPalace.pos.z))' in js
     assert 'function palaceFpsBox(THREE, scene, size, pos, mat){' in js
-    assert 'slice(0,14)' in js
+    assert 'slice(0,18)' in js
     assert 'slice(0,16)' not in js
     assert 'scene.add(avatar, drone)' not in js
     assert 'scene.add(drone)' in js
