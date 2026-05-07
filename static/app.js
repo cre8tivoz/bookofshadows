@@ -2349,9 +2349,9 @@ function clearPalaceScene(){
 }
 function resetMemoryPalaceDiver(){
   if(!memoryPalace.THREE) return;
-  memoryPalace.pos = new memoryPalace.THREE.Vector3(0, 36, 760);
+  memoryPalace.pos = new memoryPalace.THREE.Vector3(0, 118, 940);
   memoryPalace.velocity = new memoryPalace.THREE.Vector3();
-  memoryPalace.yaw = 0; memoryPalace.pitch = -.04;
+  memoryPalace.yaw = 0; memoryPalace.pitch = -.24;
   $('#palaceHudStatus').textContent = 'drifting at palace gate';
 }
 function palaceRoomsForCategories(categories){
@@ -2408,20 +2408,30 @@ function palaceCreatePortal(THREE, room, target, color=0xffe08a){
   const group = new THREE.Group();
   const dx = target.x - room.x, dz = target.z - room.z;
   const angle = Math.atan2(dx, dz);
-  const arch = new THREE.Mesh(new THREE.TorusGeometry(34, 2.5, 8, 48, Math.PI), new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.76 }));
+  const arch = new THREE.Mesh(new THREE.TorusGeometry(18, 1.6, 8, 32, Math.PI), new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.46 }));
   arch.rotation.z = Math.PI;
-  arch.position.y = 50;
-  const light = new THREE.PointLight(color, 1.2, 180); light.position.y = 44;
+  arch.position.y = 34;
+  const light = new THREE.PointLight(color, .58, 125); light.position.y = 32;
   group.add(arch, light);
-  group.position.set(room.x + Math.sin(angle) * 126, 0, room.z + Math.cos(angle) * 126);
+  group.position.set(room.x + Math.sin(angle) * 142, 0, room.z + Math.cos(angle) * 142);
   group.rotation.y = angle;
   return group;
+}
+function palaceCreateRoomEdges(THREE, scene, mesh, color=0xffe08a, opacity=.18){
+  const edges = new THREE.EdgesGeometry(mesh.geometry);
+  const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, transparent:true, opacity }));
+  lines.position.copy(mesh.position);
+  lines.rotation.copy(mesh.rotation);
+  lines.scale.copy(mesh.scale);
+  scene.add(lines);
+  return lines;
 }
 function palaceCreateRoomWalls(THREE, scene, room, index, floorMat, wallMat){
   const size = index === 0 ? 330 : 260;
   room.floor = new THREE.Mesh(new THREE.BoxGeometry(size, 10, size), floorMat);
   room.floor.position.set(room.x, -6, room.z);
   scene.add(room.floor);
+  palaceCreateRoomEdges(THREE, scene, room.floor, 0xffe08a, .20);
   const wallHeight = index === 0 ? 74 : 58;
   const wallThickness = 12;
   const wallLength = size * .92;
@@ -2433,14 +2443,15 @@ function palaceCreateRoomWalls(THREE, scene, room, index, floorMat, wallMat){
     wall.position.set(room.x + (horizontal ? 0 : (side === 1 ? offset : -offset)), wallHeight / 2 - 2, room.z + (horizontal ? (side === 0 ? offset : -offset) : 0));
     room.wall = wall;
     scene.add(wall);
+    palaceCreateRoomEdges(THREE, scene, wall, 0x8a76a4, .16);
   });
   const ceiling = new THREE.Mesh(new THREE.BoxGeometry(size * .74, 3, size * .74), new THREE.MeshBasicMaterial({ color:room.color, transparent:true, opacity:.045 }));
   ceiling.position.set(room.x, wallHeight + 10, room.z); scene.add(ceiling);
 }
 function palaceCreateDungeonRooms(THREE, scene, rooms){
-  const floorMat = new THREE.MeshStandardMaterial({ color:0x22192c, roughness:.86, metalness:.03 });
-  const wallMat = new THREE.MeshStandardMaterial({ color:0x35283f, emissive:0x0d0714, roughness:.80 });
-  const corridorMat = new THREE.MeshStandardMaterial({ color:0x2b2135, emissive:0x110911, roughness:.82 });
+  const floorMat = new THREE.MeshStandardMaterial({ color:0x3b3048, roughness:.82, metalness:.03 });
+  const wallMat = new THREE.MeshStandardMaterial({ color:0x4d3d5d, emissive:0x160d20, roughness:.78 });
+  const corridorMat = new THREE.MeshStandardMaterial({ color:0x3b3048, emissive:0x150c1d, roughness:.82 });
   const lineMat = new THREE.LineBasicMaterial({ color:0xffe08a, transparent:true, opacity:.22 });
   const corridorPoints = [];
   const gate = rooms[0];
@@ -2457,6 +2468,7 @@ function palaceCreateDungeonRooms(THREE, scene, rooms){
       corridor.position.set(midX, -8, midZ);
       corridor.rotation.y = Math.atan2(dx, dz);
       scene.add(corridor);
+      palaceCreateRoomEdges(THREE, scene, corridor, 0xffe08a, .14);
       corridorPoints.push(gate.x, 6, gate.z, room.x, 6, room.z);
       scene.add(palaceCreatePortal(THREE, gate, room, room.color));
     }
@@ -2535,7 +2547,7 @@ async function renderMemoryPalace(data){
   const stars = new Float32Array(650*3); for(let i=0;i<650;i++){ stars.set([((i*97)%2000)-1000, ((i*53)%900)-450, -((i*131)%2400)-150], i*3); }
   const starGeom = new THREE.BufferGeometry(); starGeom.setAttribute('position', new THREE.BufferAttribute(stars, 3));
   scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, size:1.2, transparent:true, opacity:.42, depthWrite:false })));
-  const avatar = palaceCreateAvatar(THREE); const drone = palaceCreateHammyDrone(THREE); scene.add(avatar, drone);
+  const avatar = palaceCreateAvatar(THREE); const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   Object.assign(memoryPalace, { renderer, scene, camera, group, nodes, rooms:nodes.rooms || [], labels:nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,54), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar, drone });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,26))}</span>`).join('');
   resetMemoryPalaceDiver(); bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
