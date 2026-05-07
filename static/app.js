@@ -2501,18 +2501,22 @@ function pickPalaceNode(e){
   const hit = memoryPalace.raycaster.intersectObjects(memoryPalace.nodes.map(n=>n.mesh), false)[0];
   if(hit?.object?.userData?.node) inspectPalaceNode(hit.object.userData.node);
 }
+function stopPalaceJoystickEvent(e){
+  e.stopPropagation();
+  if(e.cancelable) e.preventDefault();
+}
 function bindPalaceControls(){
   const viewport = $('#palaceViewport'); if(!viewport || viewport.dataset.controlsBound === 'true') return; viewport.dataset.controlsBound = 'true';
   window.addEventListener('keydown', e => { if(sectionFor(currentRoute.tab) === 'memoryPalace') palaceKeys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = true; });
   window.addEventListener('keyup', e => { palaceKeys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; });
-  viewport.addEventListener('pointerdown', e=>{ if(e.target.closest('.fullscreen-exit')) return; viewport.setPointerCapture?.(e.pointerId); memoryPalace.pointer={x:e.clientX,y:e.clientY,moved:false}; });
+  viewport.addEventListener('pointerdown', e=>{ if(e.target.closest('.fullscreen-exit') || e.target.closest('#palaceJoystick')) return; viewport.setPointerCapture?.(e.pointerId); memoryPalace.pointer={x:e.clientX,y:e.clientY,moved:false}; });
   viewport.addEventListener('pointermove', e=>{ if(!memoryPalace.pointer) return; const dx=e.clientX-memoryPalace.pointer.x, dy=e.clientY-memoryPalace.pointer.y; memoryPalace.pointer.x=e.clientX; memoryPalace.pointer.y=e.clientY; memoryPalace.pointer.moved = memoryPalace.pointer.moved || Math.abs(dx)+Math.abs(dy)>3; memoryPalace.yaw -= dx*.0032; memoryPalace.pitch = Math.max(-1.05, Math.min(.82, memoryPalace.pitch - dy*.0024)); });
   const end=()=>{ setTimeout(()=>{ memoryPalace.pointer=null; }, 0); }; viewport.addEventListener('pointerup', end); viewport.addEventListener('pointercancel', end);
-  viewport.addEventListener('click', e=>{ if(memoryPalace.pointer?.moved) return; pickPalaceNode(e); });
+  viewport.addEventListener('click', e=>{ if(e.target.closest('#palaceJoystick') || memoryPalace.pointer?.moved) return; pickPalaceNode(e); });
   const joy = $('#palaceJoystick');
-  joy.addEventListener('pointerdown', e=>{ joy.setPointerCapture?.(e.pointerId); joy.dataset.active='true'; });
-  joy.addEventListener('pointermove', e=>{ if(joy.dataset.active !== 'true') return; const r=joy.getBoundingClientRect(); const x=((e.clientX-r.left)/r.width-.5)*2, y=((e.clientY-r.top)/r.height-.5)*2; memoryPalace.joystick={x:Math.max(-1,Math.min(1,x)), y:Math.max(-1,Math.min(1,y))}; joy.querySelector('span').style.transform=`translate(${memoryPalace.joystick.x*22}px,${memoryPalace.joystick.y*22}px)`; });
-  const stopJoy=()=>{ joy.dataset.active='false'; memoryPalace.joystick={x:0,y:0}; joy.querySelector('span').style.transform='translate(0,0)'; }; joy.addEventListener('pointerup', stopJoy); joy.addEventListener('pointercancel', stopJoy);
+  joy.addEventListener('pointerdown', e=>{ stopPalaceJoystickEvent(e); joy.setPointerCapture?.(e.pointerId); joy.dataset.active='true'; memoryPalace.pointer=null; });
+  joy.addEventListener('pointermove', e=>{ stopPalaceJoystickEvent(e); if(joy.dataset.active !== 'true') return; const r=joy.getBoundingClientRect(); const x=((e.clientX-r.left)/r.width-.5)*2, y=((e.clientY-r.top)/r.height-.5)*2; memoryPalace.joystick={x:Math.max(-1,Math.min(1,x)), y:Math.max(-1,Math.min(1,y))}; joy.querySelector('span').style.transform=`translate(${memoryPalace.joystick.x*22}px,${memoryPalace.joystick.y*22}px)`; });
+  const stopJoy=e=>{ stopPalaceJoystickEvent(e); joy.dataset.active='false'; memoryPalace.joystick={x:0,y:0}; joy.querySelector('span').style.transform='translate(0,0)'; }; joy.addEventListener('pointerup', stopJoy); joy.addEventListener('pointercancel', stopJoy);
 }
 
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));

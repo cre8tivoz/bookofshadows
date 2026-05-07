@@ -485,6 +485,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'palaceCreateAvatar' in js
     assert 'palaceSearchBeacon' in js
     assert 'palaceKeys' in js
+    assert "e.target.closest('#palaceJoystick')" in js
+    assert 'stopPalaceJoystickEvent' in js
+    assert 'e.stopPropagation();' in js
     assert "toggleVisualiserFullscreen('#palaceViewport')" in js
     assert "section==='memoryPalace'" in js
     assert "toggleVisualiserFullscreen('#threeViewport')" in js
