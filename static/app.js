@@ -2869,9 +2869,14 @@ function palaceFpsAddRoom(THREE, scene, room, i){
     palaceFpsBox(THREE, scene, [30,138,30], [room.x-78,78,room.z-118], gateMat, 0xfff0b8, .38);
     palaceFpsBox(THREE, scene, [30,138,30], [room.x+78,78,room.z-118], gateMat, 0xfff0b8, .38);
     palaceFpsBox(THREE, scene, [186,30,36], [room.x,150,room.z-118], gateMat, 0xfff0b8, .42);
-    const portal = new THREE.Mesh(new THREE.TorusGeometry(70,4,10,64), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.86 }));
-    portal.position.set(room.x,92,room.z-122); portal.rotation.y = Math.PI/2; scene.add(portal);
-    const glow = new THREE.PointLight(0xffd166, 1.9, 520); glow.position.set(room.x,105,room.z-122); scene.add(glow);
+    const portalPane = new THREE.Mesh(new THREE.CircleGeometry(66, 64), new THREE.MeshBasicMaterial({ color:0xffc66d, transparent:true, opacity:.18, side:THREE.DoubleSide }));
+    portalPane.position.set(room.x,92,room.z-124); scene.add(portalPane);
+    const portal = new THREE.Mesh(new THREE.TorusGeometry(70,4,10,64), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.92 }));
+    // TorusGeometry already faces the camera along the Z axis; do not rotate it edge-on.
+    portal.position.set(room.x,92,room.z-122); scene.add(portal);
+    const inner = new THREE.Mesh(new THREE.TorusGeometry(42,2.2,8,48), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.38 }));
+    inner.position.set(room.x,92,room.z-121); scene.add(inner);
+    const glow = new THREE.PointLight(0xffd166, 2.4, 620); glow.position.set(room.x,105,room.z-122); scene.add(glow);
   }
 }
 function palaceFpsAddCorridor(THREE, scene, a, b){
