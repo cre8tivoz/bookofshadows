@@ -2493,7 +2493,7 @@ function palaceCreateHammyDrone(THREE){
   return drone;
 }
 function inspectPalaceNode(node){
-  const scanLabel = node.scanLabel || (node.kind === 'memory' ? 'Memory relic' : 'Entity obelisk');
+  const scanLabel = node.scanLabel || (node.kind === 'memory' ? 'Memory book' : 'Entity obelisk');
   $('#palaceInspector').innerHTML = `<div class="inspector-kicker">${esc(scanLabel)} · ${esc(node.room || node.category || 'Artifact room')}</div><h3>${esc(node.label || 'Memory artifact')}</h3><p class="muted">${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || node._weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="palaceOpenMemory" class="primary tiny">Open memory</button>' : ''}<button id="palaceBeaconHere" class="tiny">Beacon here</button></div>`;
   if(node.memory_id) $('#palaceOpenMemory').onclick = () => openMemoryDetail(node.memory_id);
   $('#palaceBeaconHere').onclick = () => palaceSetBeacon(node);
@@ -2568,11 +2568,11 @@ function palaceClampFpsPosition(){
   let xLimit = 900;
   // Keep the entry path/corridor playable: walking straight should not drift into unbuilt black void.
   if(z > -260) xLimit = 185;
-  else if(z > -720) xLimit = 340;
-  else if(z > -1320) xLimit = 680;
+  else if(z > -720) xLimit = 260;
+  else if(z > -1320) xLimit = 420;
   memoryPalace.pos.x = Math.max(-xLimit, Math.min(xLimit, memoryPalace.pos.x));
   memoryPalace.pos.y = Math.max(46, Math.min(150, memoryPalace.pos.y));
-  memoryPalace.pos.z = Math.max(-1900, Math.min(720, memoryPalace.pos.z));
+  memoryPalace.pos.z = Math.max(-1500, Math.min(720, memoryPalace.pos.z));
 }
 function updatePalaceLabels(){
   if(!memoryPalace.camera) return;
@@ -2586,6 +2586,21 @@ function updatePalaceLabels(){
     el.style.display = visible ? '' : 'none';
     if(visible){ shown++; el.style.left = `${sx}px`; el.style.top = `${sy}px`; el.style.opacity = String(Math.max(.34, 1 - Math.abs(v.z)*.42)); }
   });
+}
+function palaceNearestMemory(maxDist=170){
+  if(!memoryPalace.pos) return null;
+  let best=null, bestD=maxDist;
+  memoryPalace.nodes.forEach(n=>{
+    if(!n.mesh || n.kind !== 'memory') return;
+    const d=Math.hypot(memoryPalace.pos.x-n.x, memoryPalace.pos.z-n.z);
+    if(d<bestD){ best=n; bestD=d; }
+  });
+  return best;
+}
+function updatePalaceNearbyPrompt(){
+  const near = palaceNearestMemory(155);
+  if(near) $('#palaceHudStatus').textContent = `tap to scan memory: ${String(near.label || '').replace(/^memory:/,'').slice(0,30)}`;
+  else if($('#palaceHudStatus').textContent.startsWith('tap to scan memory:')) $('#palaceHudStatus').textContent = 'walk forward — memory books line the path';
 }
 function updatePalaceZoneBadge(){
   const badge = $('.palace-zone-badge');
@@ -2622,8 +2637,12 @@ function pickPalaceNode(e){
   const rect = $('#palaceViewport').getBoundingClientRect();
   memoryPalace.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1; memoryPalace.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
   memoryPalace.raycaster.setFromCamera(memoryPalace.mouse, memoryPalace.camera);
-  const hit = memoryPalace.raycaster.intersectObjects(memoryPalace.nodes.map(n=>n.mesh), false)[0];
-  if(hit?.object?.userData?.node) inspectPalaceNode(hit.object.userData.node);
+  const meshes = memoryPalace.nodes.map(n=>n.mesh).filter(Boolean);
+  const hit = memoryPalace.raycaster.intersectObjects(meshes, false)[0];
+  if(hit?.object?.userData?.node){ inspectPalaceNode(hit.object.userData.node); return; }
+  const near = palaceNearestMemory(180);
+  if(near){ inspectPalaceNode(near); return; }
+  $('#palaceHudStatus').textContent = 'walk nearer to a memory book, then tap to scan';
 }
 function stopPalaceJoystickEvent(e){
   e.stopPropagation();
@@ -2831,7 +2850,9 @@ function animateMemoryPalace(t=0){
 // V7: solid first-person memory dungeon. The Labyrinth must feel like walking inside the
 // memory archive, not viewing a whole strategy/minimap board.
 function palaceFpsRooms(data){
-  const nodes = (data.nodes || []).slice(0,120).map(n => ({...n}));
+  const raw = (data.nodes || []).map(n => ({...n}));
+  const memoryNodes = raw.filter(n => n.kind === 'memory' || n.memory_id);
+  const nodes = (memoryNodes.length ? memoryNodes : raw).slice(0,70);
   const cats = [...new Set(nodes.map(n => n.category || 'Other'))];
   const rooms = [
     { label:'Archive Gate', x:0, z:0, w:420, d:360, color:0xffd166 },
@@ -2845,13 +2866,13 @@ function palaceFpsRooms(data){
   nodes.forEach((n,i)=>{
     const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
     let room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
-    if(!contaminated && featured < 14){
-      // The first walk must immediately show real memories, not just a decorative hallway.
+    if(!contaminated && n.kind === 'memory' && featured < 12){
+      // The first walk must immediately show real memories, not generic graph/entity circles.
       room = rooms[0];
       const side = featured % 2 === 0 ? -1 : 1;
       const row = Math.floor(featured / 2);
-      n.x = side * (row < 2 ? 54 : 76);
-      n.z = 245 - row * 155;
+      n.x = side * (row < 2 ? 58 : 82);
+      n.z = 245 - row * 175;
       n.y = 34; n.room = 'Archive Gate'; n.featuredPath = true;
       featured += 1;
     } else {
@@ -2957,13 +2978,15 @@ function palaceFpsAddRoom(THREE, scene, room, i){
     hallFloor.userData.walkable = true;
     palaceFpsBox(THREE, scene, [18, 16, 1450], [room.x-112, 5, room.z-840], railMat);
     palaceFpsBox(THREE, scene, [18, 16, 1450], [room.x+112, 5, room.z-840], railMat);
-    for(let z=-260; z>-1540; z-=160){
+    for(let z=-260; z>-1280; z-=240){
       palaceFpsBox(THREE, scene, [150, 8, 10], [room.x, 8, room.z+z], railMat);
       [-1,1].forEach(side=>{
         palaceFpsBox(THREE, scene, [16, 60, 16], [room.x+side*150, 34, room.z+z], gateMat);
-        const guide = new THREE.PointLight(0xffd166, .65, 260); guide.position.set(room.x+side*150, 80, room.z+z); scene.add(guide);
       });
     }
+    palaceFpsBox(THREE, scene, [300, 120, 26], [room.x, 60, room.z-1510], sideMat);
+    palaceFpsBox(THREE, scene, [170, 88, 18], [room.x, 62, room.z-1494], doorMat);
+    const endLight = new THREE.PointLight(0xffd166, 1.1, 360); endLight.position.set(room.x, 92, room.z-1420); scene.add(endLight);
   }
 }
 function palaceFpsAddCorridor(THREE, scene, a, b){
@@ -2980,17 +3003,25 @@ function palaceFpsAddCorridor(THREE, scene, a, b){
 }
 function palaceFpsAddRelic(THREE, scene, node, colors){
   const plinth = new THREE.Mesh(new THREE.CylinderGeometry(17,24,16,7), palaceFpsMat(THREE, 0x21172c));
-  plinth.position.set(node.x,10,node.z); plinth.castShadow = plinth.receiveShadow = true; scene.add(plinth);
-  const color = node.contaminated ? 0xff4f87 : (node.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star));
-  const geo = node.contaminated ? new THREE.IcosahedronGeometry(node.size,1) : (node.kind === 'memory' ? new THREE.OctahedronGeometry(node.size,1) : new THREE.ConeGeometry(node.size*.78,node.size*2.8,5));
-  const relic = new THREE.Mesh(geo, palaceFpsMat(THREE, color, { emissive:color, emissiveIntensity:node.contaminated ? .62 : .42, roughness:.32, metalness:.08 }));
-  relic.position.set(node.x,40 + node.size*.2,node.z); relic.castShadow = true; relic.userData.node = node; node.mesh = relic; scene.add(relic);
-  const halo = new THREE.PointLight(color, node.contaminated ? .7 : (node.featuredPath ? .7 : .32), node.featuredPath ? 240 : 150); halo.position.copy(relic.position); scene.add(halo);
+  plinth.position.set(node.x,10,node.z); plinth.castShadow = plinth.receiveShadow = false; scene.add(plinth);
+  const color = node.contaminated ? 0xff4f87 : cssHexToInt(colors.memory);
   if(node.featuredPath){
-    const marker = new THREE.Mesh(new THREE.RingGeometry(node.size*1.28, node.size*1.72, 32), new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.58, side:THREE.DoubleSide }));
-    marker.position.set(node.x, 28, node.z); marker.rotation.x = -Math.PI/2; scene.add(marker);
+    const bookMat = new THREE.MeshBasicMaterial({ color:0xffd166 });
+    const cover = new THREE.Mesh(new THREE.BoxGeometry(44, 54, 8), bookMat);
+    cover.position.set(node.x, 48, node.z); cover.rotation.x = -.18; cover.userData.node = node; node.mesh = cover; scene.add(cover);
+    const page = new THREE.Mesh(new THREE.BoxGeometry(34, 40, 4), new THREE.MeshBasicMaterial({ color:0xfff0c2 }));
+    page.position.set(node.x, 50, node.z-5); page.rotation.x = -.18; scene.add(page);
+    const plaque = new THREE.Mesh(new THREE.BoxGeometry(58, 4, 34), new THREE.MeshBasicMaterial({ color:0x5b3f2d }));
+    plaque.position.set(node.x, 23, node.z+18); scene.add(plaque);
+    const halo = new THREE.PointLight(color, .55, 220); halo.position.copy(cover.position); scene.add(halo);
+    return;
   }
-  if(node.contaminated) node.scanLabel = 'Contaminated memory';
+  const geo = node.contaminated ? new THREE.IcosahedronGeometry(node.size,1) : new THREE.OctahedronGeometry(node.size,1);
+  const relic = new THREE.Mesh(geo, palaceFpsMat(THREE, color, { emissive:color, emissiveIntensity:node.contaminated ? .48 : .24, roughness:.32, metalness:.08 }));
+  relic.position.set(node.x,40 + node.size*.2,node.z); relic.castShadow = false; relic.userData.node = node; node.mesh = relic; scene.add(relic);
+  if(node.contaminated){
+    const halo = new THREE.PointLight(color, .45, 150); halo.position.copy(relic.position); scene.add(halo); node.scanLabel = 'Contaminated memory';
+  }
 }
 async function renderMemoryPalace(data){
   const THREE = await loadThreeModule();
@@ -3000,22 +3031,23 @@ async function renderMemoryPalace(data){
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' }); }
   catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Mnemosyne Labyrinth unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(cssHexToInt(colors.bg), 0);
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.4)); renderer.setClearColor(cssHexToInt(colors.bg), 0);
+  // Performance-first FPS: shadows and high DPR made desktop unplayably laggy.
+  renderer.shadowMap.enabled = false;
   viewport.prepend(renderer.domElement);
   const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x08050e, .00115);
   const camera = new THREE.PerspectiveCamera(72, 1, 1, 4200);
-  scene.add(new THREE.HemisphereLight(0xcdbaff, 0x07030c, .68));
-  const key = new THREE.DirectionalLight(0xffe8c4, 1.05); key.position.set(260,520,380); key.castShadow = true; key.shadow.mapSize.set(2048,2048); scene.add(key);
+  scene.add(new THREE.HemisphereLight(0xcdbaff, 0x07030c, .78));
+  const key = new THREE.DirectionalLight(0xffe8c4, .78); key.position.set(260,520,380); scene.add(key);
   const nodes = palaceFpsRooms(data); const rooms = nodes.rooms || [];
   rooms.slice(1).forEach(room => palaceFpsAddCorridor(THREE, scene, rooms[0], room));
   rooms.forEach((room,i)=>palaceFpsAddRoom(THREE, scene, room, i));
   nodes.forEach(n=>palaceFpsAddRelic(THREE, scene, n, colors));
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,16)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,14)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
-  $('#palaceHudStatus').textContent = 'walk forward — memory relics line the path';
+  $('#palaceHudStatus').textContent = 'walk forward — memory books line the path';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
 }
 function resizeMemoryPalace(){
@@ -3040,8 +3072,8 @@ function animateMemoryPalace(t=0){
   memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
   if(memoryPalace.drone){ const bob = Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
   if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
-  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh){ n.mesh.rotation.y += delta * (.22 + (i%5)*.035); n.mesh.rotation.x += delta * .025; }});
-  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels(); updatePalaceZoneBadge();
+  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh && (n.featuredPath || i < 18)){ n.mesh.rotation.y += delta * (.14 + (i%5)*.02); }});
+  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceNearbyPrompt(); updatePalaceLabels(); updatePalaceZoneBadge();
   memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
 }
 
