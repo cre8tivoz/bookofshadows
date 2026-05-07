@@ -461,7 +461,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="todayDegradation"' in html
     assert 'id="constellationFullscreen"' in html
     assert 'id="threeFullscreen"' in html
+    assert 'id="constellationExitFullscreen"' in html
+    assert 'id="threeExitFullscreen"' in html
+    assert 'class="fullscreen-exit"' in html
     assert 'toggleVisualiserFullscreen' in js
+    assert 'exitVisualiserFullscreen' in js
     assert "toggleVisualiserFullscreen('#threeViewport')" in js
     assert "toggleVisualiserFullscreen('.constellation-wrap')" in js
     assert "toggleVisualiserFullscreen('#visualiser3d')" not in js
@@ -471,6 +475,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert ':fullscreen' in css
     assert '#threeViewport:fullscreen' in css
     assert '.constellation-wrap:fullscreen' in css
+    assert '.fullscreen-exit' in css
+    assert ':fullscreen .fullscreen-exit' in css
     assert '#visualiser3d:fullscreen' not in css
     assert '#constellation:fullscreen' not in css
     assert 'fullscreenchange' in js

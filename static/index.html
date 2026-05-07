@@ -168,7 +168,7 @@
             <span id="visualiserHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.</span>
           </div>
           <div class="constellation-layout">
-            <div class="constellation-wrap"><canvas id="constellationCanvas" aria-label="Interactive 3D memory constellation"></canvas><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
+            <div class="constellation-wrap"><canvas id="constellationCanvas" aria-label="Interactive 3D memory constellation"></canvas><button id="constellationExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
             <aside id="constellationInspector" class="graph-inspector glass">
               <div class="inspector-kicker">Constellation inspector</div>
               <h3>Nothing selected</h3>
@@ -194,6 +194,7 @@
           </div>
           <div class="three-layout">
             <div id="threeViewport" class="three-viewport glass" aria-label="Interactive 3D memory visualiser">
+              <button id="threeExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
               <div id="threeLabels" class="three-labels"></div>
               <div id="threeLegend" class="constellation-legend three-legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div>
             </div>
