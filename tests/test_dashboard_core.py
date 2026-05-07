@@ -474,8 +474,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v7' in html
-    assert '/static/style.css?v=labyrinth-v7' in html
+    assert '/static/app.js?v=labyrinth-v10' in html
+    assert '/static/style.css?v=labyrinth-v10' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -534,6 +534,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '.palace-reticle' in css
     assert '.palace-joystick' in css
     assert '.palace-zone-badge' in css
+    assert 'body:has(#memoryPalace.active) main' in css
+    assert 'height:100svh' in css
+    assert 'position:fixed;left:0;right:0;top:0;z-index:70' in css
+    assert 'Joystick to move · drag to look · tap relics' in css
+    assert 'width:calc(100% - 20px)' in css
+    assert '.palace-labels .three-label{display:none!important}' in css
+    assert 'mobilePalace ? -.20 : -.11' in js
     assert '.palace-viewport[data-theme="labyrinth"]' in css
     assert '#palaceViewport:fullscreen' in css
     assert '#visualiser3d:fullscreen' not in css

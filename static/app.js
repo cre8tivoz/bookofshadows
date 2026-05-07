@@ -2916,7 +2916,8 @@ async function renderMemoryPalace(data){
   rooms.forEach((room,i)=>palaceFpsAddRoom(THREE, scene, room, i));
   nodes.forEach(n=>palaceFpsAddRelic(THREE, scene, n, colors));
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,72,210), velocity:new THREE.Vector3(), yaw:0, pitch:-.11, iso:false });
+  const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 64 : 72,mobilePalace ? 250 : 210), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.20 : -.11, iso:false });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   $('#palaceHudStatus').textContent = 'solid first-person memory dungeon online';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
