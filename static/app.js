@@ -2805,6 +2805,148 @@ function animateMemoryPalace(t=0){
   memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
 }
 
+
+// V6: first-person memory dungeon. The Labyrinth must feel like walking inside the
+// memory archive, not viewing a whole strategy/minimap board.
+function palaceFpsRooms(data){
+  const nodes = (data.nodes || []).slice(0,120).map(n => ({...n}));
+  const cats = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const rooms = [
+    { label:'Archive Gate', x:0, z:0, w:420, d:360, color:0xffd166 },
+    { label:String(cats[0] || 'Episodic Vault').slice(0,20), x:-520, z:-520, w:380, d:340, color:0x65d6ff },
+    { label:String(cats[1] || 'Working Stream').slice(0,20), x:520, z:-520, w:380, d:340, color:0x52d6b5 },
+    { label:String(cats[2] || 'Entity Gardens').slice(0,20), x:-520, z:-1120, w:380, d:340, color:0xb9a6ff },
+    { label:String(cats[3] || 'Cold Storage').slice(0,20), x:520, z:-1120, w:380, d:340, color:0x8aa0c9 },
+    { label:'Corrupted Wing', x:0, z:-1680, w:430, d:360, color:0xff5f87 }
+  ];
+  nodes.forEach((n,i)=>{
+    const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
+    const room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
+    const col = i % 4, row = Math.floor((i % 20) / 4);
+    n.x = room.x - room.w*.30 + col * (room.w*.20);
+    n.z = room.z - room.d*.22 + row * (room.d*.11);
+    n.y = 34; n.room = room.label; n.contaminated = contaminated;
+    n.size = Math.min(28, 10 + Math.sqrt(Math.max(1, Number(n.weight || n.count || 1))) * 4);
+  });
+  nodes.rooms = rooms;
+  return nodes;
+}
+function palaceFpsMat(THREE, color, opts={}){
+  return new THREE.MeshStandardMaterial({ color, emissive:opts.emissive || 0x05030a, emissiveIntensity:opts.emissiveIntensity ?? .08, roughness:opts.roughness ?? .76, metalness:opts.metalness ?? .04 });
+}
+function palaceFpsBox(THREE, scene, size, pos, mat, edgeColor=0xd8c7ff, edgeOpacity=.12){
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mat);
+  mesh.position.set(...pos); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color:edgeColor, transparent:true, opacity:edgeOpacity }));
+  edges.position.copy(mesh.position); scene.add(edges);
+  return mesh;
+}
+function palaceFpsAddRoom(THREE, scene, room, i){
+  const floorMat = palaceFpsMat(THREE, i === 0 ? 0x3f314a : 0x30243d, { emissive:room.color, emissiveIntensity:.025 });
+  const wallMat = palaceFpsMat(THREE, 0x554461, { emissive:room.color, emissiveIntensity:.035, roughness:.82 });
+  palaceFpsBox(THREE, scene, [room.w, 16, room.d], [room.x, -8, room.z], floorMat, room.color, .28);
+  const wallH = i === 0 ? 150 : 126, t = 24;
+  const door = 120;
+  [[0,room.d/2,room.w,t,'north'],[0,-room.d/2,room.w,t,'south'],[room.w/2,0,t,room.d,'east'],[-room.w/2,0,t,room.d,'west']].forEach(([ox,oz,w,d,side])=>{
+    const isDoorSide = i === 0 && side === 'north';
+    if(isDoorSide){
+      palaceFpsBox(THREE, scene, [(w-door)/2, wallH, d], [room.x - (w+door)/4, wallH/2, room.z+oz], wallMat, 0xe8d8ff, .16);
+      palaceFpsBox(THREE, scene, [(w-door)/2, wallH, d], [room.x + (w+door)/4, wallH/2, room.z+oz], wallMat, 0xe8d8ff, .16);
+      palaceFpsBox(THREE, scene, [door+32, 24, d+8], [room.x, wallH+12, room.z+oz], wallMat, 0xffd166, .35);
+      return;
+    }
+    palaceFpsBox(THREE, scene, [w, wallH, d], [room.x+ox, wallH/2, room.z+oz], wallMat, 0xe8d8ff, .13);
+  });
+  // floor tiles
+  const pts=[];
+  for(let x=-room.w/2+48; x<room.w/2; x+=48) pts.push(room.x+x,2,room.z-room.d/2+20, room.x+x,2,room.z+room.d/2-20);
+  for(let z=-room.d/2+48; z<room.d/2; z+=48) pts.push(room.x-room.w/2+20,2,room.z+z, room.x+room.w/2-20,2,room.z+z);
+  const g=new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts),3));
+  scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:.055 })));
+  const light = new THREE.PointLight(room.color, i === 0 ? 1.1 : .72, 480); light.position.set(room.x,130,room.z); scene.add(light);
+  if(i === 0){
+    const gateMat = palaceFpsMat(THREE, 0xffd166, { emissive:0xffba54, emissiveIntensity:.45, roughness:.42, metalness:.08 });
+    palaceFpsBox(THREE, scene, [30,138,30], [room.x-78,78,room.z-118], gateMat, 0xfff0b8, .38);
+    palaceFpsBox(THREE, scene, [30,138,30], [room.x+78,78,room.z-118], gateMat, 0xfff0b8, .38);
+    palaceFpsBox(THREE, scene, [186,30,36], [room.x,150,room.z-118], gateMat, 0xfff0b8, .42);
+    const portal = new THREE.Mesh(new THREE.TorusGeometry(70,4,10,64), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.86 }));
+    portal.position.set(room.x,92,room.z-122); portal.rotation.y = Math.PI/2; scene.add(portal);
+    const glow = new THREE.PointLight(0xffd166, 1.9, 520); glow.position.set(room.x,105,room.z-122); scene.add(glow);
+  }
+}
+function palaceFpsAddCorridor(THREE, scene, a, b){
+  const dx=b.x-a.x, dz=b.z-a.z, len=Math.hypot(dx,dz), midX=(a.x+b.x)/2, midZ=(a.z+b.z)/2;
+  const mat = palaceFpsMat(THREE, 0x372a46, { emissive:0xffd166, emissiveIntensity:.025 });
+  const road = palaceFpsBox(THREE, scene, [118, 12, len], [midX, -6, midZ], mat, 0xffd166, .18);
+  road.rotation.y = Math.atan2(dx,dz);
+  const wallMat = palaceFpsMat(THREE, 0x4a3a58, { emissive:0x140a20, emissiveIntensity:.04 });
+  [-1,1].forEach(side=>{
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(18,86,len), wallMat);
+    wall.position.set(midX + Math.cos(road.rotation.y)*side*68, 43, midZ - Math.sin(road.rotation.y)*side*68);
+    wall.rotation.y = road.rotation.y; wall.castShadow = wall.receiveShadow = true; scene.add(wall);
+  });
+}
+function palaceFpsAddRelic(THREE, scene, node, colors){
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(17,24,16,7), palaceFpsMat(THREE, 0x21172c));
+  plinth.position.set(node.x,10,node.z); plinth.castShadow = plinth.receiveShadow = true; scene.add(plinth);
+  const color = node.contaminated ? 0xff4f87 : (node.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star));
+  const geo = node.contaminated ? new THREE.IcosahedronGeometry(node.size,1) : (node.kind === 'memory' ? new THREE.OctahedronGeometry(node.size,1) : new THREE.ConeGeometry(node.size*.78,node.size*2.8,5));
+  const relic = new THREE.Mesh(geo, palaceFpsMat(THREE, color, { emissive:color, emissiveIntensity:node.contaminated ? .62 : .42, roughness:.32, metalness:.08 }));
+  relic.position.set(node.x,40 + node.size*.2,node.z); relic.castShadow = true; relic.userData.node = node; node.mesh = relic; scene.add(relic);
+  const halo = new THREE.PointLight(color, node.contaminated ? .7 : .32, 150); halo.position.copy(relic.position); scene.add(halo);
+  if(node.contaminated) node.scanLabel = 'Contaminated memory';
+}
+async function renderMemoryPalace(data){
+  const THREE = await loadThreeModule();
+  clearPalaceScene(); memoryPalace.data = data; memoryPalace.THREE = THREE; palaceInspectorDefault();
+  const viewport = $('#palaceViewport'); if(!viewport) return;
+  const colors = constellationColors();
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' }); }
+  catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Mnemosyne Labyrinth unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(cssHexToInt(colors.bg), 0);
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  viewport.prepend(renderer.domElement);
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x08050e, .00115);
+  const camera = new THREE.PerspectiveCamera(72, 1, 1, 4200);
+  scene.add(new THREE.HemisphereLight(0xcdbaff, 0x07030c, .68));
+  const key = new THREE.DirectionalLight(0xffe8c4, 1.05); key.position.set(260,520,380); key.castShadow = true; key.shadow.mapSize.set(2048,2048); scene.add(key);
+  const nodes = palaceFpsRooms(data); const rooms = nodes.rooms || [];
+  rooms.slice(1).forEach(room => palaceFpsAddCorridor(THREE, scene, rooms[0], room));
+  rooms.forEach((room,i)=>palaceFpsAddRoom(THREE, scene, room, i));
+  nodes.forEach(n=>palaceFpsAddRelic(THREE, scene, n, colors));
+  const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,72,210), velocity:new THREE.Vector3(), yaw:0, pitch:-.11, iso:false });
+  $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
+  $('#palaceHudStatus').textContent = 'first-person memory dungeon online';
+  bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
+}
+function resizeMemoryPalace(){
+  if(!memoryPalace.renderer) return;
+  const rect = $('#palaceViewport').getBoundingClientRect(); const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
+  memoryPalace.renderer.setSize(w,h,false); memoryPalace.camera.aspect = w/h; memoryPalace.camera.updateProjectionMatrix();
+}
+function animateMemoryPalace(t=0){
+  if(!memoryPalace.renderer) return;
+  resizeMemoryPalace();
+  const delta = memoryPalace.lastT ? Math.min(48, t - memoryPalace.lastT) / 1000 : .016; memoryPalace.lastT = t;
+  const {forward,right} = palaceForwardRight(); const move = new memoryPalace.THREE.Vector3();
+  if(palaceKeys.w || palaceKeys.ArrowUp) move.add(forward);
+  if(palaceKeys.s || palaceKeys.ArrowDown) move.sub(forward);
+  if(palaceKeys.d || palaceKeys.ArrowRight) move.add(right);
+  if(palaceKeys.a || palaceKeys.ArrowLeft) move.sub(right);
+  if(memoryPalace.joystick.x || memoryPalace.joystick.y){ move.addScaledVector(right, memoryPalace.joystick.x); move.addScaledVector(forward, -memoryPalace.joystick.y); }
+  if(move.lengthSq() > 0) move.normalize().multiplyScalar((palaceKeys.Shift ? 420 : 235) * delta);
+  memoryPalace.pos.add(move);
+  memoryPalace.pos.x = Math.max(-900, Math.min(900, memoryPalace.pos.x)); memoryPalace.pos.y = Math.max(46, Math.min(150, memoryPalace.pos.y)); memoryPalace.pos.z = Math.max(-1900, Math.min(280, memoryPalace.pos.z));
+  memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
+  if(memoryPalace.drone){ const bob = Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
+  if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
+  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh){ n.mesh.rotation.y += delta * (.22 + (i%5)*.035); n.mesh.rotation.x += delta * .025; }});
+  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels(); updatePalaceZoneBadge();
+  memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+}
+
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 $$('.section-tabs button').forEach(b => b.onclick = () => {
   const panelRoute = ({ exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[b.dataset.panel];
