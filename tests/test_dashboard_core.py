@@ -471,13 +471,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="palaceJoystick"' in html
     assert 'WASD' in html
     assert 'Memory Diver' in html
-    assert 'LAB v14' in html
+    assert 'LAB v15' in html
     assert 'palace-build' in html
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v14' in html
-    assert '/static/style.css?v=labyrinth-v14' in html
+    assert '/static/app.js?v=labyrinth-v15' in html
+    assert '/static/style.css?v=labyrinth-v15' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -505,11 +505,12 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'palaceFpsAddRoom' in js
     assert 'PerspectiveCamera(72' in js
     assert 'solid first-person memory dungeon online' in js
-    assert 'new THREE.PlaneGeometry(104, 94)' in js
+    assert 'new THREE.PlaneGeometry(126, 104)' in js
+    assert 'Mobile Chrome crushes subtle StandardMaterial lighting' in js
     assert 'rings read as bullseyes' in js
     assert 'new THREE.CircleGeometry(34' not in js
     assert 'new THREE.TorusGeometry(38' not in js
-    assert 'mobilePalace ? 560 : 460' in js
+    assert 'mobilePalace ? 430 : 360' in js
     assert 'Math.min(720, memoryPalace.pos.z)' in js
     assert 'function palaceFpsBox(THREE, scene, size, pos, mat){' in js
     assert 'slice(0,4)' in js

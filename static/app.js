@@ -2865,25 +2865,31 @@ function palaceFpsAddRoom(THREE, scene, room, i){
   }
   const light = new THREE.PointLight(room.color, i === 0 ? 1.1 : .72, 480); light.position.set(room.x,130,room.z); scene.add(light);
   if(i === 0){
-    const gateMat = palaceFpsMat(THREE, 0xffd166, { emissive:0xffba54, emissiveIntensity:.55, roughness:.42, metalness:.08 });
-    const approachMat = palaceFpsMat(THREE, 0x342640, { emissive:0xffd166, emissiveIntensity:.06, roughness:.84 });
-    const railMat = palaceFpsMat(THREE, 0xb9914f, { emissive:0xffd166, emissiveIntensity:.42, roughness:.5 });
-    palaceFpsBox(THREE, scene, [300, 12, 760], [room.x, -6, room.z+360], approachMat);
-    palaceFpsBox(THREE, scene, [18, 12, 740], [room.x-84, 4, room.z+348], railMat);
-    palaceFpsBox(THREE, scene, [18, 12, 740], [room.x+84, 4, room.z+348], railMat);
-    palaceFpsBox(THREE, scene, [42,150,34], [room.x-98,82,room.z-170], gateMat);
-    palaceFpsBox(THREE, scene, [42,150,34], [room.x+98,82,room.z-170], gateMat);
-    palaceFpsBox(THREE, scene, [238,36,40], [room.x,158,room.z-170], gateMat);
-    palaceFpsBox(THREE, scene, [132,112,12], [room.x,74,room.z-188], palaceFpsMat(THREE, 0x6b4b38, { emissive:0xff8f4d, emissiveIntensity:.18, roughness:.7 }));
+    // Mobile Chrome crushes subtle StandardMaterial lighting; the first screen needs deliberate unlit, high-contrast shapes.
+    const gateMat = new THREE.MeshBasicMaterial({ color:0xd3ae66 });
+    const sideMat = new THREE.MeshBasicMaterial({ color:0x4b344d });
+    const floorMat = new THREE.MeshBasicMaterial({ color:0x2f2440 });
+    const railMat = new THREE.MeshBasicMaterial({ color:0xd7b36d });
+    const doorMat = new THREE.MeshBasicMaterial({ color:0xffb86b, transparent:true, opacity:.46, side:THREE.DoubleSide });
+    palaceFpsBox(THREE, scene, [360, 14, 660], [room.x, -7, room.z+270], floorMat);
+    palaceFpsBox(THREE, scene, [22, 18, 620], [room.x-116, 8, room.z+254], railMat);
+    palaceFpsBox(THREE, scene, [22, 18, 620], [room.x+116, 8, room.z+254], railMat);
+    for(let z=450; z>-80; z-=90){ palaceFpsBox(THREE, scene, [230, 8, 12], [room.x, 6, room.z+z], railMat); }
+    palaceFpsBox(THREE, scene, [46,168,46], [room.x-126,86,room.z-120], gateMat);
+    palaceFpsBox(THREE, scene, [46,168,46], [room.x+126,86,room.z-120], gateMat);
+    palaceFpsBox(THREE, scene, [298,42,52], [room.x,170,room.z-120], gateMat);
+    palaceFpsBox(THREE, scene, [34,132,430], [room.x-210,66,room.z+90], sideMat);
+    palaceFpsBox(THREE, scene, [34,132,430], [room.x+210,66,room.z+90], sideMat);
+    palaceFpsBox(THREE, scene, [156,122,18], [room.x,76,room.z-152], new THREE.MeshBasicMaterial({ color:0x6f4e3a }));
     // No circular portal at the starting view: rings read as bullseyes on real mobile. Use a lit doorway instead.
-    const doorway = new THREE.Mesh(new THREE.PlaneGeometry(104, 94), new THREE.MeshBasicMaterial({ color:0xffc978, transparent:true, opacity:.24, side:THREE.DoubleSide }));
-    doorway.position.set(room.x,78,room.z-196); scene.add(doorway);
+    const doorway = new THREE.Mesh(new THREE.PlaneGeometry(126, 104), doorMat);
+    doorway.position.set(room.x,80,room.z-164); scene.add(doorway);
     [-1,1].forEach(side=>{
-      const torch = new THREE.Mesh(new THREE.BoxGeometry(10,34,10), new THREE.MeshBasicMaterial({ color:0xffe0a1 }));
-      torch.position.set(room.x + side*124, 104, room.z-130); scene.add(torch);
-      const flame = new THREE.PointLight(0xffb35c, 1.3, 360); flame.position.copy(torch.position); scene.add(flame);
+      const torch = new THREE.Mesh(new THREE.BoxGeometry(14,46,12), new THREE.MeshBasicMaterial({ color:0xffdf9b }));
+      torch.position.set(room.x + side*158, 112, room.z-82); scene.add(torch);
+      const flame = new THREE.PointLight(0xffb35c, 2.1, 460); flame.position.copy(torch.position); scene.add(flame);
     });
-    const glow = new THREE.PointLight(0xffd166, 1.45, 620); glow.position.set(room.x,104,room.z-190); scene.add(glow);
+    const glow = new THREE.PointLight(0xffd166, 2.4, 720); glow.position.set(room.x,112,room.z-150); scene.add(glow);
   }
 }
 function palaceFpsAddCorridor(THREE, scene, a, b){
@@ -2929,7 +2935,7 @@ async function renderMemoryPalace(data){
   nodes.forEach(n=>palaceFpsAddRelic(THREE, scene, n, colors));
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 74 : 78,mobilePalace ? 560 : 460), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   $('#palaceHudStatus').textContent = 'solid first-person memory dungeon online';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
