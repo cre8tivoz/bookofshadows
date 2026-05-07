@@ -2562,6 +2562,18 @@ function palaceForwardRight(){
   const THREE = memoryPalace.THREE;
   return { forward:new THREE.Vector3(Math.sin(memoryPalace.yaw), 0, -Math.cos(memoryPalace.yaw)), right:new THREE.Vector3(Math.cos(memoryPalace.yaw), 0, Math.sin(memoryPalace.yaw)) };
 }
+function palaceClampFpsPosition(){
+  if(!memoryPalace.pos) return;
+  const z = memoryPalace.pos.z;
+  let xLimit = 900;
+  // Keep the entry path/corridor playable: walking straight should not drift into unbuilt black void.
+  if(z > -260) xLimit = 185;
+  else if(z > -720) xLimit = 340;
+  else if(z > -1320) xLimit = 680;
+  memoryPalace.pos.x = Math.max(-xLimit, Math.min(xLimit, memoryPalace.pos.x));
+  memoryPalace.pos.y = Math.max(46, Math.min(150, memoryPalace.pos.y));
+  memoryPalace.pos.z = Math.max(-1900, Math.min(720, memoryPalace.pos.z));
+}
 function updatePalaceLabels(){
   if(!memoryPalace.camera) return;
   const rect = $('#palaceViewport').getBoundingClientRect(); const v = new memoryPalace.THREE.Vector3(); let shown=0;
@@ -2626,8 +2638,18 @@ function bindPalaceControls(){
   const end=()=>{ setTimeout(()=>{ memoryPalace.pointer=null; }, 0); }; viewport.addEventListener('pointerup', end); viewport.addEventListener('pointercancel', end);
   viewport.addEventListener('click', e=>{ if(e.target.closest('#palaceJoystick') || memoryPalace.pointer?.moved) return; pickPalaceNode(e); });
   const joy = $('#palaceJoystick');
-  joy.addEventListener('pointerdown', e=>{ stopPalaceJoystickEvent(e); joy.setPointerCapture?.(e.pointerId); joy.dataset.active='true'; memoryPalace.pointer=null; });
-  joy.addEventListener('pointermove', e=>{ stopPalaceJoystickEvent(e); if(joy.dataset.active !== 'true') return; const r=joy.getBoundingClientRect(); const x=((e.clientX-r.left)/r.width-.5)*2, y=((e.clientY-r.top)/r.height-.5)*2; memoryPalace.joystick={x:Math.max(-1,Math.min(1,x)), y:Math.max(-1,Math.min(1,y))}; joy.querySelector('span').style.transform=`translate(${memoryPalace.joystick.x*22}px,${memoryPalace.joystick.y*22}px)`; });
+  const updateJoy = e => {
+    stopPalaceJoystickEvent(e); if(joy.dataset.active !== 'true') return;
+    const r=joy.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2, max=r.width*.38;
+    let dx=e.clientX-cx, dy=e.clientY-cy; const dist=Math.hypot(dx,dy);
+    if(dist > max){ dx = dx/dist*max; dy = dy/dist*max; }
+    const rawX = dx/max, rawY = dy/max, mag = Math.min(1, Math.hypot(rawX, rawY));
+    const dead = .16, scaled = mag <= dead ? 0 : (mag-dead)/(1-dead);
+    const nx = mag ? rawX/mag*scaled : 0, ny = mag ? rawY/mag*scaled : 0;
+    memoryPalace.joystick={x:nx, y:ny}; joy.querySelector('span').style.transform=`translate(${rawX*28}px,${rawY*28}px)`;
+  };
+  joy.addEventListener('pointerdown', e=>{ stopPalaceJoystickEvent(e); joy.setPointerCapture?.(e.pointerId); joy.dataset.active='true'; memoryPalace.pointer=null; updateJoy(e); });
+  joy.addEventListener('pointermove', updateJoy);
   const stopJoy=e=>{ stopPalaceJoystickEvent(e); joy.dataset.active='false'; memoryPalace.joystick={x:0,y:0}; joy.querySelector('span').style.transform='translate(0,0)'; }; joy.addEventListener('pointerup', stopJoy); joy.addEventListener('pointercancel', stopJoy);
 }
 
@@ -2917,6 +2939,18 @@ function palaceFpsAddRoom(THREE, scene, room, i){
       const flame = new THREE.PointLight(0xffb35c, 2.1, 460); flame.position.copy(torch.position); scene.add(flame);
     });
     const glow = new THREE.PointLight(0xffd166, 2.4, 720); glow.position.set(room.x,112,room.z-150); scene.add(glow);
+    // Continue the authored path beyond the entrance so walking straight never drops into blank space.
+    const hallFloor = palaceFpsBox(THREE, scene, [240, 10, 1500], [room.x, -5, room.z-860], floorMat);
+    hallFloor.userData.walkable = true;
+    palaceFpsBox(THREE, scene, [18, 16, 1450], [room.x-112, 5, room.z-840], railMat);
+    palaceFpsBox(THREE, scene, [18, 16, 1450], [room.x+112, 5, room.z-840], railMat);
+    for(let z=-260; z>-1540; z-=160){
+      palaceFpsBox(THREE, scene, [150, 8, 10], [room.x, 8, room.z+z], railMat);
+      [-1,1].forEach(side=>{
+        palaceFpsBox(THREE, scene, [16, 60, 16], [room.x+side*150, 34, room.z+z], gateMat);
+        const guide = new THREE.PointLight(0xffd166, .65, 260); guide.position.set(room.x+side*150, 80, room.z+z); scene.add(guide);
+      });
+    }
   }
 }
 function palaceFpsAddCorridor(THREE, scene, a, b){
@@ -2982,9 +3016,10 @@ function animateMemoryPalace(t=0){
   if(palaceKeys.d || palaceKeys.ArrowRight) move.add(right);
   if(palaceKeys.a || palaceKeys.ArrowLeft) move.sub(right);
   if(memoryPalace.joystick.x || memoryPalace.joystick.y){ move.addScaledVector(right, memoryPalace.joystick.x); move.addScaledVector(forward, -memoryPalace.joystick.y); }
-  if(move.lengthSq() > 0) move.normalize().multiplyScalar((palaceKeys.Shift ? 420 : 235) * delta);
+  if(move.lengthSq() > 1) move.normalize();
+  if(move.lengthSq() > 0) move.multiplyScalar((palaceKeys.Shift ? 420 : 235) * delta);
   memoryPalace.pos.add(move);
-  memoryPalace.pos.x = Math.max(-900, Math.min(900, memoryPalace.pos.x)); memoryPalace.pos.y = Math.max(46, Math.min(150, memoryPalace.pos.y)); memoryPalace.pos.z = Math.max(-1900, Math.min(720, memoryPalace.pos.z));
+  palaceClampFpsPosition();
   memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
   if(memoryPalace.drone){ const bob = Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
   if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
