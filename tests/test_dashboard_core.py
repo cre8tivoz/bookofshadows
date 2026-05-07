@@ -462,9 +462,17 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="constellationFullscreen"' in html
     assert 'id="threeFullscreen"' in html
     assert 'toggleVisualiserFullscreen' in js
+    assert "toggleVisualiserFullscreen('#threeViewport')" in js
+    assert "toggleVisualiserFullscreen('.constellation-wrap')" in js
+    assert "toggleVisualiserFullscreen('#visualiser3d')" not in js
+    assert "toggleVisualiserFullscreen('#constellation')" not in js
     assert 'visualiserResponsiveFill' in js
     assert 'threeEffectiveCameraZ' in js
     assert ':fullscreen' in css
+    assert '#threeViewport:fullscreen' in css
+    assert '.constellation-wrap:fullscreen' in css
+    assert '#visualiser3d:fullscreen' not in css
+    assert '#constellation:fullscreen' not in css
     assert 'fullscreenchange' in js
     assert 'by_veracity' in js
     assert 'by_degradation' in js

@@ -314,8 +314,8 @@ async function toggleVisualiserFullscreen(selector){
 }
 function updateVisualiserFullscreenButtons(){
   const current = document.fullscreenElement;
-  const legacy = current === $('#constellation');
-  const three = current === $('#visualiser3d');
+  const legacy = current === $('.constellation-wrap');
+  const three = current === $('#threeViewport');
   const legacyButton = $('#constellationFullscreen');
   const threeButton = $('#threeFullscreen');
   if(legacyButton) legacyButton.textContent = legacy ? 'Exit fullscreen' : 'Fullscreen';
@@ -2369,13 +2369,13 @@ $('#constellationRefresh').onclick = loadConstellation;
 $('#constellationReset').onclick = resetConstellationView;
 $('#constellationPanMode').onclick = toggleConstellationPanMode;
 $('#constellationPause').onclick = toggleConstellationPause;
-$('#constellationFullscreen').onclick = () => toggleVisualiserFullscreen('#constellation');
+$('#constellationFullscreen').onclick = () => toggleVisualiserFullscreen('.constellation-wrap');
 $$('.visualiser-tabs button[data-visualiser]').forEach(b => b.onclick = () => switchVisualiserMode(b.dataset.visualiser));
 $('#threeRefresh').onclick = loadThreeVisualiser;
 $('#threeReset').onclick = () => { resetThreeCamera(); threeInspectorDefault(); };
 $('#threePanMode').onclick = () => { threeVis.panMode = !threeVis.panMode; updateThreeUI(); };
 $('#threePause').onclick = () => { threeVis.paused = !threeVis.paused; updateThreeUI(); };
-$('#threeFullscreen').onclick = () => toggleVisualiserFullscreen('#visualiser3d');
+$('#threeFullscreen').onclick = () => toggleVisualiserFullscreen('#threeViewport');
 $$('.visualiser-tabs button[data-three-mode]').forEach(b => b.onclick = () => switchThreeMode(b.dataset.threeMode));
 updateVisualiserModeUI();
 updateConstellationPauseButton();
