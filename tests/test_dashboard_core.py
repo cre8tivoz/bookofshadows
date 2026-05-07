@@ -471,13 +471,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="palaceJoystick"' in html
     assert 'WASD' in html
     assert 'Memory Diver' in html
-    assert 'LAB v19' in html
+    assert 'LAB v20' in html
     assert 'palace-build' in html
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v19' in html
-    assert '/static/style.css?v=labyrinth-v19' in html
+    assert '/static/app.js?v=labyrinth-v20' in html
+    assert '/static/style.css?v=labyrinth-v20' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -522,6 +522,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'not generic graph/entity circles' in js
     assert 'new THREE.BoxGeometry(44, 54, 8)' in js
     assert 'renderer.shadowMap.enabled = false' in js
+    assert 'Spatial streaming-lite' in js
+    assert 'palaceApplyVisibilityCulling' in js
+    assert 'lastVisibleObjectCount' in js
+    assert 'cullTick % 8' in js
+    assert 'slice(0,40)' in js
     assert 'dead = .16' in js
     assert 'move.lengthSq() > 1' in js
     assert 'rings read as bullseyes' in js
@@ -532,6 +537,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Math.max(-1500, Math.min(720, memoryPalace.pos.z))' in js
     assert 'function palaceFpsBox(THREE, scene, size, pos, mat){' in js
     assert 'slice(0,14)' in js
+    assert 'slice(0,16)' not in js
     assert 'scene.add(avatar, drone)' not in js
     assert 'scene.add(drone)' in js
     assert 'The Archive Gate' in js

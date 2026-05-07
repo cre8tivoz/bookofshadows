@@ -2335,7 +2335,8 @@ const palaceKeys = {};
 let memoryPalace = {
   data:null, renderer:null, scene:null, camera:null, group:null, nodes:[], labels:[], frame:0,
   yaw:0, pitch:-.05, pos:null, velocity:null, raycaster:null, mouse:null, avatar:null, drone:null,
-  beacon:null, beaconNode:null, joystick:{x:0,y:0}, lastT:0, pointer:null
+  beacon:null, beaconNode:null, joystick:{x:0,y:0}, lastT:0, pointer:null,
+  cullTick:0, lastObjectCount:0
 };
 function palaceInspectorDefault(){
   $('#palaceInspector').innerHTML = `<div class="inspector-kicker">Mnemosyne Labyrinth</div><h3>The Archive Gate</h3><p class="muted">Move between artifact rooms, scan relics on pedestals, and use search to summon a golden thread.</p><div class="trust-strip"><span class="trust-chip">WASD / joystick</span><span class="trust-chip">Drag to look</span><span class="trust-chip">Tap relic</span></div>`;
@@ -2602,6 +2603,26 @@ function updatePalaceNearbyPrompt(){
   if(near) $('#palaceHudStatus').textContent = `tap to scan memory: ${String(near.label || '').replace(/^memory:/,'').slice(0,30)}`;
   else if($('#palaceHudStatus').textContent.startsWith('tap to scan memory:')) $('#palaceHudStatus').textContent = 'walk forward — memory books line the path';
 }
+function palaceApplyVisibilityCulling(){
+  if(!memoryPalace.scene || !memoryPalace.pos) return;
+  memoryPalace.cullTick = (memoryPalace.cullTick || 0) + 1;
+  if(memoryPalace.cullTick % 8 !== 0) return;
+  let total=0, visible=0;
+  const p = memoryPalace.pos;
+  // Spatial streaming-lite: keep only nearby scene objects visible/renderable; do not draw the whole labyrinth at once.
+  memoryPalace.scene.traverse(obj=>{
+    total += 1;
+    if(obj === memoryPalace.drone || obj === memoryPalace.beacon || obj.isHemisphereLight || obj.isDirectionalLight){ obj.visible = true; visible += 1; return; }
+    if(!obj.parent || obj === memoryPalace.scene){ visible += 1; return; }
+    const wp = obj.getWorldPosition ? obj.getWorldPosition(new memoryPalace.THREE.Vector3()) : obj.position;
+    const d = Math.hypot(wp.x - p.x, wp.z - p.z);
+    const limit = obj.isLight ? 760 : (obj.userData?.node ? 620 : 980);
+    obj.visible = d < limit;
+    if(obj.visible) visible += 1;
+  });
+  memoryPalace.lastObjectCount = total;
+  memoryPalace.lastVisibleObjectCount = visible;
+}
 function updatePalaceZoneBadge(){
   const badge = $('.palace-zone-badge');
   if(!badge || !memoryPalace.pos || !memoryPalace.rooms?.length) return;
@@ -2852,7 +2873,7 @@ function animateMemoryPalace(t=0){
 function palaceFpsRooms(data){
   const raw = (data.nodes || []).map(n => ({...n}));
   const memoryNodes = raw.filter(n => n.kind === 'memory' || n.memory_id);
-  const nodes = (memoryNodes.length ? memoryNodes : raw).slice(0,70);
+  const nodes = (memoryNodes.length ? memoryNodes : raw).slice(0,40);
   const cats = [...new Set(nodes.map(n => n.category || 'Other'))];
   const rooms = [
     { label:'Archive Gate', x:0, z:0, w:420, d:360, color:0xffd166 },
@@ -3072,7 +3093,8 @@ function animateMemoryPalace(t=0){
   memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
   if(memoryPalace.drone){ const bob = Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
   if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
-  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh && (n.featuredPath || i < 18)){ n.mesh.rotation.y += delta * (.14 + (i%5)*.02); }});
+  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh && n.mesh.visible && (n.featuredPath || i < 18)){ n.mesh.rotation.y += delta * (.14 + (i%5)*.02); }});
+  palaceApplyVisibilityCulling();
   memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceNearbyPrompt(); updatePalaceLabels(); updatePalaceZoneBadge();
   memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
 }
