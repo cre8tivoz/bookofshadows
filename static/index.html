@@ -125,7 +125,8 @@
             <label for="reviewQueueSelect" class="muted">Review queue</label>
             <select id="reviewQueueSelect"></select>
             <input id="reviewSearchQuery" placeholder="Search this queue…" />
-            <input id="reviewMinImportance" type="number" min="0" max="1" step="0.05" placeholder="Min importance e.g. 0.8" />
+            <label class="range-filter" for="reviewMinImportance"><span>Min importance</span><strong id="reviewMinImportanceValue">any</strong></label>
+            <input id="reviewMinImportance" type="range" min="0" max="1" step="0.05" value="0" />
             <button id="reviewApplyFilters" class="primary">Apply filters</button>
             <button id="reviewClearFilters">Clear</button>
             <span id="reviewQueueCount" class="muted">0 listed</span>

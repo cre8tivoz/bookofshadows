@@ -768,8 +768,15 @@ function reviewFilterParams(){
   const q = ($('#reviewSearchQuery')?.value || '').trim();
   const minImportance = ($('#reviewMinImportance')?.value || '').trim();
   if(q) params.set('q', q);
-  if(minImportance) params.set('min_importance', minImportance);
+  if(minImportance && Number(minImportance) > 0) params.set('min_importance', minImportance);
   return params;
+}
+function updateReviewImportanceLabel(){
+  const slider = $('#reviewMinImportance');
+  const label = $('#reviewMinImportanceValue');
+  if(!slider || !label) return;
+  const value = Number(slider.value || 0);
+  label.textContent = value > 0 ? `≥ ${value.toFixed(2)}` : 'any';
 }
 function renderSelectedReviewQueue(data, append=false){
   latestReviewData = data;
@@ -799,8 +806,10 @@ function renderSelectedReviewQueue(data, append=false){
   bindReviewControls(queues);
   updateReviewBulkBar();
   $('#reviewQueueSelect').onchange = e => { selectedReviewQueue = e.target.value; reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
+  $('#reviewMinImportance').oninput = updateReviewImportanceLabel;
+  updateReviewImportanceLabel();
   $('#reviewApplyFilters').onclick = () => { reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
-  $('#reviewClearFilters').onclick = () => { $('#reviewSearchQuery').value = ''; $('#reviewMinImportance').value = ''; reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
+  $('#reviewClearFilters').onclick = () => { $('#reviewSearchQuery').value = ''; $('#reviewMinImportance').value = '0'; updateReviewImportanceLabel(); reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
   $('#reviewLoadMore').onclick = () => { if(data.next_offset != null){ reviewOffset = data.next_offset; loadReviewPage(true); } };
   $('#reviewLoadMore').classList.toggle('hidden', !data.has_more);
   $$('#review .review-filter').forEach(el => {

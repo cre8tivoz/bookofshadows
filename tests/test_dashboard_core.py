@@ -408,6 +408,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="reviewQueueCount"' in html
     assert 'id="reviewSearchQuery"' in html
     assert 'id="reviewMinImportance"' in html
+    assert 'type="range"' in html
+    assert 'id="reviewMinImportanceValue"' in html
     assert 'id="reviewLoadMore"' in html
     assert 'id="reviewQueues"' in html
     assert 'id="reviewBulkBar"' in html
@@ -460,6 +462,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'REVIEW_PAGE_SIZE = 100' in js
     assert 'min_importance' in js
     assert 'reviewSearchQuery' in js
+    assert 'reviewMinImportanceValue' in js
+    assert 'updateReviewImportanceLabel' in js
     assert '/api/review?' in js
     assert 'limit=${REVIEW_PAGE_SIZE}' in js
     assert 'offset=${reviewOffset}' in js
