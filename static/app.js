@@ -281,7 +281,7 @@ function showPanel(sectionId, panelId){
   section.querySelectorAll('.section-tabs button').forEach(button => button.classList.toggle('active', button.dataset.panel === panelId));
 }
 function sectionFor(name){
-  return ({ visualiser:'visualiser3d', visualiserlegacy:'constellation', constellation:'constellation', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
+  return ({ visualiser:'visualiser3d', palace:'memoryPalace', visualiserlegacy:'constellation', constellation:'constellation', recall:'explore', memories:'explore', timelineView:'activity', consolidations:'activity', triples:'graph', todayAdded:'today', todayRecalled:'today', todayTriples:'today', todayConsolidations:'today' })[name] || name;
 }
 function defaultPanelFor(section){
   return ({ explore:'exploreMemories', activity:'activityTimeline', graph:'graphGraph', today:'todayAdded' })[section];
@@ -320,17 +320,22 @@ function updateVisualiserFullscreenButtons(){
   const current = document.fullscreenElement;
   const legacy = current === $('.constellation-wrap');
   const three = current === $('#threeViewport');
+  const palace = current === $('#palaceViewport');
   const legacyButton = $('#constellationFullscreen');
   const threeButton = $('#threeFullscreen');
+  const palaceButton = $('#palaceFullscreen');
   if(legacyButton) legacyButton.textContent = legacy ? 'Exit fullscreen' : 'Fullscreen';
   if(threeButton) threeButton.textContent = three ? 'Exit fullscreen' : 'Fullscreen';
+  if(palaceButton) palaceButton.textContent = palace ? 'Exit fullscreen' : 'Fullscreen';
   if(isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data);
   if(threeVis.renderer) resizeThree();
+  if(memoryPalace.renderer) resizeMemoryPalace();
 }
 function switchTab(name, opts={}){
   const section = sectionFor(name);
   if(section !== 'constellation') stopCanvasVisualiserLoop();
   if(section !== 'visualiser3d' && threeVis?.renderer) clearThreeScene();
+  if(section !== 'memoryPalace' && memoryPalace?.renderer) clearPalaceScene();
   document.body.classList.toggle('compact-page', section !== 'overview');
   $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
   $(`#${section}`).classList.add('active');
@@ -354,6 +359,7 @@ function switchTab(name, opts={}){
   if(section==='lifecycle') loadLifecycle();
   if(section==='constellation') loadConstellation();
   if(section==='visualiser3d') loadThreeVisualiser();
+  if(section==='memoryPalace') loadMemoryPalace();
   if(section==='settings') { loadAuthStatus(); loadDiagnostics(); }
 }
 
@@ -2324,6 +2330,191 @@ function pickThreeNode(e){
   if(best) inspectThreeNode(best);
 }
 
+
+const palaceKeys = {};
+let memoryPalace = {
+  data:null, renderer:null, scene:null, camera:null, group:null, nodes:[], labels:[], frame:0,
+  yaw:0, pitch:-.05, pos:null, velocity:null, raycaster:null, mouse:null, avatar:null, drone:null,
+  beacon:null, beaconNode:null, joystick:{x:0,y:0}, lastT:0, pointer:null
+};
+function palaceInspectorDefault(){
+  $('#palaceInspector').innerHTML = `<div class="inspector-kicker">Memory Palace</div><h3>Start exploring</h3><p class="muted">Fly through memory artifacts, follow glowing paths, or search to place a navigation beacon.</p><div class="trust-strip"><span class="trust-chip">WASD / joystick</span><span class="trust-chip">Drag to look</span><span class="trust-chip">Tap artifact</span></div>`;
+}
+function clearPalaceScene(){
+  if(memoryPalace.frame) cancelAnimationFrame(memoryPalace.frame);
+  memoryPalace.frame = 0;
+  if(memoryPalace.renderer){ memoryPalace.renderer.dispose(); memoryPalace.renderer.domElement.remove(); }
+  $('#palaceLabels').innerHTML = '';
+  Object.assign(memoryPalace, { renderer:null, scene:null, camera:null, group:null, nodes:[], labels:[], avatar:null, drone:null, beacon:null, beaconNode:null, lastT:0 });
+}
+function resetMemoryPalaceDiver(){
+  if(!memoryPalace.THREE) return;
+  memoryPalace.pos = new memoryPalace.THREE.Vector3(0, 36, 760);
+  memoryPalace.velocity = new memoryPalace.THREE.Vector3();
+  memoryPalace.yaw = 0; memoryPalace.pitch = -.04;
+  $('#palaceHudStatus').textContent = 'drifting at palace gate';
+}
+function palacePositions(data){
+  const nodes = (data.nodes || []).slice(0,170).map(n => ({...n}));
+  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
+  nodes.forEach((n,i)=>{
+    const ci = catIndex[n.category || 'Other'] || 0;
+    const weight = Math.max(1, Number(n.weight || n.count || 1));
+    const lane = ci - (categories.length - 1) / 2;
+    const depth = -120 - i * 20 - (ci % 5) * 22;
+    const spiral = i * 1.91 + ci * .62;
+    const radius = 80 + (i % 11) * 18 + Math.sqrt(weight) * 12;
+    n.x = lane * 145 + Math.cos(spiral) * radius;
+    n.y = ((i % 9) - 4) * 28 + (n.kind === 'memory' ? -18 : 36);
+    n.z = depth + Math.sin(spiral) * radius * .62;
+    n.size = Math.min(34, 8 + Math.sqrt(weight) * (n.kind === 'memory' ? 5.2 : 6.2));
+    n._weight = weight;
+  });
+  return nodes;
+}
+function palaceCreateAvatar(THREE){
+  const avatar = new THREE.Group();
+  const suit = new THREE.Mesh(new THREE.CylinderGeometry(6, 8, 24, 16), new THREE.MeshStandardMaterial({ color:0xd8e8ff, emissive:0x102040, roughness:.35 }));
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(7.8, 18, 12), new THREE.MeshStandardMaterial({ color:0x101b2e, emissive:0x65d6ff, emissiveIntensity:.38, metalness:.2, roughness:.18 }));
+  visor.position.y = 16;
+  const lantern = new THREE.PointLight(0xffe08a, 1.4, 160); lantern.position.set(10, 8, -8);
+  avatar.add(suit, visor, lantern);
+  return avatar;
+}
+function palaceCreateHammyDrone(THREE){
+  const drone = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(5.5, 18, 12), new THREE.MeshStandardMaterial({ color:0xffd1a1, emissive:0x3a1908, roughness:.42 }));
+  const glow = new THREE.PointLight(0xffb86b, .9, 120); glow.position.set(0, 0, 0);
+  drone.add(body, glow);
+  return drone;
+}
+function inspectPalaceNode(node){
+  $('#palaceInspector').innerHTML = `<div class="inspector-kicker">${esc(node.kind || 'artifact')} · ${esc(node.category || 'Other')}</div><h3>${esc(node.label || 'Memory artifact')}</h3><p class="muted">${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || node._weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="palaceOpenMemory" class="primary tiny">Open memory</button>' : ''}<button id="palaceBeaconHere" class="tiny">Beacon here</button></div>`;
+  if(node.memory_id) $('#palaceOpenMemory').onclick = () => openMemoryDetail(node.memory_id);
+  $('#palaceBeaconHere').onclick = () => palaceSetBeacon(node);
+}
+function palaceSetBeacon(node){
+  if(!node || !memoryPalace.THREE || !memoryPalace.scene) return;
+  if(memoryPalace.beacon) memoryPalace.beacon.removeFromParent();
+  const THREE = memoryPalace.THREE;
+  const beacon = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(24, 1.2, 8, 48), new THREE.MeshBasicMaterial({ color:0xffe08a, transparent:true, opacity:.82 }));
+  const light = new THREE.PointLight(0xffe08a, 1.8, 220); light.position.y = 22;
+  beacon.add(ring, light); beacon.position.set(node.x, node.y + 28, node.z);
+  memoryPalace.scene.add(beacon); memoryPalace.beacon = beacon; memoryPalace.beaconNode = node;
+  $('#palaceHudStatus').textContent = `beacon: ${String(node.label || '').slice(0,34)}`;
+}
+function palaceSearchBeacon(){
+  const q = $('#palaceSearchQuery').value.trim().toLowerCase();
+  if(!q){ $('#palaceHudStatus').textContent = 'type a search to place beacon'; return; }
+  const node = memoryPalace.nodes.find(n => [n.label,n.category,n.preview].some(v => String(v || '').toLowerCase().includes(q)));
+  if(node){ palaceSetBeacon(node); inspectPalaceNode(node); }
+  else $('#palaceHudStatus').textContent = `no artifact found for “${q.slice(0,32)}”`;
+}
+async function renderMemoryPalace(data){
+  const THREE = await loadThreeModule();
+  clearPalaceScene(); memoryPalace.data = data; memoryPalace.THREE = THREE; palaceInspectorDefault();
+  const viewport = $('#palaceViewport'); if(!viewport) return;
+  const colors = constellationColors();
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' }); }
+  catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Memory Palace unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(cssHexToInt(colors.bg), 0);
+  viewport.prepend(renderer.domElement);
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(cssHexToInt(colors.bg), .00078);
+  const camera = new THREE.PerspectiveCamera(62, 1, 1, 7000);
+  const group = new THREE.Group(); scene.add(group);
+  scene.add(new THREE.AmbientLight(0xffffff, .55));
+  const nodes = palacePositions(data); const byId = new Map(nodes.map(n => [n.id, n]));
+  const entityMat = new THREE.MeshStandardMaterial({ color:cssHexToInt(colors.star), emissive:cssHexToInt(colors.star), emissiveIntensity:.34, roughness:.32 });
+  const memoryMat = new THREE.MeshStandardMaterial({ color:cssHexToInt(colors.memory), emissive:cssHexToInt(colors.memory), emissiveIntensity:.28, roughness:.38 });
+  nodes.forEach((n,i)=>{
+    const geo = n.kind === 'memory' ? new THREE.OctahedronGeometry(n.size || 12, 1) : new THREE.SphereGeometry(n.size || 12, 18, 12);
+    const mesh = new THREE.Mesh(geo, n.kind === 'memory' ? memoryMat : entityMat);
+    mesh.position.set(n.x,n.y,n.z); mesh.userData.node = n; n.mesh = mesh; group.add(mesh);
+    if(i % 4 === 0){ const halo = new THREE.PointLight(n.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star), .28, 120); halo.position.copy(mesh.position); group.add(halo); }
+  });
+  const lines=[];
+  (data.edges || []).slice(0,150).forEach(e=>{ const a=byId.get(e.source), b=byId.get(e.target); if(a && b) lines.push(a.x,a.y,a.z,b.x,b.y,b.z); });
+  const lineGeom = new THREE.BufferGeometry(); lineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lines), 3));
+  group.add(new THREE.LineSegments(lineGeom, new THREE.LineBasicMaterial({ color:cssHexToInt(colors.light ? '#19416c' : '#c6e0ff'), transparent:true, opacity:.18 })));
+  const stars = new Float32Array(900*3); for(let i=0;i<900;i++){ stars.set([((i*97)%2000)-1000, ((i*53)%900)-450, -((i*131)%2400)-150], i*3); }
+  const starGeom = new THREE.BufferGeometry(); starGeom.setAttribute('position', new THREE.BufferAttribute(stars, 3));
+  scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, size:1.2, transparent:true, opacity:.42, depthWrite:false })));
+  const avatar = palaceCreateAvatar(THREE); const drone = palaceCreateHammyDrone(THREE); scene.add(avatar, drone);
+  Object.assign(memoryPalace, { renderer, scene, camera, group, nodes, labels:nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,54), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar, drone });
+  $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,26))}</span>`).join('');
+  resetMemoryPalaceDiver(); bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
+}
+function resizeMemoryPalace(){
+  if(!memoryPalace.renderer) return;
+  const rect = $('#palaceViewport').getBoundingClientRect();
+  const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
+  memoryPalace.renderer.setSize(w,h,false); memoryPalace.camera.aspect = w/h; memoryPalace.camera.updateProjectionMatrix();
+}
+function palaceForwardRight(){
+  const THREE = memoryPalace.THREE;
+  return { forward:new THREE.Vector3(Math.sin(memoryPalace.yaw), 0, -Math.cos(memoryPalace.yaw)), right:new THREE.Vector3(Math.cos(memoryPalace.yaw), 0, Math.sin(memoryPalace.yaw)) };
+}
+function updatePalaceLabels(){
+  if(!memoryPalace.camera) return;
+  const rect = $('#palaceViewport').getBoundingClientRect(); const v = new memoryPalace.THREE.Vector3(); let shown=0;
+  $$('#palaceLabels .three-label').forEach((el,i)=>{
+    const n = memoryPalace.labels[i]; if(!n) return;
+    v.set(n.x,n.y,n.z).project(memoryPalace.camera);
+    const sx=(v.x*.5+.5)*rect.width, sy=(-v.y*.5+.5)*rect.height;
+    const close = memoryPalace.pos ? memoryPalace.pos.distanceTo(n.mesh.position) < 420 : false;
+    const visible = close && v.z > -1 && v.z < 1 && sx > 14 && sx < rect.width-14 && sy > 14 && sy < rect.height-14 && shown < 18;
+    el.style.display = visible ? '' : 'none';
+    if(visible){ shown++; el.style.left = `${sx}px`; el.style.top = `${sy}px`; el.style.opacity = String(Math.max(.34, 1 - Math.abs(v.z)*.42)); }
+  });
+}
+function animateMemoryPalace(t=0){
+  if(!memoryPalace.renderer) return;
+  resizeMemoryPalace();
+  const delta = memoryPalace.lastT ? Math.min(48, t - memoryPalace.lastT) / 1000 : .016; memoryPalace.lastT = t;
+  const {forward,right} = palaceForwardRight(); const move = new memoryPalace.THREE.Vector3();
+  if(palaceKeys.w || palaceKeys.ArrowUp) move.add(forward);
+  if(palaceKeys.s || palaceKeys.ArrowDown) move.sub(forward);
+  if(palaceKeys.d || palaceKeys.ArrowRight) move.add(right);
+  if(palaceKeys.a || palaceKeys.ArrowLeft) move.sub(right);
+  if(palaceKeys.q) move.y -= 1; if(palaceKeys.e || palaceKeys[' ']) move.y += 1;
+  if(memoryPalace.joystick.x || memoryPalace.joystick.y){ move.addScaledVector(right, memoryPalace.joystick.x); move.addScaledVector(forward, -memoryPalace.joystick.y); }
+  if(move.lengthSq() > 0) move.normalize().multiplyScalar((palaceKeys.Shift ? 380 : 210) * delta);
+  memoryPalace.pos.add(move);
+  memoryPalace.pos.x = Math.max(-1050, Math.min(1050, memoryPalace.pos.x)); memoryPalace.pos.y = Math.max(-260, Math.min(360, memoryPalace.pos.y)); memoryPalace.pos.z = Math.max(-2800, Math.min(860, memoryPalace.pos.z));
+  memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
+  if(memoryPalace.avatar){ const avatarPos = memoryPalace.pos.clone().add(forward.clone().multiplyScalar(58)).add(new memoryPalace.THREE.Vector3(0,-34,0)); memoryPalace.avatar.position.lerp(avatarPos, .18); memoryPalace.avatar.rotation.y = memoryPalace.yaw; }
+  if(memoryPalace.drone){ const bob = Math.sin(t*.002)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(42)).add(new memoryPalace.THREE.Vector3(0,18+bob,-30)); memoryPalace.drone.position.lerp(dronePos, .12); }
+  if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
+  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh){ n.mesh.rotation.y += delta * (.18 + (i%5)*.03); n.mesh.rotation.x += delta * .05; }});
+  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels();
+  memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+}
+async function loadMemoryPalace(){ renderMemoryPalace(await api('/api/constellation?limit=360')); }
+function pickPalaceNode(e){
+  if(!memoryPalace.raycaster) return;
+  const rect = $('#palaceViewport').getBoundingClientRect();
+  memoryPalace.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1; memoryPalace.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  memoryPalace.raycaster.setFromCamera(memoryPalace.mouse, memoryPalace.camera);
+  const hit = memoryPalace.raycaster.intersectObjects(memoryPalace.nodes.map(n=>n.mesh), false)[0];
+  if(hit?.object?.userData?.node) inspectPalaceNode(hit.object.userData.node);
+}
+function bindPalaceControls(){
+  const viewport = $('#palaceViewport'); if(!viewport || viewport.dataset.controlsBound === 'true') return; viewport.dataset.controlsBound = 'true';
+  window.addEventListener('keydown', e => { if(sectionFor(currentRoute.tab) === 'memoryPalace') palaceKeys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = true; });
+  window.addEventListener('keyup', e => { palaceKeys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; });
+  viewport.addEventListener('pointerdown', e=>{ if(e.target.closest('.fullscreen-exit')) return; viewport.setPointerCapture?.(e.pointerId); memoryPalace.pointer={x:e.clientX,y:e.clientY,moved:false}; });
+  viewport.addEventListener('pointermove', e=>{ if(!memoryPalace.pointer) return; const dx=e.clientX-memoryPalace.pointer.x, dy=e.clientY-memoryPalace.pointer.y; memoryPalace.pointer.x=e.clientX; memoryPalace.pointer.y=e.clientY; memoryPalace.pointer.moved = memoryPalace.pointer.moved || Math.abs(dx)+Math.abs(dy)>3; memoryPalace.yaw -= dx*.0032; memoryPalace.pitch = Math.max(-1.05, Math.min(.82, memoryPalace.pitch - dy*.0024)); });
+  const end=()=>{ setTimeout(()=>{ memoryPalace.pointer=null; }, 0); }; viewport.addEventListener('pointerup', end); viewport.addEventListener('pointercancel', end);
+  viewport.addEventListener('click', e=>{ if(memoryPalace.pointer?.moved) return; pickPalaceNode(e); });
+  const joy = $('#palaceJoystick');
+  joy.addEventListener('pointerdown', e=>{ joy.setPointerCapture?.(e.pointerId); joy.dataset.active='true'; });
+  joy.addEventListener('pointermove', e=>{ if(joy.dataset.active !== 'true') return; const r=joy.getBoundingClientRect(); const x=((e.clientX-r.left)/r.width-.5)*2, y=((e.clientY-r.top)/r.height-.5)*2; memoryPalace.joystick={x:Math.max(-1,Math.min(1,x)), y:Math.max(-1,Math.min(1,y))}; joy.querySelector('span').style.transform=`translate(${memoryPalace.joystick.x*22}px,${memoryPalace.joystick.y*22}px)`; });
+  const stopJoy=()=>{ joy.dataset.active='false'; memoryPalace.joystick={x:0,y:0}; joy.querySelector('span').style.transform='translate(0,0)'; }; joy.addEventListener('pointerup', stopJoy); joy.addEventListener('pointercancel', stopJoy);
+}
+
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 $$('.section-tabs button').forEach(b => b.onclick = () => {
   const panelRoute = ({ exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[b.dataset.panel];
@@ -2382,6 +2573,12 @@ $('#threePanMode').onclick = () => { threeVis.panMode = !threeVis.panMode; updat
 $('#threePause').onclick = () => { threeVis.paused = !threeVis.paused; updateThreeUI(); };
 $('#threeFullscreen').onclick = () => toggleVisualiserFullscreen('#threeViewport');
 $('#threeExitFullscreen').onclick = exitVisualiserFullscreen;
+$('#palaceRefresh').onclick = loadMemoryPalace;
+$('#palaceReset').onclick = resetMemoryPalaceDiver;
+$('#palaceSearchButton').onclick = palaceSearchBeacon;
+$('#palaceSearchQuery').onkeydown = e => { if(e.key === 'Enter') palaceSearchBeacon(); };
+$('#palaceFullscreen').onclick = () => toggleVisualiserFullscreen('#palaceViewport');
+$('#palaceExitFullscreen').onclick = exitVisualiserFullscreen;
 $$('.visualiser-tabs button[data-three-mode]').forEach(b => b.onclick = () => switchThreeMode(b.dataset.threeMode));
 updateVisualiserModeUI();
 updateConstellationPauseButton();

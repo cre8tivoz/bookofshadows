@@ -461,11 +461,32 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="todayDegradation"' in html
     assert 'id="constellationFullscreen"' in html
     assert 'id="threeFullscreen"' in html
+    assert 'data-tab="palace"' in html
+    assert 'id="memoryPalace"' in html
+    assert 'id="palaceViewport"' in html
+    assert 'id="palaceSearchQuery"' in html
+    assert 'id="palaceSearchButton"' in html
+    assert 'id="palaceFullscreen"' in html
+    assert 'id="palaceInspector"' in html
+    assert 'id="palaceJoystick"' in html
+    assert 'WASD' in html
+    assert 'Memory Diver' in html
+    assert 'Hammy drone' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
     assert 'toggleVisualiserFullscreen' in js
     assert 'exitVisualiserFullscreen' in js
+    assert 'loadMemoryPalace' in js
+    assert 'renderMemoryPalace' in js
+    assert 'animateMemoryPalace' in js
+    assert 'bindPalaceControls' in js
+    assert 'clearPalaceScene' in js
+    assert 'palaceCreateAvatar' in js
+    assert 'palaceSearchBeacon' in js
+    assert 'palaceKeys' in js
+    assert "toggleVisualiserFullscreen('#palaceViewport')" in js
+    assert "section==='memoryPalace'" in js
     assert "toggleVisualiserFullscreen('#threeViewport')" in js
     assert "toggleVisualiserFullscreen('.constellation-wrap')" in js
     assert "toggleVisualiserFullscreen('#visualiser3d')" not in js
@@ -477,6 +498,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '.constellation-wrap:fullscreen' in css
     assert '.fullscreen-exit' in css
     assert ':fullscreen .fullscreen-exit' in css
+    assert '.palace-viewport' in css
+    assert '.palace-hud' in css
+    assert '.palace-reticle' in css
+    assert '.palace-joystick' in css
+    assert '#palaceViewport:fullscreen' in css
     assert '#visualiser3d:fullscreen' not in css
     assert '#constellation:fullscreen' not in css
     assert 'fullscreenchange' in js
