@@ -336,6 +336,7 @@ class DashboardStore:
         contaminated_only: bool | str = False,
         degraded_only: bool | str = False,
         due_for_degradation: bool | str = False,
+        min_importance: float | str | None = None,
     ) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit or 100), 10000))
         offset = max(0, int(offset or 0))
@@ -348,6 +349,10 @@ class DashboardStore:
         veracity = (veracity or "").strip().lower()
         if veracity and veracity not in VERACITY_WEIGHTS:
             veracity = ""
+        try:
+            min_importance_value = float(min_importance) if min_importance not in (None, "") else None
+        except (TypeError, ValueError):
+            min_importance_value = None
         try:
             degradation_tier_value = int(degradation_tier) if degradation_tier not in (None, "") else None
         except (TypeError, ValueError):
@@ -402,6 +407,9 @@ class DashboardStore:
                 if session_id:
                     where.append("session_id = ?")
                     params.append(session_id)
+                if min_importance_value is not None:
+                    where.append("COALESCE(importance, 0) >= ?")
+                    params.append(min_importance_value)
                 veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
                 if veracity:
                     where.append(f"{veracity_expr} = ?")
@@ -440,15 +448,15 @@ class DashboardStore:
                     FROM {table}
                     {clause}
                     ORDER BY {sql_order}
-                    LIMIT ? OFFSET ?
+                    LIMIT ? OFFSET 0
                 """
-                for row in con.execute(sql, [*params, limit, offset]):
+                for row in con.execute(sql, [*params, limit + offset]):
                     d = self._enrich_memory(self._dict(row), memory_kind)
                     rows.append(d)
         rows.sort(key=lambda r: (
             float(r.get("importance") or 0) if sort == "importance" else int(r.get("recall_count") or 0) if sort == "recall" else (r.get("timestamp") or r.get("created_at") or "")
         ), reverse=sort != "oldest")
-        return rows[:limit]
+        return rows[offset:offset + limit]
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         with self.connect() as con:
@@ -461,54 +469,93 @@ class DashboardStore:
                     return self._enrich_memory(self._dict(row), memory_kind)
         return None
 
-    def review_queues(self, limit: int = 50) -> dict[str, Any]:
-        """Read-only trust/lifecycle review queues for Mnemosyne 2.3 metadata."""
-        limit = max(1, min(int(limit or 50), 10000))
-        contaminated = self.list_memories(kind="all", status="active", contaminated_only=True, sort="importance", limit=limit)
-        high_importance = [m for m in contaminated if float(m.get("importance") or 0) > 0.5][:limit]
-        degraded = self.list_memories(kind="episodic", status="active", degraded_only=True, sort="recent", limit=limit)
-        due = self.list_memories(kind="episodic", status="active", due_for_degradation=True, sort="oldest", limit=limit)
-        counts = {
-            "contaminated": len(contaminated),
-            "high_importance_contaminated": len(high_importance),
-            "degraded": len(degraded),
-            "due_for_degradation": len(due),
-        }
-        queues = {
+    def review_queues(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        queue: str = "",
+        q: str = "",
+        min_importance: float | str | None = None,
+    ) -> dict[str, Any]:
+        """Trust/lifecycle review queues for Mnemosyne 2.3 metadata."""
+        limit = max(1, min(int(limit or 50), 500))
+        offset = max(0, int(offset or 0))
+        queue = (queue or "").strip() or "contaminated"
+        queue_defs = {
             "contaminated": {
                 "title": "Contaminated",
                 "description": "Mnemosyne veracity is inferred, tool, imported, or unknown.",
+                "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance"},
                 "filter": {"contaminated_only": "1", "sort": "importance"},
-                "items": contaminated,
             },
             "high_importance_contaminated": {
                 "title": "High-importance contaminated",
                 "description": "Contaminated memories with importance above the review threshold.",
+                "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance", "min_importance": 0.500001},
                 "filter": {"contaminated_only": "1", "sort": "importance"},
-                "items": high_importance,
             },
             "degraded": {
                 "title": "Degraded",
                 "description": "Episodic memories that have moved down the lifecycle and may carry reduced recall weight.",
+                "args": {"kind": "episodic", "status": "active", "degraded_only": True, "sort": "recent"},
                 "filter": {"kind": "episodic", "degraded_only": "1", "sort": "recent"},
-                "items": degraded,
             },
             "due_for_degradation": {
                 "title": "Due for degradation",
                 "description": "Hot or warm episodic memories old enough to be compressed into the next lifecycle tier.",
+                "args": {"kind": "episodic", "status": "active", "due_for_degradation": True, "sort": "oldest"},
                 "filter": {"kind": "episodic", "due_for_degradation": "1", "sort": "oldest"},
-                "items": due,
             },
         }
+        if queue not in queue_defs:
+            queue = "contaminated"
+        try:
+            min_importance_value = float(min_importance) if min_importance not in (None, "") else None
+        except (TypeError, ValueError):
+            min_importance_value = None
+
+        def args_for(key: str, *, page: bool = False) -> dict[str, Any]:
+            args = dict(queue_defs[key]["args"])
+            if q:
+                args["q"] = q
+            base_min = args.get("min_importance")
+            if min_importance_value is not None:
+                args["min_importance"] = max(float(base_min or 0), min_importance_value)
+            elif base_min is not None:
+                args["min_importance"] = base_min
+            args["limit"] = limit if page else 10000
+            args["offset"] = offset if page else 0
+            return args
+
+        totals = {key: len(self.list_memories(**args_for(key))) for key in queue_defs}
+        page_items = self.list_memories(**args_for(queue, page=True))
+        queues = {
+            key: {
+                "title": meta["title"],
+                "description": meta["description"],
+                "filter": meta["filter"],
+                "items": page_items if key == queue else [],
+            }
+            for key, meta in queue_defs.items()
+        }
         cards = [
-            {"key": key, "title": queue["title"], "count": counts[key], "description": queue["description"]}
-            for key, queue in queues.items()
+            {"key": key, "title": meta["title"], "count": totals[key], "description": meta["description"]}
+            for key, meta in queue_defs.items()
         ]
+        next_offset = offset + limit if offset + len(page_items) < totals[queue] else None
         return {
             "read_only": True,
             "limit": limit,
+            "offset": offset,
+            "queue": queue,
+            "q": q,
+            "min_importance": min_importance_value,
+            "total": totals[queue],
+            "listed": len(page_items),
+            "next_offset": next_offset,
+            "has_more": next_offset is not None,
             "generated_at": _utc_now(),
-            "counts": counts,
+            "counts": totals,
             "cards": cards,
             "queues": queues,
         }

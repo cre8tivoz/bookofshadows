@@ -10,6 +10,9 @@ let applyingHistory = false;
 let bulkSelection = new Set();
 let reviewSelection = new Set();
 let selectedReviewQueue = 'contaminated';
+let reviewOffset = 0;
+let latestReviewData = null;
+const REVIEW_PAGE_SIZE = 100;
 let latestMemoryItems = [];
 let latestReviewItems = [];
 let graphView = { scale:1, x:0, y:0, dragging:false, sx:0, sy:0, ox:0, oy:0 };
@@ -760,7 +763,16 @@ function bindReviewControls(queues){
   $$('#review .review-check').forEach(chk => chk.onchange = e => { e.stopPropagation(); chk.checked ? reviewSelection.add(chk.dataset.id) : reviewSelection.delete(chk.dataset.id); updateReviewBulkBar(); });
   $$('#review .review-select-visible').forEach(el => el.onclick = e => { e.stopPropagation(); const items = queues[el.dataset.reviewKey]?.items || []; items.forEach(x => reviewSelection.add(x.id)); updateReviewBulkBar(); });
 }
-function renderSelectedReviewQueue(data){
+function reviewFilterParams(){
+  const params = new URLSearchParams(`queue=${encodeURIComponent(selectedReviewQueue)}&limit=${REVIEW_PAGE_SIZE}&offset=${reviewOffset}`);
+  const q = ($('#reviewSearchQuery')?.value || '').trim();
+  const minImportance = ($('#reviewMinImportance')?.value || '').trim();
+  if(q) params.set('q', q);
+  if(minImportance) params.set('min_importance', minImportance);
+  return params;
+}
+function renderSelectedReviewQueue(data, append=false){
+  latestReviewData = data;
   const queues = data.queues || {};
   const cards = data.cards || [];
   const keys = cards.map(card => card.key).filter(key => queues[key]);
@@ -770,23 +782,34 @@ function renderSelectedReviewQueue(data){
     $('#reviewQueueSelect').innerHTML = '';
     $('#reviewQueueCount').textContent = '0 listed';
     $('#reviewQueues').innerHTML = '<p class="muted">No review queues available.</p>';
+    $('#reviewLoadMore').classList.add('hidden');
     updateReviewBulkBar();
     return;
   }
-  if(!queues[selectedReviewQueue]) selectedReviewQueue = keys[0];
-  const selectedCard = cards.find(card => card.key === selectedReviewQueue) || {count: queues[selectedReviewQueue]?.items?.length || 0};
+  if(!queues[selectedReviewQueue]) selectedReviewQueue = data.queue || keys[0];
+  const selectedCard = cards.find(card => card.key === selectedReviewQueue) || {count: data.total || 0};
   $('#reviewCards').innerHTML = '';
   $('#reviewQueueSelect').innerHTML = cards.map(card => `<option value="${esc(card.key)}" ${card.key === selectedReviewQueue ? 'selected' : ''}>${esc(card.title)} (${Number(card.count || 0).toLocaleString()})</option>`).join('');
-  $('#reviewQueueCount').textContent = `${Number(selectedCard.count || 0).toLocaleString()} total · ${(queues[selectedReviewQueue]?.items || []).length.toLocaleString()} listed`;
-  latestReviewItems = [...new Map((queues[selectedReviewQueue]?.items || []).map(item => [item.id, item])).values()];
-  $('#reviewQueues').innerHTML = reviewQueueHtml(selectedReviewQueue, queues[selectedReviewQueue], {triage:true});
+  const newItems = queues[selectedReviewQueue]?.items || [];
+  latestReviewItems = append ? [...new Map([...latestReviewItems, ...newItems].map(item => [item.id, item])).values()] : [...new Map(newItems.map(item => [item.id, item])).values()];
+  $('#reviewQueueCount').textContent = `${Number(data.total ?? selectedCard.count ?? 0).toLocaleString()} total · ${latestReviewItems.length.toLocaleString()} listed`;
+  const renderedQueue = {...queues[selectedReviewQueue], items:latestReviewItems};
+  $('#reviewQueues').innerHTML = reviewQueueHtml(selectedReviewQueue, renderedQueue, {triage:true});
   bindMemoryClicks($('#review'));
   bindReviewControls(queues);
   updateReviewBulkBar();
-  $('#reviewQueueSelect').onchange = e => { selectedReviewQueue = e.target.value; reviewSelection.clear(); renderSelectedReviewQueue(data); };
+  $('#reviewQueueSelect').onchange = e => { selectedReviewQueue = e.target.value; reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
+  $('#reviewApplyFilters').onclick = () => { reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
+  $('#reviewClearFilters').onclick = () => { $('#reviewSearchQuery').value = ''; $('#reviewMinImportance').value = ''; reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
+  $('#reviewLoadMore').onclick = () => { if(data.next_offset != null){ reviewOffset = data.next_offset; loadReviewPage(true); } };
+  $('#reviewLoadMore').classList.toggle('hidden', !data.has_more);
   $$('#review .review-filter').forEach(el => {
     el.onclick = e => { e.stopPropagation(); const key = el.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); };
   });
+}
+async function loadReviewPage(append=false){
+  const data = await api(`/api/review?${reviewFilterParams().toString()}`);
+  renderSelectedReviewQueue(data, append);
 }
 async function confirmSelectedReviewMemories(){
   const ids = reviewActionableIds();
@@ -825,8 +848,9 @@ async function expireSelectedReviewMemories(){
   reviewSelection.clear(); await loadStats(); await loadReview();
 }
 async function loadReview(){
-  const data = await api('/api/review?limit=10000');
-  renderSelectedReviewQueue(data);
+  reviewOffset = 0;
+  reviewSelection.clear();
+  await loadReviewPage(false);
 }
 function lifecycleQueueHtml(key, queue){
   return reviewQueueHtml(key, queue).replace('review-queue glass', 'review-queue lifecycle-queue glass').replace('Open filtered browser', 'Open lifecycle filter');
