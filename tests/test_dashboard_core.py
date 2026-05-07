@@ -410,6 +410,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="reviewMinImportance"' in html
     assert 'type="range"' in html
     assert 'id="reviewMinImportanceValue"' in html
+    assert 'class="range-filter-value" id="reviewMinImportanceValue"' in html
     assert 'id="reviewLoadMore"' in html
     assert 'id="reviewQueues"' in html
     assert 'id="reviewBulkBar"' in html
@@ -464,6 +465,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'reviewSearchQuery' in js
     assert 'reviewMinImportanceValue' in js
     assert 'updateReviewImportanceLabel' in js
+    assert 'actionable selected' in js
+    assert 'active' not in js[js.index("$('#reviewSelectionStatus').textContent"):js.index("$('#reviewConfirm').disabled")]
     assert "$('#reviewSelectAll').onchange" in js
     assert "latestReviewItems.forEach" in js
     assert "loadReview();" not in js[js.index("$('#reviewSelectAll').onchange"):js.index("$('#reviewClear').onclick")]
