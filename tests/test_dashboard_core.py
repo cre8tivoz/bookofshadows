@@ -464,6 +464,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'reviewSearchQuery' in js
     assert 'reviewMinImportanceValue' in js
     assert 'updateReviewImportanceLabel' in js
+    assert "$('#reviewSelectAll').onchange" in js
+    assert "latestReviewItems.forEach" in js
+    assert "loadReview();" not in js[js.index("$('#reviewSelectAll').onchange"):js.index("$('#reviewClear').onclick")]
+    assert "updateReviewBulkBar();" in js[js.index("$('#reviewSelectAll').onchange"):js.index("$('#reviewClear').onclick")]
+    select_visible_segment = js[js.index("$$('#review .review-select-visible')"):js.index('function reviewFilterParams')]
+    assert 'latestReviewItems.forEach' in select_visible_segment
+    assert '$$(\'#review .review-check\')' in select_visible_segment
     assert '/api/review?' in js
     assert 'limit=${REVIEW_PAGE_SIZE}' in js
     assert 'offset=${reviewOffset}' in js

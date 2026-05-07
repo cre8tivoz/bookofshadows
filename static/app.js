@@ -761,7 +761,12 @@ function updateReviewBulkBar(){
 }
 function bindReviewControls(queues){
   $$('#review .review-check').forEach(chk => chk.onchange = e => { e.stopPropagation(); chk.checked ? reviewSelection.add(chk.dataset.id) : reviewSelection.delete(chk.dataset.id); updateReviewBulkBar(); });
-  $$('#review .review-select-visible').forEach(el => el.onclick = e => { e.stopPropagation(); const items = queues[el.dataset.reviewKey]?.items || []; items.forEach(x => reviewSelection.add(x.id)); updateReviewBulkBar(); });
+  $$('#review .review-select-visible').forEach(el => el.onclick = e => {
+    e.stopPropagation();
+    latestReviewItems.forEach(x => reviewSelection.add(x.id));
+    $$('#review .review-check').forEach(chk => { chk.checked = true; });
+    updateReviewBulkBar();
+  });
 }
 function reviewFilterParams(){
   const params = new URLSearchParams(`queue=${encodeURIComponent(selectedReviewQueue)}&limit=${REVIEW_PAGE_SIZE}&offset=${reviewOffset}`);
@@ -2303,7 +2308,12 @@ $('#bulkExpire').onclick = expireSelectedMemories;
 $('#bulkVeracity').onclick = setSelectedVeracity;
 $('#bulkExpiry').onclick = setSelectedExpiry;
 $('#bulkImportance').onclick = setSelectedImportance; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') loadMemories(); };
-$('#reviewSelectAll').onchange = () => { latestReviewItems.forEach(x => $('#reviewSelectAll').checked ? reviewSelection.add(x.id) : reviewSelection.delete(x.id)); loadReview(); };
+$('#reviewSelectAll').onchange = () => {
+  const checked = $('#reviewSelectAll').checked;
+  latestReviewItems.forEach(x => checked ? reviewSelection.add(x.id) : reviewSelection.delete(x.id));
+  $$('#review .review-check').forEach(chk => { chk.checked = checked; });
+  updateReviewBulkBar();
+};
 $('#reviewClear').onclick = () => { reviewSelection.clear(); loadReview(); };
 $('#reviewConfirm').onclick = confirmSelectedReviewMemories;
 $('#reviewVeracity').onclick = setSelectedReviewVeracity;
