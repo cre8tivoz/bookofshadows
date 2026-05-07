@@ -751,7 +751,7 @@ function updateReviewBulkBar(){
   const visible = latestReviewItems.length;
   const actionable = reviewActionableIds().length;
   bar.classList.toggle('hidden', !visible);
-  $('#reviewSelectionStatus').textContent = `${reviewSelection.size} selected · ${actionable} actionable selected`;
+  $('#reviewSelectionStatus').textContent = `${reviewSelection.size} selected`;
   $('#reviewConfirm').disabled = !admin || !actionable;
   $('#reviewVeracity').disabled = !admin || !actionable;
   $('#reviewExpiry').disabled = !admin || !actionable;

@@ -143,6 +143,17 @@ def test_list_memories_filters_v23_veracity_and_degradation(tmp_path):
 def test_review_queues_surface_trust_lifecycle_work(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,veracity,valid_until) VALUES (?,?,?,?,?,?,?,?,?)",
+        ('expired_review', 'Expired contaminated review item', 'test', '2026-01-05T00:00:00', 's6', 0.99, 'global', 'unknown', '2020-01-01T00:00:00'),
+    )
+    con.execute(
+        "INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,veracity,superseded_by) VALUES (?,?,?,?,?,?,?,?,?)",
+        ('superseded_review', 'Superseded contaminated review item', 'test', '2026-01-06T00:00:00', 's7', 0.98, 'global', 'unknown', 'replacement'),
+    )
+    con.commit()
+    con.close()
     store = DashboardStore(db)
 
     review = store.review_queues(queue='high_importance_contaminated', limit=10)
@@ -153,6 +164,7 @@ def test_review_queues_surface_trust_lifecycle_work(tmp_path):
     assert review['counts']['degraded'] == 2
     assert 'due_for_degradation' in review['counts']
     assert [item['id'] for item in review['queues']['high_importance_contaminated']['items']] == ['w4', 'e1']
+    assert all(item['status'] == 'active' for item in review['queues']['high_importance_contaminated']['items'])
     assert review['queues']['degraded']['items'] == []
     assert review['queues']['contaminated']['title'] == 'Contaminated'
     assert review['queues']['high_importance_contaminated']['title'] == 'High-importance contaminated'
@@ -465,7 +477,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'reviewSearchQuery' in js
     assert 'reviewMinImportanceValue' in js
     assert 'updateReviewImportanceLabel' in js
-    assert 'actionable selected' in js
+    assert 'actionable selected' not in js
+    assert "`${reviewSelection.size} selected`" in js
     assert 'active' not in js[js.index("$('#reviewSelectionStatus').textContent"):js.index("$('#reviewConfirm').disabled")]
     assert "$('#reviewSelectAll').onchange" in js
     assert "latestReviewItems.forEach" in js
