@@ -2338,7 +2338,7 @@ let memoryPalace = {
   beacon:null, beaconNode:null, joystick:{x:0,y:0}, lastT:0, pointer:null
 };
 function palaceInspectorDefault(){
-  $('#palaceInspector').innerHTML = `<div class="inspector-kicker">Memory Palace</div><h3>Start exploring</h3><p class="muted">Fly through memory artifacts, follow glowing paths, or search to place a navigation beacon.</p><div class="trust-strip"><span class="trust-chip">WASD / joystick</span><span class="trust-chip">Drag to look</span><span class="trust-chip">Tap artifact</span></div>`;
+  $('#palaceInspector').innerHTML = `<div class="inspector-kicker">Mnemosyne Labyrinth</div><h3>The Archive Gate</h3><p class="muted">Move between artifact rooms, scan relics on pedestals, and use search to summon a golden thread.</p><div class="trust-strip"><span class="trust-chip">WASD / joystick</span><span class="trust-chip">Drag to look</span><span class="trust-chip">Tap relic</span></div>`;
 }
 function clearPalaceScene(){
   if(memoryPalace.frame) cancelAnimationFrame(memoryPalace.frame);
@@ -2354,24 +2354,86 @@ function resetMemoryPalaceDiver(){
   memoryPalace.yaw = 0; memoryPalace.pitch = -.04;
   $('#palaceHudStatus').textContent = 'drifting at palace gate';
 }
+function palaceRoomsForCategories(categories){
+  const base = [
+    { label:'The Archive Gate', x:0, y:0, z:620, color:0xffe08a },
+    { label:'Episodic Vault', x:-360, y:0, z:120, color:0x65d6ff },
+    { label:'Working Memory Stream', x:360, y:0, z:80, color:0x52d6b5 },
+    { label:'Entity Gardens', x:-520, y:0, z:-520, color:0xb9a6ff },
+    { label:'Cold Storage', x:520, y:0, z:-560, color:0x8aa0c9 },
+    { label:'Corrupted Wing', x:0, y:0, z:-980, color:0xff5f87 }
+  ];
+  categories.slice(0, Math.max(0, base.length - 1)).forEach((cat,i) => { base[i + 1].category = cat; });
+  return base;
+}
 function palacePositions(data){
-  const nodes = (data.nodes || []).slice(0,170).map(n => ({...n}));
+  const nodes = (data.nodes || []).slice(0,190).map(n => ({...n}));
   const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
-  const catIndex = Object.fromEntries(categories.map((c,i)=>[c,i]));
+  const rooms = palaceRoomsForCategories(categories);
   nodes.forEach((n,i)=>{
-    const ci = catIndex[n.category || 'Other'] || 0;
+    const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
+    const room = contaminated ? rooms.find(r => r.label === 'Corrupted Wing') : (n.kind === 'memory' ? rooms[1 + (i % Math.max(1, rooms.length - 2))] : rooms[1 + ((i + 2) % Math.max(1, rooms.length - 2))]);
     const weight = Math.max(1, Number(n.weight || n.count || 1));
-    const lane = ci - (categories.length - 1) / 2;
-    const depth = -120 - i * 20 - (ci % 5) * 22;
-    const spiral = i * 1.91 + ci * .62;
-    const radius = 80 + (i % 11) * 18 + Math.sqrt(weight) * 12;
-    n.x = lane * 145 + Math.cos(spiral) * radius;
-    n.y = ((i % 9) - 4) * 28 + (n.kind === 'memory' ? -18 : 36);
-    n.z = depth + Math.sin(spiral) * radius * .62;
-    n.size = Math.min(34, 8 + Math.sqrt(weight) * (n.kind === 'memory' ? 5.2 : 6.2));
-    n._weight = weight;
+    const slot = i % 28;
+    const ring = Math.floor(slot / 7) + 1;
+    const angle = (slot % 7) / 7 * Math.PI * 2 + ring * .27;
+    const radius = 54 + ring * 34 + Math.sqrt(weight) * 5;
+    n.x = room.x + Math.cos(angle) * radius;
+    n.y = 18 + (slot % 3) * 8 + (n.kind === 'memory' ? 0 : 18);
+    n.z = room.z + Math.sin(angle) * radius;
+    n.size = Math.min(30, 8 + Math.sqrt(weight) * (n.kind === 'memory' ? 4.8 : 5.8));
+    n._weight = weight; n.room = room.label; n.contaminated = contaminated;
   });
+  nodes.rooms = rooms;
   return nodes;
+}
+function palaceCreateArtifactMaterial(THREE, node, colors){
+  if(node.contaminated){
+    node.scanLabel = 'Contaminated memory';
+    return new THREE.MeshStandardMaterial({ color:0xff4f87, emissive:0x8d0035, emissiveIntensity:.72, roughness:.28, metalness:.12 });
+  }
+  const color = node.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star);
+  return new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:node.kind === 'memory' ? .34 : .42, roughness:.33, metalness:.08 });
+}
+function palaceCreatePedestal(THREE, node){
+  const group = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(18, 24, 8, 6), new THREE.MeshStandardMaterial({ color:0x2a2235, emissive:0x0b0712, roughness:.72 }));
+  base.position.set(node.x, 3, node.z);
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(12, 16, 10, 8), new THREE.MeshStandardMaterial({ color:node.contaminated ? 0x4b1630 : 0x3a3042, roughness:.62 }));
+  plinth.position.set(node.x, 12, node.z);
+  group.add(base, plinth);
+  return group;
+}
+function palaceCreatePortal(THREE, room, target, color=0xffe08a){
+  const group = new THREE.Group();
+  const dx = target.x - room.x, dz = target.z - room.z;
+  const angle = Math.atan2(dx, dz);
+  const arch = new THREE.Mesh(new THREE.TorusGeometry(34, 2.5, 8, 48, Math.PI), new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.76 }));
+  arch.rotation.z = Math.PI;
+  arch.position.y = 50;
+  const light = new THREE.PointLight(color, 1.2, 180); light.position.y = 44;
+  group.add(arch, light);
+  group.position.set(room.x + Math.sin(angle) * 126, 0, room.z + Math.cos(angle) * 126);
+  group.rotation.y = angle;
+  return group;
+}
+function palaceCreateDungeonRooms(THREE, scene, rooms){
+  const floorMat = new THREE.MeshStandardMaterial({ color:0x21192b, roughness:.82, metalness:.04 });
+  const edgeMat = new THREE.MeshStandardMaterial({ color:0x4c3b56, emissive:0x120a18, roughness:.76 });
+  const lineMat = new THREE.LineBasicMaterial({ color:0xffe08a, transparent:true, opacity:.18 });
+  const corridorPoints = [];
+  const gate = rooms[0];
+  rooms.forEach((room,i)=>{
+    const floor = new THREE.Mesh(new THREE.CylinderGeometry(i === 0 ? 170 : 135, i === 0 ? 190 : 152, 12, 8), floorMat);
+    floor.position.set(room.x, -6, room.z); floor.rotation.y = Math.PI / 8; scene.add(floor);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(i === 0 ? 176 : 140, 2.3, 6, 8), edgeMat);
+    rim.position.set(room.x, 2, room.z); rim.rotation.x = Math.PI / 2; rim.rotation.z = Math.PI / 8; scene.add(rim);
+    const obelisk = new THREE.Mesh(new THREE.ConeGeometry(15, i === 0 ? 92 : 64, 5), new THREE.MeshStandardMaterial({ color:room.color, emissive:room.color, emissiveIntensity:.28, roughness:.40 }));
+    obelisk.position.set(room.x, i === 0 ? 48 : 34, room.z); scene.add(obelisk);
+    if(i > 0){ corridorPoints.push(gate.x, 0, gate.z, room.x, 0, room.z); scene.add(palaceCreatePortal(THREE, gate, room, room.color)); }
+  });
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(corridorPoints), 3));
+  scene.add(new THREE.LineSegments(geometry, lineMat));
 }
 function palaceCreateAvatar(THREE){
   const avatar = new THREE.Group();
@@ -2390,7 +2452,8 @@ function palaceCreateHammyDrone(THREE){
   return drone;
 }
 function inspectPalaceNode(node){
-  $('#palaceInspector').innerHTML = `<div class="inspector-kicker">${esc(node.kind || 'artifact')} · ${esc(node.category || 'Other')}</div><h3>${esc(node.label || 'Memory artifact')}</h3><p class="muted">${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || node._weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="palaceOpenMemory" class="primary tiny">Open memory</button>' : ''}<button id="palaceBeaconHere" class="tiny">Beacon here</button></div>`;
+  const scanLabel = node.scanLabel || (node.kind === 'memory' ? 'Memory relic' : 'Entity obelisk');
+  $('#palaceInspector').innerHTML = `<div class="inspector-kicker">${esc(scanLabel)} · ${esc(node.room || node.category || 'Artifact room')}</div><h3>${esc(node.label || 'Memory artifact')}</h3><p class="muted">${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || node._weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="palaceOpenMemory" class="primary tiny">Open memory</button>' : ''}<button id="palaceBeaconHere" class="tiny">Beacon here</button></div>`;
   if(node.memory_id) $('#palaceOpenMemory').onclick = () => openMemoryDetail(node.memory_id);
   $('#palaceBeaconHere').onclick = () => palaceSetBeacon(node);
 }
@@ -2419,31 +2482,32 @@ async function renderMemoryPalace(data){
   const colors = constellationColors();
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' }); }
-  catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Memory Palace unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
+  catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Mnemosyne Labyrinth unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(cssHexToInt(colors.bg), 0);
   viewport.prepend(renderer.domElement);
-  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(cssHexToInt(colors.bg), .00078);
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x0b0712, .00092);
   const camera = new THREE.PerspectiveCamera(62, 1, 1, 7000);
   const group = new THREE.Group(); scene.add(group);
-  scene.add(new THREE.AmbientLight(0xffffff, .55));
+  scene.add(new THREE.AmbientLight(0xd8c7ff, .42));
+  const torch = new THREE.PointLight(0xffe08a, 1.4, 900); torch.position.set(0, 220, 520); scene.add(torch);
   const nodes = palacePositions(data); const byId = new Map(nodes.map(n => [n.id, n]));
-  const entityMat = new THREE.MeshStandardMaterial({ color:cssHexToInt(colors.star), emissive:cssHexToInt(colors.star), emissiveIntensity:.34, roughness:.32 });
-  const memoryMat = new THREE.MeshStandardMaterial({ color:cssHexToInt(colors.memory), emissive:cssHexToInt(colors.memory), emissiveIntensity:.28, roughness:.38 });
+  palaceCreateDungeonRooms(THREE, scene, nodes.rooms || []);
   nodes.forEach((n,i)=>{
-    const geo = n.kind === 'memory' ? new THREE.OctahedronGeometry(n.size || 12, 1) : new THREE.SphereGeometry(n.size || 12, 18, 12);
-    const mesh = new THREE.Mesh(geo, n.kind === 'memory' ? memoryMat : entityMat);
-    mesh.position.set(n.x,n.y,n.z); mesh.userData.node = n; n.mesh = mesh; group.add(mesh);
-    if(i % 4 === 0){ const halo = new THREE.PointLight(n.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star), .28, 120); halo.position.copy(mesh.position); group.add(halo); }
+    group.add(palaceCreatePedestal(THREE, n));
+    const geo = n.contaminated ? new THREE.IcosahedronGeometry(n.size || 12, 1) : (n.kind === 'memory' ? new THREE.OctahedronGeometry(n.size || 12, 1) : new THREE.ConeGeometry((n.size || 12) * .75, (n.size || 12) * 2.9, 5));
+    const mesh = new THREE.Mesh(geo, palaceCreateArtifactMaterial(THREE, n, colors));
+    mesh.position.set(n.x,n.y + 16,n.z); mesh.userData.node = n; n.mesh = mesh; group.add(mesh);
+    if(i % 3 === 0 || n.contaminated){ const halo = new THREE.PointLight(n.contaminated ? 0xff4f87 : (n.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star)), n.contaminated ? .62 : .32, n.contaminated ? 190 : 130); halo.position.copy(mesh.position); group.add(halo); }
   });
   const lines=[];
   (data.edges || []).slice(0,150).forEach(e=>{ const a=byId.get(e.source), b=byId.get(e.target); if(a && b) lines.push(a.x,a.y,a.z,b.x,b.y,b.z); });
   const lineGeom = new THREE.BufferGeometry(); lineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lines), 3));
-  group.add(new THREE.LineSegments(lineGeom, new THREE.LineBasicMaterial({ color:cssHexToInt(colors.light ? '#19416c' : '#c6e0ff'), transparent:true, opacity:.18 })));
-  const stars = new Float32Array(900*3); for(let i=0;i<900;i++){ stars.set([((i*97)%2000)-1000, ((i*53)%900)-450, -((i*131)%2400)-150], i*3); }
+  group.add(new THREE.LineSegments(lineGeom, new THREE.LineBasicMaterial({ color:0xffe08a, transparent:true, opacity:.15 })));
+  const stars = new Float32Array(650*3); for(let i=0;i<650;i++){ stars.set([((i*97)%2000)-1000, ((i*53)%900)-450, -((i*131)%2400)-150], i*3); }
   const starGeom = new THREE.BufferGeometry(); starGeom.setAttribute('position', new THREE.BufferAttribute(stars, 3));
   scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, size:1.2, transparent:true, opacity:.42, depthWrite:false })));
   const avatar = palaceCreateAvatar(THREE); const drone = palaceCreateHammyDrone(THREE); scene.add(avatar, drone);
-  Object.assign(memoryPalace, { renderer, scene, camera, group, nodes, labels:nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,54), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar, drone });
+  Object.assign(memoryPalace, { renderer, scene, camera, group, nodes, rooms:nodes.rooms || [], labels:nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,54), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar, drone });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,26))}</span>`).join('');
   resetMemoryPalaceDiver(); bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
 }
@@ -2470,6 +2534,13 @@ function updatePalaceLabels(){
     if(visible){ shown++; el.style.left = `${sx}px`; el.style.top = `${sy}px`; el.style.opacity = String(Math.max(.34, 1 - Math.abs(v.z)*.42)); }
   });
 }
+function updatePalaceZoneBadge(){
+  const badge = $('.palace-zone-badge');
+  if(!badge || !memoryPalace.pos || !memoryPalace.rooms?.length) return;
+  let best = memoryPalace.rooms[0], bestD = Infinity;
+  memoryPalace.rooms.forEach(r => { const d = Math.hypot(memoryPalace.pos.x - r.x, memoryPalace.pos.z - r.z); if(d < bestD){ bestD = d; best = r; } });
+  badge.textContent = best.label || 'The Archive Gate';
+}
 function animateMemoryPalace(t=0){
   if(!memoryPalace.renderer) return;
   resizeMemoryPalace();
@@ -2489,7 +2560,7 @@ function animateMemoryPalace(t=0){
   if(memoryPalace.drone){ const bob = Math.sin(t*.002)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(42)).add(new memoryPalace.THREE.Vector3(0,18+bob,-30)); memoryPalace.drone.position.lerp(dronePos, .12); }
   if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
   memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh){ n.mesh.rotation.y += delta * (.18 + (i%5)*.03); n.mesh.rotation.x += delta * .05; }});
-  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels();
+  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels(); updatePalaceZoneBadge();
   memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
 }
 async function loadMemoryPalace(){ renderMemoryPalace(await api('/api/constellation?limit=360')); }

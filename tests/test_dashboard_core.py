@@ -472,6 +472,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'WASD' in html
     assert 'Memory Diver' in html
     assert 'Hammy drone' in html
+    assert 'Mnemosyne Labyrinth' in html
+    assert 'artifact rooms' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -485,6 +487,14 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'palaceCreateAvatar' in js
     assert 'palaceSearchBeacon' in js
     assert 'palaceKeys' in js
+    assert 'palaceCreateDungeonRooms' in js
+    assert 'palaceCreatePortal' in js
+    assert 'palaceCreatePedestal' in js
+    assert 'palaceCreateArtifactMaterial' in js
+    assert 'The Archive Gate' in js
+    assert 'Corrupted Wing' in js
+    assert 'Episodic Vault' in js
+    assert 'Contaminated memory' in js
     assert "e.target.closest('#palaceJoystick')" in js
     assert 'stopPalaceJoystickEvent' in js
     assert 'e.stopPropagation();' in js
@@ -505,6 +515,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '.palace-hud' in css
     assert '.palace-reticle' in css
     assert '.palace-joystick' in css
+    assert '.palace-zone-badge' in css
+    assert '.palace-viewport[data-theme="labyrinth"]' in css
     assert '#palaceViewport:fullscreen' in css
     assert '#visualiser3d:fullscreen' not in css
     assert '#constellation:fullscreen' not in css

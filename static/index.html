@@ -42,7 +42,7 @@
         <button data-tab="overview" class="active"><span>⌘</span>Overview</button>
         <button data-tab="today"><span>✦</span>Today</button>
         <button data-tab="visualiser"><span>✹</span>Visualiser</button>
-        <button data-tab="palace"><span>♜</span>Memory Palace</button>
+        <button data-tab="palace"><span>♜</span>Mnemosyne Labyrinth</button>
         <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
         <button data-tab="review"><span>⚑</span>Review</button>
         <button data-tab="memories"><span>▦</span>Memories</button>
@@ -209,27 +209,27 @@
         </section>
 
         <section id="memoryPalace" class="tab">
-          <div class="section-head"><h2>Memory Palace</h2><span>first-person memory exploration</span></div>
+          <div class="section-head"><h2>Mnemosyne Labyrinth</h2><span>artifact rooms + memory dungeon exploration</span></div>
           <div class="toolbar glass">
             <button id="palaceRefresh" class="primary">Refresh palace</button>
             <button id="palaceReset">Reset diver</button>
             <input id="palaceSearchQuery" placeholder="Beacon search…" />
             <button id="palaceSearchButton">Set beacon</button>
             <button id="palaceFullscreen">Fullscreen</button>
-            <span class="muted">WASD to fly · drag to look · tap memory artifacts · Memory Diver + Hammy drone</span>
+            <span class="muted">WASD to move · drag to look · tap relics · artifact rooms · Memory Diver + Hammy drone</span>
           </div>
           <div class="palace-layout">
-            <div id="palaceViewport" class="palace-viewport glass" aria-label="First-person Memory Palace explorer">
+            <div id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" aria-label="First-person Mnemosyne Labyrinth explorer">
               <button id="palaceExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
               <div id="palaceLabels" class="three-labels palace-labels"></div>
               <div class="palace-reticle" aria-hidden="true"></div>
-              <div class="palace-hud"><strong>Memory Diver</strong><span id="palaceHudStatus">loading palace…</span><span>Hammy drone online</span></div>
+              <div class="palace-hud"><strong>Memory Diver</strong><span class="palace-zone-badge">The Archive Gate</span><span id="palaceHudStatus">loading labyrinth…</span><span>Hammy drone online</span></div>
               <div id="palaceJoystick" class="palace-joystick" aria-label="Touch joystick"><span></span></div>
             </div>
             <aside id="palaceInspector" class="graph-inspector glass">
-              <div class="inspector-kicker">Memory Palace</div>
-              <h3>Start exploring</h3>
-              <p class="muted">Fly through memory artifacts, follow glowing paths, or search to place a navigation beacon.</p>
+              <div class="inspector-kicker">Mnemosyne Labyrinth</div>
+              <h3>Enter the Archive Gate</h3>
+              <p class="muted">Move between artifact rooms, inspect relics on pedestals, and use search to summon a golden thread.</p>
             </aside>
           </div>
         </section>
