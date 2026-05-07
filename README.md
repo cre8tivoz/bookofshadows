@@ -84,6 +84,7 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 - Optional password auth is disabled by default and can be enabled from Settings
 - No external JavaScript or CSS dependencies
 - Runtime state lives under `~/.hermes/plugin-data/mnemosyne-dashboard/`
+- On macOS, run it as a separate LaunchAgent with `KeepAlive=true` if you want the dashboard to survive Hermes gateway restarts
 - Static assets are resolved under `static/` before serving; path escapes are rejected
 - Browser responses include CSP, no-sniff, frame-deny, and no-referrer headers
 
@@ -190,6 +191,42 @@ If bound to `0.0.0.0`, use your machine’s LAN IP from another device, e.g.:
 ```text
 http://192.168.1.10:8765/
 ```
+
+## Optional macOS launchd auto-restart
+
+If you want the dashboard to survive Hermes gateway restarts or plugin-owned process shutdowns, run it as a separate macOS LaunchAgent instead of starting it from inside the Hermes gateway process.
+
+The helper below writes `~/Library/LaunchAgents/<label>.plist` with `RunAtLoad=true` and `KeepAlive=true`, then bootstraps it into the current GUI session:
+
+```bash
+cd ~/.hermes/plugins/mnemosyne-dashboard
+MNEMOSYNE_DASHBOARD_LAUNCHD_LABEL=io.example.mnemosyne-dashboard \
+MNEMOSYNE_DASHBOARD_HOST=127.0.0.1 \
+MNEMOSYNE_DASHBOARD_PORT=8765 \
+bash scripts/install_launchd_macos.sh
+```
+
+Useful service commands:
+
+```bash
+LABEL=io.example.mnemosyne-dashboard
+PLIST=~/Library/LaunchAgents/$LABEL.plist
+
+# Restart without unloading the service
+launchctl kickstart -k gui/$(id -u)/$LABEL
+
+# Full reload after changing the plist
+launchctl bootout gui/$(id -u) "$PLIST" 2>/dev/null || true
+launchctl bootstrap gui/$(id -u) "$PLIST"
+launchctl kickstart -k gui/$(id -u)/$LABEL
+
+# Status, listener, and smoke check
+launchctl print gui/$(id -u)/$LABEL | head -80
+lsof -nP -iTCP:8765 -sTCP:LISTEN
+curl -fsSI http://127.0.0.1:8765/ | head
+```
+
+Keep the bind host as `127.0.0.1` unless you explicitly want LAN access to memory metadata.
 
 ## Development
 
