@@ -474,8 +474,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v3' in html
-    assert '/static/style.css?v=labyrinth-v3' in html
+    assert '/static/app.js?v=labyrinth-v5' in html
+    assert '/static/style.css?v=labyrinth-v5' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -498,6 +498,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'room.floor' in js
     assert 'room.wall' in js
     assert 'palaceCreateRoomEdges' in js
+    assert 'palaceIsoRoomLayout' in js
+    assert 'palaceAddIsoRoom' in js
+    assert 'OrthographicCamera' in js
+    assert 'isometric dungeon map online' in js
+    assert 'new THREE.TorusGeometry(47' in js
+    assert 'gridPts' in js
+    assert 'slice(0,8)' in js
     assert 'scene.add(avatar, drone)' not in js
     assert 'scene.add(drone)' in js
     assert 'The Archive Gate' in js

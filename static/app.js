@@ -2631,6 +2631,180 @@ function bindPalaceControls(){
   const stopJoy=e=>{ stopPalaceJoystickEvent(e); joy.dataset.active='false'; memoryPalace.joystick={x:0,y:0}; joy.querySelector('span').style.transform='translate(0,0)'; }; joy.addEventListener('pointerup', stopJoy); joy.addEventListener('pointercancel', stopJoy);
 }
 
+
+// V4: game-first isometric dungeon view. Keep the older first-person prototype above as
+// reusable primitives, but render the Labyrinth as a readable game board by default.
+function palaceIsoRoomLayout(data){
+  const nodes = (data.nodes || []).slice(0,150).map(n => ({...n}));
+  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
+  const rooms = [
+    { label:'Archive Gate', x:0, z:420, w:320, d:250, color:0xffd166 },
+    { label:'Episodic Vault', x:-520, z:40, w:300, d:240, color:0x65d6ff },
+    { label:'Working Stream', x:520, z:20, w:300, d:240, color:0x52d6b5 },
+    { label:'Entity Gardens', x:-560, z:-420, w:300, d:240, color:0xb9a6ff },
+    { label:'Cold Storage', x:520, z:-450, w:300, d:240, color:0x8aa0c9 },
+    { label:'Corrupted Wing', x:0, z:-760, w:340, d:260, color:0xff5f87 }
+  ];
+  categories.slice(0,4).forEach((cat,i)=>{ rooms[i+1].category = cat; rooms[i+1].label = String(cat).slice(0,18); });
+  nodes.forEach((n,i)=>{
+    const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
+    const room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
+    const col = i % 5, row = Math.floor((i % 25) / 5);
+    n.x = room.x - room.w*.34 + col * (room.w*.17);
+    n.z = room.z - room.d*.28 + row * (room.d*.14);
+    n.y = 34;
+    n.room = room.label; n.contaminated = contaminated;
+    n.size = Math.min(22, 9 + Math.sqrt(Math.max(1, Number(n.weight || n.count || 1))) * 3.5);
+  });
+  nodes.rooms = rooms;
+  return nodes;
+}
+function palaceIsoMaterial(THREE, color, opts={}){
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive:opts.emissive || 0x07040d,
+    emissiveIntensity:opts.emissiveIntensity ?? .18,
+    roughness:opts.roughness ?? .72,
+    metalness:opts.metalness ?? .04
+  });
+}
+function palaceAddIsoRoom(THREE, scene, room, i){
+  const floorMat = palaceIsoMaterial(THREE, i === 0 ? 0x44344f : 0x342945, { emissive:room.color, emissiveIntensity:.035 });
+  const edgeMat = new THREE.LineBasicMaterial({ color:room.color, transparent:true, opacity:.46 });
+  const wallMat = palaceIsoMaterial(THREE, 0x5b4967, { emissive:room.color, emissiveIntensity:.055, roughness:.80 });
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(room.w, 14, room.d), floorMat);
+  floor.position.set(room.x, 0, room.z); floor.receiveShadow = true; scene.add(floor);
+  const floorEdges = new THREE.LineSegments(new THREE.EdgesGeometry(floor.geometry), edgeMat);
+  floorEdges.position.copy(floor.position); scene.add(floorEdges);
+  const wallH = i === 0 ? 56 : 48, t = 18;
+  [
+    [0, room.d/2, room.w, t], [0, -room.d/2, room.w, t],
+    [room.w/2, 0, t, room.d], [-room.w/2, 0, t, room.d]
+  ].forEach(([ox,oz,w,d],side)=>{
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wallMat);
+    wall.position.set(room.x + ox, wallH/2 + 7, room.z + oz); wall.castShadow = true; wall.receiveShadow = true; scene.add(wall);
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(wall.geometry), new THREE.LineBasicMaterial({ color:0xd8c7ff, transparent:true, opacity:.20 }));
+    lines.position.copy(wall.position); scene.add(lines);
+    if(side < 2){
+      for(let k=-2;k<=2;k++){
+        const crenel = new THREE.Mesh(new THREE.BoxGeometry(26, 18, t+4), wallMat);
+        crenel.position.set(room.x + k*44, wallH + 22, room.z + oz); crenel.castShadow = true; scene.add(crenel);
+      }
+    }
+  });
+  const gridPts = [];
+  for(let gx=-Math.floor(room.w/2)+44; gx<room.w/2; gx+=44){ gridPts.push(room.x+gx,8,room.z-room.d/2+18, room.x+gx,8,room.z+room.d/2-18); }
+  for(let gz=-Math.floor(room.d/2)+44; gz<room.d/2; gz+=44){ gridPts.push(room.x-room.w/2+18,8,room.z+gz, room.x+room.w/2-18,8,room.z+gz); }
+  const tileGeom = new THREE.BufferGeometry(); tileGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(gridPts), 3));
+  scene.add(new THREE.LineSegments(tileGeom, new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:.075 })));
+  const banner = new THREE.Mesh(new THREE.CylinderGeometry(7,7,70,6), palaceIsoMaterial(THREE, room.color, { emissive:room.color, emissiveIntensity:.62, roughness:.35 }));
+  banner.position.set(room.x, 52, room.z); banner.castShadow = true; scene.add(banner);
+  if(i === 0){
+    const gateMat = palaceIsoMaterial(THREE, 0xffd166, { emissive:0xffb84d, emissiveIntensity:.42, roughness:.42, metalness:.08 });
+    const left = new THREE.Mesh(new THREE.BoxGeometry(24,92,24), gateMat); left.position.set(room.x-58,66,room.z+46);
+    const right = left.clone(); right.position.x = room.x+58;
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(140,24,28), gateMat); lintel.position.set(room.x,116,room.z+46);
+    const portal = new THREE.Mesh(new THREE.TorusGeometry(47,3.2,8,48), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.74 }));
+    portal.rotation.y = Math.PI/2; portal.position.set(room.x,70,room.z+49);
+    left.castShadow = right.castShadow = lintel.castShadow = true; scene.add(left,right,lintel,portal);
+    const gateLight = new THREE.PointLight(0xffd166, 1.25, 430); gateLight.position.set(room.x,110,room.z+70); scene.add(gateLight);
+  }
+  const light = new THREE.PointLight(room.color, .72, 360); light.position.set(room.x, 120, room.z); scene.add(light);
+}
+function palaceAddIsoCorridor(THREE, scene, a, b){
+  const dx=b.x-a.x, dz=b.z-a.z, len=Math.hypot(dx,dz), midX=(a.x+b.x)/2, midZ=(a.z+b.z)/2;
+  const mat = palaceIsoMaterial(THREE, 0x3f344d, { emissive:0xffd166, emissiveIntensity:.04 });
+  const road = new THREE.Mesh(new THREE.BoxGeometry(82, 10, len), mat);
+  road.position.set(midX, -5, midZ); road.rotation.y = Math.atan2(dx,dz); road.receiveShadow = true; scene.add(road);
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(road.geometry), new THREE.LineBasicMaterial({ color:0xffd166, transparent:true, opacity:.28 }));
+  edge.position.copy(road.position); edge.rotation.copy(road.rotation); scene.add(edge);
+}
+function palaceAddIsoRelic(THREE, scene, node, colors){
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(15, 20, 12, 6), palaceIsoMaterial(THREE, 0x20182b));
+  plinth.position.set(node.x, 17, node.z); plinth.castShadow = true; plinth.receiveShadow = true; scene.add(plinth);
+  const color = node.contaminated ? 0xff4f87 : (node.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star));
+  const geo = node.contaminated ? new THREE.IcosahedronGeometry(node.size,1) : (node.kind === 'memory' ? new THREE.OctahedronGeometry(node.size,1) : new THREE.BoxGeometry(node.size*1.1,node.size*2.0,node.size*1.1));
+  const relic = new THREE.Mesh(geo, palaceIsoMaterial(THREE, color, { emissive:color, emissiveIntensity: node.contaminated ? .55 : .34, roughness:.34, metalness:.08 }));
+  relic.position.set(node.x, 40 + node.size*.25, node.z); relic.castShadow = true; relic.userData.node = node; node.mesh = relic; scene.add(relic);
+  if(node.contaminated) node.scanLabel = 'Contaminated memory';
+  const glow = new THREE.PointLight(color, node.contaminated ? .55 : .22, 110); glow.position.copy(relic.position); scene.add(glow);
+}
+async function renderMemoryPalace(data){
+  const THREE = await loadThreeModule();
+  clearPalaceScene(); memoryPalace.data = data; memoryPalace.THREE = THREE; palaceInspectorDefault();
+  const viewport = $('#palaceViewport'); if(!viewport) return;
+  const colors = constellationColors();
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' }); }
+  catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Mnemosyne Labyrinth unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(cssHexToInt(colors.bg), 0);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  viewport.prepend(renderer.domElement);
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x08050e, .00052);
+  const camera = new THREE.OrthographicCamera(-700,700,420,-420,1,5000);
+  const nodes = palaceIsoRoomLayout(data); const rooms = nodes.rooms || [];
+  scene.add(new THREE.HemisphereLight(0xb9a6ff, 0x08050e, .82));
+  const sun = new THREE.DirectionalLight(0xffe7c0, 1.35); sun.position.set(620,980,720); sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); scene.add(sun);
+  const underlay = new THREE.Mesh(new THREE.PlaneGeometry(1900,1900), new THREE.MeshBasicMaterial({ color:0x0a0711, transparent:true, opacity:.62 }));
+  underlay.rotation.x = -Math.PI/2; underlay.position.y = -16; scene.add(underlay);
+  rooms.slice(1).forEach(room => palaceAddIsoCorridor(THREE, scene, rooms[0], room));
+  rooms.forEach((room,i)=>palaceAddIsoRoom(THREE, scene, room, i));
+  nodes.forEach(n => palaceAddIsoRelic(THREE, scene, n, colors));
+  const player = palaceCreateAvatar(THREE); player.scale.setScalar(1.35); player.position.set(rooms[0]?.x || 0, 52, (rooms[0]?.z || 0) - 38); scene.add(player);
+  const drone = palaceCreateHammyDrone(THREE); drone.scale.setScalar(1.35); scene.add(drone);
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:110, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,8)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:player, drone, pos:new THREE.Vector3(0,0,-170), velocity:new THREE.Vector3(), yaw:0, pitch:0, iso:true });
+  $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
+  $('#palaceHudStatus').textContent = 'isometric dungeon map online';
+  bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
+}
+function resizeMemoryPalace(){
+  if(!memoryPalace.renderer) return;
+  const rect = $('#palaceViewport').getBoundingClientRect();
+  const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
+  memoryPalace.renderer.setSize(w,h,false);
+  if(memoryPalace.camera?.isOrthographicCamera){
+    const view = Math.max(980, Math.min(1480, 1260 * Math.max(.82, Math.min(1.12, w / Math.max(h,1)))));
+    memoryPalace.camera.left = -view * w / h / 2; memoryPalace.camera.right = view * w / h / 2;
+    memoryPalace.camera.top = view / 2; memoryPalace.camera.bottom = -view / 2;
+  } else if(memoryPalace.camera){ memoryPalace.camera.aspect = w/h; }
+  memoryPalace.camera?.updateProjectionMatrix();
+}
+function updatePalaceLabels(){
+  if(!memoryPalace.camera) return;
+  const rect = $('#palaceViewport').getBoundingClientRect(); const v = new memoryPalace.THREE.Vector3(); let shown=0;
+  $$('#palaceLabels .three-label').forEach((el,i)=>{
+    const n = memoryPalace.labels[i]; if(!n) return;
+    v.set(n.x,n.y,n.z).project(memoryPalace.camera);
+    const sx=(v.x*.5+.5)*rect.width, sy=(-v.y*.5+.5)*rect.height;
+    const visible = v.z > -1 && v.z < 1 && sx > 10 && sx < rect.width-10 && sy > 10 && sy < rect.height-10 && shown < 30;
+    el.style.display = visible ? '' : 'none';
+    if(visible){ shown++; el.style.left = `${sx}px`; el.style.top = `${sy}px`; el.style.opacity = String(n.room ? .78 : .96); }
+  });
+}
+function animateMemoryPalace(t=0){
+  if(!memoryPalace.renderer) return;
+  resizeMemoryPalace();
+  const THREE = memoryPalace.THREE;
+  const delta = memoryPalace.lastT ? Math.min(48, t - memoryPalace.lastT) / 1000 : .016; memoryPalace.lastT = t;
+  const speed = (palaceKeys.Shift ? 520 : 300) * delta;
+  if(palaceKeys.w || palaceKeys.ArrowUp) memoryPalace.pos.z -= speed;
+  if(palaceKeys.s || palaceKeys.ArrowDown) memoryPalace.pos.z += speed;
+  if(palaceKeys.a || palaceKeys.ArrowLeft) memoryPalace.pos.x -= speed;
+  if(palaceKeys.d || palaceKeys.ArrowRight) memoryPalace.pos.x += speed;
+  if(memoryPalace.joystick.x || memoryPalace.joystick.y){ memoryPalace.pos.x += memoryPalace.joystick.x * speed; memoryPalace.pos.z += memoryPalace.joystick.y * speed; }
+  memoryPalace.pos.x = Math.max(-760, Math.min(760, memoryPalace.pos.x)); memoryPalace.pos.z = Math.max(-980, Math.min(560, memoryPalace.pos.z));
+  memoryPalace.camera.position.set(memoryPalace.pos.x + 760, 980, memoryPalace.pos.z + 860);
+  memoryPalace.camera.lookAt(new THREE.Vector3(memoryPalace.pos.x, 0, memoryPalace.pos.z));
+  if(memoryPalace.avatar){ memoryPalace.avatar.position.x += (memoryPalace.pos.x - memoryPalace.avatar.position.x) * .16; memoryPalace.avatar.position.z += (memoryPalace.pos.z + 360 - memoryPalace.avatar.position.z) * .16; memoryPalace.avatar.rotation.y = Math.PI * .75; }
+  if(memoryPalace.drone && memoryPalace.avatar){ const bob = Math.sin(t*.004)*8; memoryPalace.drone.position.set(memoryPalace.avatar.position.x + 42, memoryPalace.avatar.position.y + 38 + bob, memoryPalace.avatar.position.z - 34); }
+  if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
+  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh){ n.mesh.rotation.y += delta * (.25 + (i%5)*.035); }});
+  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels(); updatePalaceZoneBadge();
+  memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+}
+
 $$('nav button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
 $$('.section-tabs button').forEach(b => b.onclick = () => {
   const panelRoute = ({ exploreMemories:'memories', exploreRecall:'recall', activityTimeline:'timelineView', activityConsolidations:'consolidations', graphGraph:'graph', graphTriples:'triples', todayAdded:'todayAdded', todayRecalled:'todayRecalled', todayTriples:'todayTriples', todayConsolidations:'todayConsolidations' })[b.dataset.panel];
