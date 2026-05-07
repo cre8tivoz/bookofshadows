@@ -2866,17 +2866,21 @@ function palaceFpsAddRoom(THREE, scene, room, i){
   const light = new THREE.PointLight(room.color, i === 0 ? 1.1 : .72, 480); light.position.set(room.x,130,room.z); scene.add(light);
   if(i === 0){
     const gateMat = palaceFpsMat(THREE, 0xffd166, { emissive:0xffba54, emissiveIntensity:.45, roughness:.42, metalness:.08 });
-    palaceFpsBox(THREE, scene, [30,138,30], [room.x-78,78,room.z-118], gateMat, 0xfff0b8, .38);
-    palaceFpsBox(THREE, scene, [30,138,30], [room.x+78,78,room.z-118], gateMat, 0xfff0b8, .38);
-    palaceFpsBox(THREE, scene, [186,30,36], [room.x,150,room.z-118], gateMat, 0xfff0b8, .42);
-    const portalPane = new THREE.Mesh(new THREE.CircleGeometry(66, 64), new THREE.MeshBasicMaterial({ color:0xffc66d, transparent:true, opacity:.18, side:THREE.DoubleSide }));
-    portalPane.position.set(room.x,92,room.z-124); scene.add(portalPane);
-    const portal = new THREE.Mesh(new THREE.TorusGeometry(70,4,10,64), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.92 }));
-    // TorusGeometry already faces the camera along the Z axis; do not rotate it edge-on.
-    portal.position.set(room.x,92,room.z-122); scene.add(portal);
-    const inner = new THREE.Mesh(new THREE.TorusGeometry(42,2.2,8,48), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.38 }));
-    inner.position.set(room.x,92,room.z-121); scene.add(inner);
-    const glow = new THREE.PointLight(0xffd166, 2.4, 620); glow.position.set(room.x,105,room.z-122); scene.add(glow);
+    const approachMat = palaceFpsMat(THREE, 0x2a2036, { emissive:0xffd166, emissiveIntensity:.018, roughness:.88 });
+    palaceFpsBox(THREE, scene, [250, 10, 620], [room.x, -5, room.z+300], approachMat);
+    palaceFpsBox(THREE, scene, [24, 92, 620], [room.x-150, 46, room.z+300], wallMat);
+    palaceFpsBox(THREE, scene, [24, 92, 620], [room.x+150, 46, room.z+300], wallMat);
+    palaceFpsBox(THREE, scene, [34,138,30], [room.x-88,78,room.z-150], gateMat);
+    palaceFpsBox(THREE, scene, [34,138,30], [room.x+88,78,room.z-150], gateMat);
+    palaceFpsBox(THREE, scene, [210,32,36], [room.x,150,room.z-150], gateMat);
+    const portalPane = new THREE.Mesh(new THREE.CircleGeometry(34, 64), new THREE.MeshBasicMaterial({ color:0xff9f6d, transparent:true, opacity:.16, side:THREE.DoubleSide }));
+    portalPane.position.set(room.x,88,room.z-156); scene.add(portalPane);
+    const portal = new THREE.Mesh(new THREE.TorusGeometry(38,3.2,10,64), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.86 }));
+    // TorusGeometry already faces the camera along the Z axis; keep it small/in-world, not a flat bullseye in the viewport.
+    portal.position.set(room.x,88,room.z-154); scene.add(portal);
+    const inner = new THREE.Mesh(new THREE.TorusGeometry(22,1.5,8,48), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.28 }));
+    inner.position.set(room.x,88,room.z-153); scene.add(inner);
+    const glow = new THREE.PointLight(0xffd166, 1.7, 560); glow.position.set(room.x,102,room.z-154); scene.add(glow);
   }
 }
 function palaceFpsAddCorridor(THREE, scene, a, b){
@@ -2922,7 +2926,7 @@ async function renderMemoryPalace(data){
   nodes.forEach(n=>palaceFpsAddRelic(THREE, scene, n, colors));
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 64 : 72,mobilePalace ? 250 : 210), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.20 : -.11, iso:false });
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 74 : 78,mobilePalace ? 560 : 460), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   $('#palaceHudStatus').textContent = 'solid first-person memory dungeon online';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
@@ -2944,7 +2948,7 @@ function animateMemoryPalace(t=0){
   if(memoryPalace.joystick.x || memoryPalace.joystick.y){ move.addScaledVector(right, memoryPalace.joystick.x); move.addScaledVector(forward, -memoryPalace.joystick.y); }
   if(move.lengthSq() > 0) move.normalize().multiplyScalar((palaceKeys.Shift ? 420 : 235) * delta);
   memoryPalace.pos.add(move);
-  memoryPalace.pos.x = Math.max(-900, Math.min(900, memoryPalace.pos.x)); memoryPalace.pos.y = Math.max(46, Math.min(150, memoryPalace.pos.y)); memoryPalace.pos.z = Math.max(-1900, Math.min(280, memoryPalace.pos.z));
+  memoryPalace.pos.x = Math.max(-900, Math.min(900, memoryPalace.pos.x)); memoryPalace.pos.y = Math.max(46, Math.min(150, memoryPalace.pos.y)); memoryPalace.pos.z = Math.max(-1900, Math.min(720, memoryPalace.pos.z));
   memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
   if(memoryPalace.drone){ const bob = Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
   if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
