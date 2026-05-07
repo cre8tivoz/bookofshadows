@@ -477,19 +477,19 @@ class DashboardStore:
         }
         queues = {
             "contaminated": {
-                "title": "Needs confirmation",
-                "description": "Non-stated memories that may need human review before they are trusted as durable facts.",
+                "title": "Contaminated",
+                "description": "Mnemosyne veracity is inferred, tool, imported, or unknown.",
                 "filter": {"contaminated_only": "1", "sort": "importance"},
                 "items": contaminated,
             },
             "high_importance_contaminated": {
-                "title": "High-importance non-stated",
-                "description": "Important memories that are inferred, tool-derived, imported, or unknown veracity.",
+                "title": "High-importance contaminated",
+                "description": "Contaminated memories with importance above the review threshold.",
                 "filter": {"contaminated_only": "1", "sort": "importance"},
                 "items": high_importance,
             },
             "degraded": {
-                "title": "Already degraded",
+                "title": "Degraded",
                 "description": "Episodic memories that have moved down the lifecycle and may carry reduced recall weight.",
                 "filter": {"kind": "episodic", "degraded_only": "1", "sort": "recent"},
                 "items": degraded,

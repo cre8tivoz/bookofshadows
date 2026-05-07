@@ -447,7 +447,7 @@ function whyMemoryHtml(item){
   if(session && item.session_id === session) reasons.push(`session filter matched ${session}`);
   if(veracity && item.veracity === veracity) reasons.push(`trust filter matched ${veracity}`);
   if(degradation && String(item.degradation_tier || '') === String(degradation)) reasons.push(`lifecycle filter matched tier ${degradation}`);
-  if(trustPreset === 'contaminated' && item.contaminated) reasons.push('confidence review filter matched non-stated memory');
+  if(trustPreset === 'contaminated' && item.contaminated) reasons.push('contaminated filter matched');
   if(trustPreset === 'degraded' && item.degraded_at) reasons.push('degraded-only filter matched');
   if(!reasons.length) reasons.push('shown from the current list/search context');
   return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || 'active')}</span></h3><div class="diag-grid compact">
@@ -472,7 +472,7 @@ function memoryDetailHtml(item){
         <span class="trust-chip trust-${esc(trust)}">${esc(trust)} trust · ×${Number(item.trust_weight ?? 0).toFixed(2)}</span>
         <span class="trust-chip lifecycle-${esc(item.degradation_label || 'none')}">${esc(lifecycle)}${item.degradation_weight != null ? ` · ×${Number(item.degradation_weight).toFixed(2)}` : ''}</span>
         <span class="trust-chip">effective ×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</span>
-        ${item.contaminated ? '<span class="trust-chip review">review non-stated</span>' : ''}
+        ${item.contaminated ? '<span class="trust-chip review">contaminated</span>' : ''}
       </div>
       ${whyMemoryHtml(item)}
       <div class="diag-grid compact">
@@ -655,7 +655,7 @@ async function loadTodayDigest(day=''){
   const suffix = day ? `&day=${encodeURIComponent(day)}` : '';
   const data = await api(`/api/digest/today?limit=80${suffix}`);
   const c = data.counts || {};
-  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Retrieved', c.memories_recalled], ['Needs confirmation', c.contaminated_added], ['Lifecycle changes', c.degraded_added], ['Facts', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
+  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Retrieved', c.memories_recalled], ['Contaminated', c.contaminated_added], ['Lifecycle changes', c.degraded_added], ['Facts', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
   $('#todayEntities').innerHTML = tinyRows(data.breakdowns?.entities || []);
   $('#todayVeracity').innerHTML = tinyRows(data.breakdowns?.veracity || []);
   $('#todayDegradation').innerHTML = tinyRows(data.breakdowns?.degradation || []);
@@ -718,10 +718,10 @@ function applyReviewFilter(filter={}){
 }
 function reviewReasonBadges(key, item={}){
   const reasons = [];
-  if(key === 'contaminated' || item.veracity && item.veracity !== 'stated') reasons.push('Needs confirmation');
+  if(key === 'contaminated' || item.veracity && item.veracity !== 'stated') reasons.push('Contaminated');
   if(key === 'important_contaminated' || Number(item.importance || 0) >= 0.75) reasons.push('High importance');
-  if(key === 'degraded' || Number(item.degradation_tier || 1) > 1) reasons.push('Already compressed');
-  if(key === 'due_degradation') reasons.push('Due for lifecycle compression');
+  if(key === 'degraded' || Number(item.degradation_tier || 1) > 1) reasons.push('Degraded');
+  if(key === 'due_degradation') reasons.push('Due for degradation');
   return [...new Set(reasons)].map(reason => `<span>${esc(reason)}</span>`).join('');
 }
 function reviewMemoryItem(key, item, opts={}){

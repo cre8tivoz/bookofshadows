@@ -154,6 +154,9 @@ def test_review_queues_surface_trust_lifecycle_work(tmp_path):
     assert 'due_for_degradation' in review['counts']
     assert [item['id'] for item in review['queues']['high_importance_contaminated']['items']] == ['w4', 'e1']
     assert [item['id'] for item in review['queues']['degraded']['items']] == ['e2', 'e1']
+    assert review['queues']['contaminated']['title'] == 'Contaminated'
+    assert review['queues']['high_importance_contaminated']['title'] == 'High-importance contaminated'
+    assert review['queues']['degraded']['title'] == 'Degraded'
     assert review['queues']['contaminated']['filter']['contaminated_only'] == '1'
     assert review['queues']['degraded']['filter']['degraded_only'] == '1'
     assert review['queues']['due_for_degradation']['filter']['due_for_degradation'] == '1'
@@ -404,7 +407,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Search results for' in js
     assert 'reviewReasonBadges' in js
     assert 'review-reasons' in js
-    assert 'Needs confirmation' in js
+    assert 'Contaminated' in js
+    assert 'Needs confirmation' not in js
+    assert 'review non-stated' not in html
+    assert 'review non-stated' not in js
     assert 'Lifecycle changes' in js
     assert '>Facts table<' in html
     assert '>Triples table<' not in html
