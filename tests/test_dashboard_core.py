@@ -474,6 +474,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
+    assert '/static/app.js?v=labyrinth-v2' in html
+    assert '/static/style.css?v=labyrinth-v2' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -488,9 +490,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'palaceSearchBeacon' in js
     assert 'palaceKeys' in js
     assert 'palaceCreateDungeonRooms' in js
+    assert 'palaceCreateRoomWalls' in js
     assert 'palaceCreatePortal' in js
     assert 'palaceCreatePedestal' in js
     assert 'palaceCreateArtifactMaterial' in js
+    assert 'THREE.BoxGeometry' in js
+    assert 'room.floor' in js
+    assert 'room.wall' in js
     assert 'The Archive Gate' in js
     assert 'Corrupted Wing' in js
     assert 'Episodic Vault' in js

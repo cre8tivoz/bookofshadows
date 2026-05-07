@@ -2417,20 +2417,49 @@ function palaceCreatePortal(THREE, room, target, color=0xffe08a){
   group.rotation.y = angle;
   return group;
 }
+function palaceCreateRoomWalls(THREE, scene, room, index, floorMat, wallMat){
+  const size = index === 0 ? 330 : 260;
+  room.floor = new THREE.Mesh(new THREE.BoxGeometry(size, 10, size), floorMat);
+  room.floor.position.set(room.x, -6, room.z);
+  scene.add(room.floor);
+  const wallHeight = index === 0 ? 74 : 58;
+  const wallThickness = 12;
+  const wallLength = size * .92;
+  const openings = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+  openings.forEach((angle, side) => {
+    const horizontal = side % 2 === 0;
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? wallLength : wallThickness, wallHeight, horizontal ? wallThickness : wallLength), wallMat);
+    const offset = size / 2;
+    wall.position.set(room.x + (horizontal ? 0 : (side === 1 ? offset : -offset)), wallHeight / 2 - 2, room.z + (horizontal ? (side === 0 ? offset : -offset) : 0));
+    room.wall = wall;
+    scene.add(wall);
+  });
+  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(size * .74, 3, size * .74), new THREE.MeshBasicMaterial({ color:room.color, transparent:true, opacity:.045 }));
+  ceiling.position.set(room.x, wallHeight + 10, room.z); scene.add(ceiling);
+}
 function palaceCreateDungeonRooms(THREE, scene, rooms){
-  const floorMat = new THREE.MeshStandardMaterial({ color:0x21192b, roughness:.82, metalness:.04 });
-  const edgeMat = new THREE.MeshStandardMaterial({ color:0x4c3b56, emissive:0x120a18, roughness:.76 });
-  const lineMat = new THREE.LineBasicMaterial({ color:0xffe08a, transparent:true, opacity:.18 });
+  const floorMat = new THREE.MeshStandardMaterial({ color:0x22192c, roughness:.86, metalness:.03 });
+  const wallMat = new THREE.MeshStandardMaterial({ color:0x35283f, emissive:0x0d0714, roughness:.80 });
+  const corridorMat = new THREE.MeshStandardMaterial({ color:0x2b2135, emissive:0x110911, roughness:.82 });
+  const lineMat = new THREE.LineBasicMaterial({ color:0xffe08a, transparent:true, opacity:.22 });
   const corridorPoints = [];
   const gate = rooms[0];
   rooms.forEach((room,i)=>{
-    const floor = new THREE.Mesh(new THREE.CylinderGeometry(i === 0 ? 170 : 135, i === 0 ? 190 : 152, 12, 8), floorMat);
-    floor.position.set(room.x, -6, room.z); floor.rotation.y = Math.PI / 8; scene.add(floor);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(i === 0 ? 176 : 140, 2.3, 6, 8), edgeMat);
-    rim.position.set(room.x, 2, room.z); rim.rotation.x = Math.PI / 2; rim.rotation.z = Math.PI / 8; scene.add(rim);
-    const obelisk = new THREE.Mesh(new THREE.ConeGeometry(15, i === 0 ? 92 : 64, 5), new THREE.MeshStandardMaterial({ color:room.color, emissive:room.color, emissiveIntensity:.28, roughness:.40 }));
+    palaceCreateRoomWalls(THREE, scene, room, i, floorMat, wallMat);
+    const obelisk = new THREE.Mesh(new THREE.ConeGeometry(15, i === 0 ? 92 : 64, 5), new THREE.MeshStandardMaterial({ color:room.color, emissive:room.color, emissiveIntensity:.34, roughness:.40 }));
     obelisk.position.set(room.x, i === 0 ? 48 : 34, room.z); scene.add(obelisk);
-    if(i > 0){ corridorPoints.push(gate.x, 0, gate.z, room.x, 0, room.z); scene.add(palaceCreatePortal(THREE, gate, room, room.color)); }
+    const roomLight = new THREE.PointLight(room.color, i === 0 ? 1.0 : .72, i === 0 ? 420 : 320); roomLight.position.set(room.x, 88, room.z); scene.add(roomLight);
+    if(i > 0){
+      const dx = room.x - gate.x, dz = room.z - gate.z;
+      const len = Math.max(1, Math.hypot(dx, dz));
+      const midX = (room.x + gate.x) / 2, midZ = (room.z + gate.z) / 2;
+      const corridor = new THREE.Mesh(new THREE.BoxGeometry(76, 6, len), corridorMat);
+      corridor.position.set(midX, -8, midZ);
+      corridor.rotation.y = Math.atan2(dx, dz);
+      scene.add(corridor);
+      corridorPoints.push(gate.x, 6, gate.z, room.x, 6, room.z);
+      scene.add(palaceCreatePortal(THREE, gate, room, room.color));
+    }
   });
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(corridorPoints), 3));
   scene.add(new THREE.LineSegments(geometry, lineMat));
