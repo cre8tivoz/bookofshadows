@@ -2841,13 +2841,26 @@ function palaceFpsRooms(data){
     { label:String(cats[3] || 'Cold Storage').slice(0,20), x:520, z:-1120, w:380, d:340, color:0x8aa0c9 },
     { label:'Corrupted Wing', x:0, z:-1680, w:430, d:360, color:0xff5f87 }
   ];
+  let featured = 0;
   nodes.forEach((n,i)=>{
     const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
-    const room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
-    const col = i % 4, row = Math.floor((i % 20) / 4);
-    n.x = room.x - room.w*.30 + col * (room.w*.20);
-    n.z = room.z - room.d*.22 + row * (room.d*.11);
-    n.y = 34; n.room = room.label; n.contaminated = contaminated;
+    let room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
+    if(!contaminated && featured < 14){
+      // The first walk must immediately show real memories, not just a decorative hallway.
+      room = rooms[0];
+      const side = featured % 2 === 0 ? -1 : 1;
+      const row = Math.floor(featured / 2);
+      n.x = side * (row < 2 ? 54 : 76);
+      n.z = 245 - row * 155;
+      n.y = 34; n.room = 'Archive Gate'; n.featuredPath = true;
+      featured += 1;
+    } else {
+      const col = i % 4, row = Math.floor((i % 20) / 4);
+      n.x = room.x - room.w*.30 + col * (room.w*.20);
+      n.z = room.z - room.d*.22 + row * (room.d*.11);
+      n.y = 34; n.room = room.label;
+    }
+    n.contaminated = contaminated;
     n.size = Math.min(28, 10 + Math.sqrt(Math.max(1, Number(n.weight || n.count || 1))) * 4);
   });
   nodes.rooms = rooms;
@@ -2972,7 +2985,11 @@ function palaceFpsAddRelic(THREE, scene, node, colors){
   const geo = node.contaminated ? new THREE.IcosahedronGeometry(node.size,1) : (node.kind === 'memory' ? new THREE.OctahedronGeometry(node.size,1) : new THREE.ConeGeometry(node.size*.78,node.size*2.8,5));
   const relic = new THREE.Mesh(geo, palaceFpsMat(THREE, color, { emissive:color, emissiveIntensity:node.contaminated ? .62 : .42, roughness:.32, metalness:.08 }));
   relic.position.set(node.x,40 + node.size*.2,node.z); relic.castShadow = true; relic.userData.node = node; node.mesh = relic; scene.add(relic);
-  const halo = new THREE.PointLight(color, node.contaminated ? .7 : .32, 150); halo.position.copy(relic.position); scene.add(halo);
+  const halo = new THREE.PointLight(color, node.contaminated ? .7 : (node.featuredPath ? .7 : .32), node.featuredPath ? 240 : 150); halo.position.copy(relic.position); scene.add(halo);
+  if(node.featuredPath){
+    const marker = new THREE.Mesh(new THREE.RingGeometry(node.size*1.28, node.size*1.72, 32), new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.58, side:THREE.DoubleSide }));
+    marker.position.set(node.x, 28, node.z); marker.rotation.x = -Math.PI/2; scene.add(marker);
+  }
   if(node.contaminated) node.scanLabel = 'Contaminated memory';
 }
 async function renderMemoryPalace(data){
@@ -2996,9 +3013,9 @@ async function renderMemoryPalace(data){
   nodes.forEach(n=>palaceFpsAddRelic(THREE, scene, n, colors));
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,16)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
-  $('#palaceHudStatus').textContent = 'solid first-person memory dungeon online';
+  $('#palaceHudStatus').textContent = 'walk forward — memory relics line the path';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
 }
 function resizeMemoryPalace(){

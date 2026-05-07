@@ -471,13 +471,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="palaceJoystick"' in html
     assert 'WASD' in html
     assert 'Memory Diver' in html
-    assert 'LAB v17' in html
+    assert 'LAB v18' in html
     assert 'palace-build' in html
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v17' in html
-    assert '/static/style.css?v=labyrinth-v17' in html
+    assert '/static/app.js?v=labyrinth-v18' in html
+    assert '/static/style.css?v=labyrinth-v18' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -504,7 +504,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'palaceFpsRooms' in js
     assert 'palaceFpsAddRoom' in js
     assert 'PerspectiveCamera(72' in js
-    assert 'solid first-person memory dungeon online' in js
+    assert 'walk forward — memory relics line the path' in js
     assert 'new THREE.PlaneGeometry(126, 104)' in js
     assert 'function palaceFpsTexture' in js
     assert 'new THREE.CanvasTexture' in js
@@ -512,6 +512,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "palaceFpsTexturedBasic(THREE, 'gold'" in js
     assert 'Mobile Chrome crushes subtle StandardMaterial lighting' in js
     assert 'walking straight never drops into blank space' in js
+    assert 'The first walk must immediately show real memories' in js
+    assert 'featuredPath' in js
+    assert 'walk forward — memory relics line the path' in js
+    assert 'new THREE.RingGeometry(node.size*1.28' in js
     assert 'palaceClampFpsPosition' in js
     assert 'dead = .16' in js
     assert 'move.lengthSq() > 1' in js
