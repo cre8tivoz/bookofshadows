@@ -2336,7 +2336,7 @@ let memoryPalace = {
   data:null, renderer:null, scene:null, camera:null, group:null, nodes:[], labels:[], frame:0,
   yaw:0, pitch:-.05, pos:null, velocity:null, raycaster:null, mouse:null, avatar:null, drone:null,
   beacon:null, beaconNode:null, joystick:{x:0,y:0}, lastT:0, pointer:null,
-  cullTick:0, lastObjectCount:0
+  cullTick:0, lastObjectCount:0, streamedChunks:null, streamTick:0, colors:null
 };
 function palaceInspectorDefault(){
   $('#palaceInspector').innerHTML = `<div class="inspector-kicker">Mnemosyne Labyrinth</div><h3>The Archive Gate</h3><p class="muted">Move between artifact rooms, scan relics on pedestals, and use search to summon a golden thread.</p><div class="trust-strip"><span class="trust-chip">WASD / joystick</span><span class="trust-chip">Drag to look</span><span class="trust-chip">Tap relic</span></div>`;
@@ -2904,6 +2904,7 @@ function palaceFpsRooms(data){
     }
     n.contaminated = contaminated;
     n.size = Math.min(28, 10 + Math.sqrt(Math.max(1, Number(n.weight || n.count || 1))) * 4);
+    n.chunkId = Math.floor((n.z + 1600) / 350);
   });
   nodes.rooms = rooms;
   return nodes;
@@ -3044,6 +3045,26 @@ function palaceFpsAddRelic(THREE, scene, node, colors){
     const halo = new THREE.PointLight(color, .45, 150); halo.position.copy(relic.position); scene.add(halo); node.scanLabel = 'Contaminated memory';
   }
 }
+function palaceStreamRelicChunks(force=false){
+  if(!memoryPalace.scene || !memoryPalace.THREE || !memoryPalace.pos || !memoryPalace.streamedChunks) return;
+  memoryPalace.streamTick = (memoryPalace.streamTick || 0) + 1;
+  if(!force && memoryPalace.streamTick % 10 !== 0) return;
+  const THREE = memoryPalace.THREE, active = new Set();
+  const current = Math.floor((memoryPalace.pos.z + 1600) / 350);
+  [current-1,current,current+1].forEach(id => active.add(id));
+  for(const [id, group] of memoryPalace.streamedChunks.entries()){
+    if(!active.has(id)){
+      group.traverse(obj => { if(obj.userData?.node) obj.userData.node.mesh = null; });
+      group.removeFromParent(); memoryPalace.streamedChunks.delete(id);
+    }
+  }
+  active.forEach(id=>{
+    if(memoryPalace.streamedChunks.has(id)) return;
+    const group = new THREE.Group(); group.userData.chunkId = id;
+    memoryPalace.nodes.filter(n => n.chunkId === id).forEach(n => palaceFpsAddRelic(THREE, group, n, memoryPalace.colors));
+    memoryPalace.scene.add(group); memoryPalace.streamedChunks.set(id, group);
+  });
+}
 async function renderMemoryPalace(data){
   const THREE = await loadThreeModule();
   clearPalaceScene(); memoryPalace.data = data; memoryPalace.THREE = THREE; palaceInspectorDefault();
@@ -3063,10 +3084,10 @@ async function renderMemoryPalace(data){
   const nodes = palaceFpsRooms(data); const rooms = nodes.rooms || [];
   rooms.slice(1).forEach(room => palaceFpsAddCorridor(THREE, scene, rooms[0], room));
   rooms.forEach((room,i)=>palaceFpsAddRoom(THREE, scene, room, i));
-  nodes.forEach(n=>palaceFpsAddRelic(THREE, scene, n, colors));
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,14)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, colors, streamedChunks:new Map(), labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,14)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
+  palaceStreamRelicChunks(true);
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   $('#palaceHudStatus').textContent = 'walk forward — memory books line the path';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
@@ -3092,6 +3113,7 @@ function animateMemoryPalace(t=0){
   palaceClampFpsPosition();
   memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
   if(memoryPalace.drone){ const bob = Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
+  palaceStreamRelicChunks();
   if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
   memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh && n.mesh.visible && (n.featuredPath || i < 18)){ n.mesh.rotation.y += delta * (.14 + (i%5)*.02); }});
   palaceApplyVisibilityCulling();

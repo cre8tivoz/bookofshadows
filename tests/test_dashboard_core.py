@@ -471,13 +471,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="palaceJoystick"' in html
     assert 'WASD' in html
     assert 'Memory Diver' in html
-    assert 'LAB v20' in html
+    assert 'LAB v21' in html
     assert 'palace-build' in html
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v20' in html
-    assert '/static/style.css?v=labyrinth-v20' in html
+    assert '/static/app.js?v=labyrinth-v21' in html
+    assert '/static/style.css?v=labyrinth-v21' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -524,6 +524,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'renderer.shadowMap.enabled = false' in js
     assert 'Spatial streaming-lite' in js
     assert 'palaceApplyVisibilityCulling' in js
+    assert 'palaceStreamRelicChunks' in js
+    assert 'streamedChunks:new Map()' in js
+    assert 'group.removeFromParent()' in js
+    assert 'palaceStreamRelicChunks(true)' in js
+    assert 'nodes.forEach(n=>palaceFpsAddRelic' not in js
     assert 'lastVisibleObjectCount' in js
     assert 'cullTick % 8' in js
     assert 'slice(0,40)' in js
