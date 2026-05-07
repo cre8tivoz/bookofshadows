@@ -2865,22 +2865,25 @@ function palaceFpsAddRoom(THREE, scene, room, i){
   }
   const light = new THREE.PointLight(room.color, i === 0 ? 1.1 : .72, 480); light.position.set(room.x,130,room.z); scene.add(light);
   if(i === 0){
-    const gateMat = palaceFpsMat(THREE, 0xffd166, { emissive:0xffba54, emissiveIntensity:.45, roughness:.42, metalness:.08 });
-    const approachMat = palaceFpsMat(THREE, 0x2a2036, { emissive:0xffd166, emissiveIntensity:.018, roughness:.88 });
-    palaceFpsBox(THREE, scene, [250, 10, 620], [room.x, -5, room.z+300], approachMat);
-    palaceFpsBox(THREE, scene, [24, 92, 620], [room.x-150, 46, room.z+300], wallMat);
-    palaceFpsBox(THREE, scene, [24, 92, 620], [room.x+150, 46, room.z+300], wallMat);
-    palaceFpsBox(THREE, scene, [34,138,30], [room.x-88,78,room.z-150], gateMat);
-    palaceFpsBox(THREE, scene, [34,138,30], [room.x+88,78,room.z-150], gateMat);
-    palaceFpsBox(THREE, scene, [210,32,36], [room.x,150,room.z-150], gateMat);
-    const portalPane = new THREE.Mesh(new THREE.CircleGeometry(34, 64), new THREE.MeshBasicMaterial({ color:0xff9f6d, transparent:true, opacity:.16, side:THREE.DoubleSide }));
-    portalPane.position.set(room.x,88,room.z-156); scene.add(portalPane);
-    const portal = new THREE.Mesh(new THREE.TorusGeometry(38,3.2,10,64), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.86 }));
-    // TorusGeometry already faces the camera along the Z axis; keep it small/in-world, not a flat bullseye in the viewport.
-    portal.position.set(room.x,88,room.z-154); scene.add(portal);
-    const inner = new THREE.Mesh(new THREE.TorusGeometry(22,1.5,8,48), new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.28 }));
-    inner.position.set(room.x,88,room.z-153); scene.add(inner);
-    const glow = new THREE.PointLight(0xffd166, 1.7, 560); glow.position.set(room.x,102,room.z-154); scene.add(glow);
+    const gateMat = palaceFpsMat(THREE, 0xffd166, { emissive:0xffba54, emissiveIntensity:.55, roughness:.42, metalness:.08 });
+    const approachMat = palaceFpsMat(THREE, 0x342640, { emissive:0xffd166, emissiveIntensity:.06, roughness:.84 });
+    const railMat = palaceFpsMat(THREE, 0xb9914f, { emissive:0xffd166, emissiveIntensity:.42, roughness:.5 });
+    palaceFpsBox(THREE, scene, [300, 12, 760], [room.x, -6, room.z+360], approachMat);
+    palaceFpsBox(THREE, scene, [18, 12, 740], [room.x-84, 4, room.z+348], railMat);
+    palaceFpsBox(THREE, scene, [18, 12, 740], [room.x+84, 4, room.z+348], railMat);
+    palaceFpsBox(THREE, scene, [42,150,34], [room.x-98,82,room.z-170], gateMat);
+    palaceFpsBox(THREE, scene, [42,150,34], [room.x+98,82,room.z-170], gateMat);
+    palaceFpsBox(THREE, scene, [238,36,40], [room.x,158,room.z-170], gateMat);
+    palaceFpsBox(THREE, scene, [132,112,12], [room.x,74,room.z-188], palaceFpsMat(THREE, 0x6b4b38, { emissive:0xff8f4d, emissiveIntensity:.18, roughness:.7 }));
+    // No circular portal at the starting view: rings read as bullseyes on real mobile. Use a lit doorway instead.
+    const doorway = new THREE.Mesh(new THREE.PlaneGeometry(104, 94), new THREE.MeshBasicMaterial({ color:0xffc978, transparent:true, opacity:.24, side:THREE.DoubleSide }));
+    doorway.position.set(room.x,78,room.z-196); scene.add(doorway);
+    [-1,1].forEach(side=>{
+      const torch = new THREE.Mesh(new THREE.BoxGeometry(10,34,10), new THREE.MeshBasicMaterial({ color:0xffe0a1 }));
+      torch.position.set(room.x + side*124, 104, room.z-130); scene.add(torch);
+      const flame = new THREE.PointLight(0xffb35c, 1.3, 360); flame.position.copy(torch.position); scene.add(flame);
+    });
+    const glow = new THREE.PointLight(0xffd166, 1.45, 620); glow.position.set(room.x,104,room.z-190); scene.add(glow);
   }
 }
 function palaceFpsAddCorridor(THREE, scene, a, b){
