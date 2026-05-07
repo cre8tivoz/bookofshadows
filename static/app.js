@@ -2806,7 +2806,7 @@ function animateMemoryPalace(t=0){
 }
 
 
-// V6: first-person memory dungeon. The Labyrinth must feel like walking inside the
+// V7: solid first-person memory dungeon. The Labyrinth must feel like walking inside the
 // memory archive, not viewing a whole strategy/minimap board.
 function palaceFpsRooms(data){
   const nodes = (data.nodes || []).slice(0,120).map(n => ({...n}));
@@ -2834,11 +2834,9 @@ function palaceFpsRooms(data){
 function palaceFpsMat(THREE, color, opts={}){
   return new THREE.MeshStandardMaterial({ color, emissive:opts.emissive || 0x05030a, emissiveIntensity:opts.emissiveIntensity ?? .08, roughness:opts.roughness ?? .76, metalness:opts.metalness ?? .04 });
 }
-function palaceFpsBox(THREE, scene, size, pos, mat, edgeColor=0xd8c7ff, edgeOpacity=.12){
+function palaceFpsBox(THREE, scene, size, pos, mat){
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mat);
   mesh.position.set(...pos); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color:edgeColor, transparent:true, opacity:edgeOpacity }));
-  edges.position.copy(mesh.position); scene.add(edges);
   return mesh;
 }
 function palaceFpsAddRoom(THREE, scene, room, i){
@@ -2857,12 +2855,14 @@ function palaceFpsAddRoom(THREE, scene, room, i){
     }
     palaceFpsBox(THREE, scene, [w, wallH, d], [room.x+ox, wallH/2, room.z+oz], wallMat, 0xe8d8ff, .13);
   });
-  // floor tiles
-  const pts=[];
-  for(let x=-room.w/2+48; x<room.w/2; x+=48) pts.push(room.x+x,2,room.z-room.d/2+20, room.x+x,2,room.z+room.d/2-20);
-  for(let z=-room.d/2+48; z<room.d/2; z+=48) pts.push(room.x-room.w/2+20,2,room.z+z, room.x+room.w/2-20,2,room.z+z);
-  const g=new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts),3));
-  scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:.055 })));
+  // Keep the FPS view solid, not wireframe/skeletal. Subtle floor blocks give scale without debug grid lines.
+  const tileMat = palaceFpsMat(THREE, 0x473854, { emissive:room.color, emissiveIntensity:.018, roughness:.86 });
+  for(let x=-room.w/2+64; x<room.w/2-24; x+=96){
+    for(let z=-room.d/2+64; z<room.d/2-24; z+=96){
+      const inset = new THREE.Mesh(new THREE.BoxGeometry(54, 2, 54), tileMat);
+      inset.position.set(room.x+x, 2, room.z+z); inset.receiveShadow = true; scene.add(inset);
+    }
+  }
   const light = new THREE.PointLight(room.color, i === 0 ? 1.1 : .72, 480); light.position.set(room.x,130,room.z); scene.add(light);
   if(i === 0){
     const gateMat = palaceFpsMat(THREE, 0xffd166, { emissive:0xffba54, emissiveIntensity:.45, roughness:.42, metalness:.08 });
@@ -2918,7 +2918,7 @@ async function renderMemoryPalace(data){
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:180, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,4)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,72,210), velocity:new THREE.Vector3(), yaw:0, pitch:-.11, iso:false });
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
-  $('#palaceHudStatus').textContent = 'first-person memory dungeon online';
+  $('#palaceHudStatus').textContent = 'solid first-person memory dungeon online';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
 }
 function resizeMemoryPalace(){
