@@ -459,6 +459,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="lifecycleThresholds"' in html
     assert 'id="todayVeracity"' in html
     assert 'id="todayDegradation"' in html
+    assert 'id="constellationFullscreen"' in html
+    assert 'id="threeFullscreen"' in html
+    assert 'toggleVisualiserFullscreen' in js
+    assert 'visualiserResponsiveFill' in js
+    assert 'threeEffectiveCameraZ' in js
+    assert ':fullscreen' in css
+    assert 'fullscreenchange' in js
     assert 'by_veracity' in js
     assert 'by_degradation' in js
     assert 'stateHtml' in js

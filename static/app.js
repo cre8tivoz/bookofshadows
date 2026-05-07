@@ -298,6 +298,31 @@ function stopCanvasVisualiserLoop(){
   constellationScene.renderLastTime = 0;
 }
 function isCanvasVisualiserActive(){ return $('#constellation')?.classList.contains('active'); }
+function visualiserResponsiveFill(width, height){
+  const w = Math.max(0, Number(width) || 0);
+  const h = Math.max(0, Number(height) || 0);
+  if(w < 760 || h < 520) return 1;
+  const widthFill = Math.max(0, Math.min(1, (w - 760) / 760));
+  const heightFill = Math.max(0, Math.min(1, (h - 520) / 360));
+  return 1 + Math.min(.22, (widthFill * .16) + (heightFill * .06));
+}
+async function toggleVisualiserFullscreen(selector){
+  const el = $(selector);
+  if(!el || !document.fullscreenEnabled) return;
+  if(document.fullscreenElement === el) await document.exitFullscreen();
+  else await el.requestFullscreen();
+}
+function updateVisualiserFullscreenButtons(){
+  const current = document.fullscreenElement;
+  const legacy = current === $('#constellation');
+  const three = current === $('#visualiser3d');
+  const legacyButton = $('#constellationFullscreen');
+  const threeButton = $('#threeFullscreen');
+  if(legacyButton) legacyButton.textContent = legacy ? 'Exit fullscreen' : 'Fullscreen';
+  if(threeButton) threeButton.textContent = three ? 'Exit fullscreen' : 'Fullscreen';
+  if(isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data);
+  if(threeVis.renderer) resizeThree();
+}
 function switchTab(name, opts={}){
   const section = sectionFor(name);
   if(section !== 'constellation') stopCanvasVisualiserLoop();
@@ -912,7 +937,8 @@ function projectConstellationNode(n, w, h, t){
   const z = n.y * Math.sin(tilt) + z0 * Math.cos(tilt);
   const depth = 760;
   const scale = depth / (depth + z + 260);
-  const fit = w < 620 ? Math.min(.72, Math.max(.58, (w - 36) / 680)) : Math.min(1.02, Math.max(.62, (w - 72) / 760));
+  const fill = visualiserResponsiveFill(w, h);
+  const fit = w < 620 ? Math.min(.72, Math.max(.58, (w - 36) / 680)) : Math.min(1.18, Math.max(.62, (w - 72) / 760) * fill);
   const cameraScale = fit * constellationScene.zoom;
   return { x:w/2 + constellationScene.panX + x*scale*cameraScale, y:h/2 + constellationScene.panY + y*scale*cameraScale, z, scale:scale*constellationScene.zoom, visible:scale > .35 };
 }
@@ -2143,6 +2169,12 @@ function resizeThree(){
   const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
   threeVis.renderer.setSize(w,h,false); threeVis.camera.aspect = w/h; threeVis.camera.updateProjectionMatrix();
 }
+function threeEffectiveCameraZ(rect){
+  const box = rect || $('#threeViewport')?.getBoundingClientRect?.() || {width:650,height:650};
+  const fill = visualiserResponsiveFill(box.width, box.height);
+  const mobile = box.width < 760 || box.height < 520;
+  return threeVis.cameraZ / (mobile ? 1 : fill);
+}
 function updateThreeAuras(rect, projectVector){
   if(threeVis.mode !== 'neural') return;
   const mobile = rect.width < 520;
@@ -2170,7 +2202,8 @@ function updateThreeLabels(){
   const viewport = $('#threeViewport'); const rect = viewport.getBoundingClientRect(); const v = new threeVis.THREE.Vector3();
   updateThreeAuras(rect, v);
   const labelBoxes = [];
-  const zoomReveal = threeVis.mode === 'neural' ? Math.max(0, Math.min(1, (900 - threeVis.cameraZ) / 420)) : Math.max(0, Math.min(1, (760 - threeVis.cameraZ) / 520));
+  const effectiveCameraZ = threeEffectiveCameraZ(rect);
+  const zoomReveal = threeVis.mode === 'neural' ? Math.max(0, Math.min(1, (900 - effectiveCameraZ) / 420)) : Math.max(0, Math.min(1, (760 - effectiveCameraZ) / 520));
   const maxLabels = threeVis.mode === 'neural' ? ((rect.width < 520 ? 14 : 24) + Math.round(zoomReveal * (rect.width < 520 ? 14 : 18))) : (rect.width < 520 ? (12 + Math.round(zoomReveal * 12)) : (20 + Math.round(zoomReveal * 18)));
   let shown = 0;
   $$('#threeLabels .three-label').forEach((el,i)=>{
@@ -2199,7 +2232,9 @@ function animateThree(t=0){
   if(!threeVis.paused && !threeVis.drag) threeVis.yaw += delta * (threeVis.mode === 'neural' ? .00009 : .000055);
   clampThreeCamera();
   threeVis.group.rotation.y = threeVis.yaw; threeVis.group.rotation.x = threeVis.pitch;
-  threeVis.camera.position.set(threeVis.panX, threeVis.panY, threeVis.cameraZ); threeVis.camera.lookAt(threeVis.panX, threeVis.panY, 0);
+  const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
+  const effectiveCameraZ = threeEffectiveCameraZ(rect);
+  threeVis.camera.position.set(threeVis.panX, threeVis.panY, effectiveCameraZ); threeVis.camera.lookAt(threeVis.panX, threeVis.panY, 0);
   if(threeVis.pulsePoints){
     const attr = threeVis.pulsePoints.geometry.attributes.position; const arr = attr.array;
     threeVis.pulses.forEach((e,i)=>{ const phase=(t*.00030 + (i%17)/17)%1; const inv=1-phase; if(e._curve){ arr[i*3]=inv*inv*e.a.x+2*inv*phase*e._curve.cx+phase*phase*e.b.x; arr[i*3+1]=inv*inv*e.a.y+2*inv*phase*e._curve.cy+phase*phase*e.b.y; arr[i*3+2]=inv*inv*e.a.z+2*inv*phase*e._curve.cz+phase*phase*e.b.z; } else { arr[i*3]=e.a.x+(e.b.x-e.a.x)*phase; arr[i*3+1]=e.a.y+(e.b.y-e.a.y)*phase; arr[i*3+2]=e.a.z+(e.b.z-e.a.z)*phase; } });
@@ -2301,6 +2336,7 @@ $('#mobileMenuToggle').onclick = () => {
 };
 window.addEventListener('resize', closeMobileMenuForViewportChange, { passive: true });
 window.addEventListener('orientationchange', closeMobileMenuForViewportChange, { passive: true });
+document.addEventListener('fullscreenchange', updateVisualiserFullscreenButtons);
 $('#memorySearch').onclick = loadMemories;
 $('#bulkSelectAll').onchange = () => { latestMemoryItems.forEach(x => $('#bulkSelectAll').checked ? bulkSelection.add(x.id) : bulkSelection.delete(x.id)); loadMemories(); };
 $('#bulkClear').onclick = () => { bulkSelection.clear(); loadMemories(); };
@@ -2333,11 +2369,13 @@ $('#constellationRefresh').onclick = loadConstellation;
 $('#constellationReset').onclick = resetConstellationView;
 $('#constellationPanMode').onclick = toggleConstellationPanMode;
 $('#constellationPause').onclick = toggleConstellationPause;
+$('#constellationFullscreen').onclick = () => toggleVisualiserFullscreen('#constellation');
 $$('.visualiser-tabs button[data-visualiser]').forEach(b => b.onclick = () => switchVisualiserMode(b.dataset.visualiser));
 $('#threeRefresh').onclick = loadThreeVisualiser;
 $('#threeReset').onclick = () => { resetThreeCamera(); threeInspectorDefault(); };
 $('#threePanMode').onclick = () => { threeVis.panMode = !threeVis.panMode; updateThreeUI(); };
 $('#threePause').onclick = () => { threeVis.paused = !threeVis.paused; updateThreeUI(); };
+$('#threeFullscreen').onclick = () => toggleVisualiserFullscreen('#visualiser3d');
 $$('.visualiser-tabs button[data-three-mode]').forEach(b => b.onclick = () => switchThreeMode(b.dataset.threeMode));
 updateVisualiserModeUI();
 updateConstellationPauseButton();
