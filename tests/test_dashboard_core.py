@@ -471,13 +471,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="palaceJoystick"' in html
     assert 'WASD' in html
     assert 'Memory Diver' in html
-    assert 'LAB v15' in html
+    assert 'LAB v16' in html
     assert 'palace-build' in html
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v15' in html
-    assert '/static/style.css?v=labyrinth-v15' in html
+    assert '/static/app.js?v=labyrinth-v16' in html
+    assert '/static/style.css?v=labyrinth-v16' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -506,6 +506,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'PerspectiveCamera(72' in js
     assert 'solid first-person memory dungeon online' in js
     assert 'new THREE.PlaneGeometry(126, 104)' in js
+    assert 'function palaceFpsTexture' in js
+    assert 'new THREE.CanvasTexture' in js
+    assert "palaceFpsTexturedBasic(THREE, 'stone'" in js
+    assert "palaceFpsTexturedBasic(THREE, 'gold'" in js
     assert 'Mobile Chrome crushes subtle StandardMaterial lighting' in js
     assert 'rings read as bullseyes' in js
     assert 'new THREE.CircleGeometry(34' not in js

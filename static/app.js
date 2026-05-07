@@ -2839,6 +2839,33 @@ function palaceFpsBox(THREE, scene, size, pos, mat){
   mesh.position.set(...pos); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
   return mesh;
 }
+function palaceFpsTexture(THREE, kind, base='#4b344d', line='rgba(255,224,138,.28)'){
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = base; g.fillRect(0,0,128,128);
+  if(kind === 'stone'){
+    g.strokeStyle = line; g.lineWidth = 2;
+    for(let y=0;y<=128;y+=32){ g.beginPath(); g.moveTo(0,y+.5); g.lineTo(128,y+.5); g.stroke(); }
+    for(let y=0;y<128;y+=32){ for(let x=(y/32)%2?32:0;x<128;x+=64){ g.beginPath(); g.moveTo(x+.5,y); g.lineTo(x+.5,y+32); g.stroke(); } }
+    g.fillStyle = 'rgba(255,255,255,.055)'; for(let i=0;i<70;i++) g.fillRect(Math.random()*128, Math.random()*128, 1.5, 1.5);
+    g.fillStyle = 'rgba(0,0,0,.16)'; for(let i=0;i<40;i++) g.fillRect(Math.random()*128, Math.random()*128, 2, 1);
+  } else if(kind === 'gold'){
+    const grad = g.createLinearGradient(0,0,128,128); grad.addColorStop(0,'#f3d589'); grad.addColorStop(.45,base); grad.addColorStop(1,'#7f622b');
+    g.fillStyle = grad; g.fillRect(0,0,128,128);
+    g.strokeStyle = 'rgba(255,245,190,.34)'; g.lineWidth = 3; for(let y=18;y<128;y+=28){ g.beginPath(); g.moveTo(0,y); g.lineTo(128,y+10); g.stroke(); }
+    g.fillStyle = 'rgba(0,0,0,.10)'; for(let i=0;i<45;i++) g.fillRect(Math.random()*128, Math.random()*128, 2, 2);
+  } else if(kind === 'door'){
+    const grad = g.createRadialGradient(64,58,5,64,64,78); grad.addColorStop(0,'#ffc078'); grad.addColorStop(.45,base); grad.addColorStop(1,'#2f1f25');
+    g.fillStyle = grad; g.fillRect(0,0,128,128);
+    g.strokeStyle = 'rgba(255,220,150,.24)'; g.lineWidth = 2; for(let x=18;x<128;x+=24){ g.beginPath(); g.moveTo(x,0); g.lineTo(x+6,128); g.stroke(); }
+  }
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 2; return tex;
+}
+function palaceFpsTexturedBasic(THREE, kind, color, repeat=[1,1], opacity=1){
+  const map = palaceFpsTexture(THREE, kind, color);
+  map.repeat.set(...repeat);
+  return new THREE.MeshBasicMaterial({ color:0xffffff, map, transparent:opacity < 1, opacity, side:THREE.DoubleSide });
+}
 function palaceFpsAddRoom(THREE, scene, room, i){
   const floorMat = palaceFpsMat(THREE, i === 0 ? 0x3f314a : 0x30243d, { emissive:room.color, emissiveIntensity:.025 });
   const wallMat = palaceFpsMat(THREE, 0x554461, { emissive:room.color, emissiveIntensity:.035, roughness:.82 });
@@ -2866,11 +2893,11 @@ function palaceFpsAddRoom(THREE, scene, room, i){
   const light = new THREE.PointLight(room.color, i === 0 ? 1.1 : .72, 480); light.position.set(room.x,130,room.z); scene.add(light);
   if(i === 0){
     // Mobile Chrome crushes subtle StandardMaterial lighting; the first screen needs deliberate unlit, high-contrast shapes.
-    const gateMat = new THREE.MeshBasicMaterial({ color:0xd3ae66 });
-    const sideMat = new THREE.MeshBasicMaterial({ color:0x4b344d });
-    const floorMat = new THREE.MeshBasicMaterial({ color:0x2f2440 });
-    const railMat = new THREE.MeshBasicMaterial({ color:0xd7b36d });
-    const doorMat = new THREE.MeshBasicMaterial({ color:0xffb86b, transparent:true, opacity:.46, side:THREE.DoubleSide });
+    const gateMat = palaceFpsTexturedBasic(THREE, 'gold', '#caa45c', [2.2,1.1]);
+    const sideMat = palaceFpsTexturedBasic(THREE, 'stone', '#4b344d', [1,4]);
+    const floorMat = palaceFpsTexturedBasic(THREE, 'stone', '#2f2440', [3,8]);
+    const railMat = palaceFpsTexturedBasic(THREE, 'gold', '#d7b36d', [1,5]);
+    const doorMat = palaceFpsTexturedBasic(THREE, 'door', '#9b6041', [1.2,1], .62);
     palaceFpsBox(THREE, scene, [360, 14, 660], [room.x, -7, room.z+270], floorMat);
     palaceFpsBox(THREE, scene, [22, 18, 620], [room.x-116, 8, room.z+254], railMat);
     palaceFpsBox(THREE, scene, [22, 18, 620], [room.x+116, 8, room.z+254], railMat);
@@ -2880,7 +2907,7 @@ function palaceFpsAddRoom(THREE, scene, room, i){
     palaceFpsBox(THREE, scene, [298,42,52], [room.x,170,room.z-120], gateMat);
     palaceFpsBox(THREE, scene, [34,132,430], [room.x-210,66,room.z+90], sideMat);
     palaceFpsBox(THREE, scene, [34,132,430], [room.x+210,66,room.z+90], sideMat);
-    palaceFpsBox(THREE, scene, [156,122,18], [room.x,76,room.z-152], new THREE.MeshBasicMaterial({ color:0x6f4e3a }));
+    palaceFpsBox(THREE, scene, [156,122,18], [room.x,76,room.z-152], palaceFpsTexturedBasic(THREE, 'door', '#6f4e3a', [1,1]));
     // No circular portal at the starting view: rings read as bullseyes on real mobile. Use a lit doorway instead.
     const doorway = new THREE.Mesh(new THREE.PlaneGeometry(126, 104), doorMat);
     doorway.position.set(room.x,80,room.z-164); scene.add(doorway);
