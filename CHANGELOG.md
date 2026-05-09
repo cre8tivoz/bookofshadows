@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.0
+
+- Hide the experimental Mnemosyne Labyrinth/Memory Palace entry from the main sidebar while keeping the route and implementation available for direct testing.
+- Ship the focused visualiser/review polish line as the main release surface: fullscreen visualisers, memory-name alignment improvements, Review pagination, and related dashboard fixes.
+
 ## 0.9.1
 
 - Bump package/plugin release version to `0.9.1`.

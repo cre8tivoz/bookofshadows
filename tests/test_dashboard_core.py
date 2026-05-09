@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.9.1'
+    assert project_version == '0.10.0'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -462,6 +462,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="constellationFullscreen"' in html
     assert 'id="threeFullscreen"' in html
     assert 'data-tab="palace"' in html
+    assert 'data-tab="palace" class="nav-hidden" aria-hidden="true" tabindex="-1"' in html
     assert 'id="memoryPalace"' in html
     assert 'id="palaceViewport"' in html
     assert 'id="palaceSearchQuery"' in html
