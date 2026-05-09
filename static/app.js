@@ -2601,7 +2601,7 @@ function palaceNearestMemory(maxDist=170){
 function updatePalaceNearbyPrompt(){
   const near = palaceNearestMemory(155);
   if(near) $('#palaceHudStatus').textContent = `tap to scan memory: ${String(near.label || '').replace(/^memory:/,'').slice(0,30)}`;
-  else if($('#palaceHudStatus').textContent.startsWith('tap to scan memory:')) $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by topic';
+  else if($('#palaceHudStatus').textContent.startsWith('tap to scan memory:')) $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by domain';
 }
 function palaceApplyVisibilityCulling(){
   if(!memoryPalace.scene || !memoryPalace.pos) return;
@@ -2874,10 +2874,22 @@ function animateMemoryPalace(t=0){
 function palaceFpsRooms(data){
   const raw = (data.nodes || []).map(n => ({...n}));
   const memoryNodes = raw.filter(n => n.kind === 'memory' || n.memory_id);
-  const source = (memoryNodes.length ? memoryNodes : raw).slice(0,40);
-  const countByCat = source.reduce((m,n)=>{ const c=String(n.category || 'Other'); m[c]=(m[c]||0)+1; return m; }, {});
+  const domainSource = (memoryNodes.length ? memoryNodes : raw).slice(0,140);
+  const domainGroups = {};
+  domainSource.forEach(n => {
+    const c = String(n.category || 'Other');
+    if(!domainGroups[c]) domainGroups[c] = [];
+    domainGroups[c].push(n);
+  });
+  const countByCat = Object.fromEntries(Object.entries(domainGroups).map(([cat, items]) => [cat, items.length]));
   const cats = Object.keys(countByCat).sort((a,b)=>countByCat[b]-countByCat[a] || a.localeCompare(b));
-  const nodes = cats.flatMap(cat => source.filter(n => String(n.category || 'Other') === cat)).slice(0,40);
+  const nodes = [];
+  for(let round=0; nodes.length < 40 && round < 20; round++){
+    cats.forEach(cat => {
+      const n = domainGroups[cat]?.[round];
+      if(n && nodes.length < 40) nodes.push(n);
+    });
+  }
   const rooms = [
     { label:'Archive Gate', x:0, z:0, w:420, d:360, color:0xffd166 },
     { label:String(cats[0] || 'Episodic Vault').slice(0,20), x:-520, z:-520, w:380, d:340, color:0x65d6ff },
@@ -2897,7 +2909,7 @@ function palaceFpsRooms(data){
     const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
     let room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
     if(!contaminated && n.kind === 'memory' && featured < 24){
-      // Group the first playable walk by memory category/topic so the idea is judgeable, not random books.
+      // Group the first playable walk by memory domain so the dungeon reads like a map, not random books.
       const cat = String(n.category || 'Other');
       const section = pathSections.find(s => s.category === cat) || pathSections[0] || { label:'Archive Gate', z:245 };
       const within = seenInSection[cat] || 0; seenInSection[cat] = within + 1;
@@ -3113,7 +3125,7 @@ async function renderMemoryPalace(data){
   Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, pathSections, colors, streamedChunks:new Map(), labels:pathSections.map(s=>({ label:`${s.label} (${s.count})`, x:s.x, y:s.y, z:s.z, kind:'section' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,18)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
   palaceStreamRelicChunks(true);
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
-  $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by topic';
+  $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by domain';
   bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
 }
 function resizeMemoryPalace(){

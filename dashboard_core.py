@@ -958,25 +958,124 @@ class DashboardStore:
 
     @staticmethod
     def _context_category_names() -> list[str]:
-        return ["Preferences", "People", "Home setup", "Work / business", "Health / wearables", "Devices", "Projects", "Privacy rules", "Other"]
+        return [
+            "Preferences",
+            "People",
+            "Home setup",
+            "Work / business",
+            "Health / wearables",
+            "Devices",
+            "Agent memory",
+            "Dashboard / visualisers",
+            "Messaging / WhatsApp",
+            "Travel / leisure",
+            "Creative / media",
+            "Finance / assets",
+            "Projects",
+            "Privacy rules",
+            "Other",
+        ]
 
     @staticmethod
     def _category_for_text(text: str) -> str:
-        hay = text.lower()
-        buckets = [
-            ("Preferences", ("prefers", "preference", "likes", "wants", "expects", "avoid", "tone", "style")),
-            ("People", ("sheryl", "babu", "hope", "wife", "kid", "baby", "family", "person", "friend")),
-            ("Home setup", ("home", "house", "home assistant", "light", "camera", "sensor", "smart", "whatsapp")),
-            ("Work / business", ("work", "marketing", "business", "promptlybuilt", "linkedin", "github", "release", "office")),
-            ("Health / wearables", ("whoop", "health", "sleep", "recovery", "hrv", "wearable", "strain")),
-            ("Devices", ("mac", "device", "draw things", "gpu", "server", "iphone", "tesla", "zeekr")),
-            ("Projects", ("project", "plugin", "dashboard", "mnemosyne", "draw things", "health connect", "whoop")),
-            ("Privacy rules", ("privacy", "local-only", "local only", "no cloud", "whatsapp history", "access", "cannot")),
+        """Classify a memory into a human domain for Context Bank and the Labyrinth.
+
+        The first implementation used first-keyword wins, which made the memory dungeon feel random:
+        Hindsight daemon "health checks" landed in Health/wearables, WhatsApp operations landed in
+        Home setup, and Mnemosyne Labyrinth work split across People/Projects/Other. Use weighted
+        domain signals instead so the dungeon becomes a map of actual topics.
+        """
+        hay = str(text or "").lower()
+        buckets: list[tuple[str, tuple[tuple[str, int], ...]]] = [
+            ("Privacy rules", (
+                ("local-only", 9), ("local only", 9), ("no cloud", 9), ("privacy", 8),
+                ("whatsapp history", 8), ("cannot", 3), ("access", 2), ("permission", 2),
+            )),
+            ("Dashboard / visualisers", (
+                ("memory palace", 10), ("mnemosyne labyrinth", 10), ("labyrinth", 8),
+                ("dungeon", 8), ("visualiser", 8), ("visualizer", 8), ("three.js", 7),
+                ("fps", 7), ("first-person", 7), ("viewport", 5), ("portal", 5),
+                ("joystick", 5), ("palace", 5), ("dashboard", 4), ("review", 2),
+            )),
+            ("Agent memory", (
+                ("hindsight", 10), ("mnemosyne", 9), ("lcm", 9), ("memory provider", 8),
+                ("memory setup", 8), ("memory migration", 8), ("daemon", 6),
+                ("idle_timeout", 6), ("consolidation", 5), ("episodic", 5),
+                ("working memory", 5), ("context engine", 5), ("hindsight-api", 5),
+            )),
+            ("Messaging / WhatsApp", (
+                ("whatsapp-cli", 10), ("whatsapp", 8), ("daily summary", 6),
+                ("watchdog", 6), ("sync", 4), ("jid", 4), ("telegram", 4),
+                ("message bridge", 4), ("gateway", 3),
+            )),
+            ("Health / wearables", (
+                ("whoop", 10), ("health connect", 10), ("samsung health", 10),
+                ("sleep", 8), ("hrv", 8), ("recovery", 7), ("strain", 7),
+                ("wearable", 7), ("resting heart", 6), ("spo2", 6), ("heart rate", 5),
+                ("activity", 4), ("health digest", 4),
+            )),
+            ("People", (
+                ("sheryl", 9), ("babu", 9), ("hope", 9), ("clyde", 9), ("wife", 7),
+                ("kid", 6), ("child", 6), ("baby", 6), ("family", 5), ("helper", 5),
+                ("friend", 3), ("person", 1),
+            )),
+            ("Home setup", (
+                ("home assistant", 9), ("smart home", 9), ("home setup", 8),
+                ("house", 5), ("light", 4), ("camera", 4), ("sensor", 4),
+                ("switch", 3), ("automation", 3), ("cleaning", 3),
+            )),
+            ("Work / business", (
+                ("promptlybuilt", 10), ("marketing", 8), ("business", 8),
+                ("lead", 5), ("linkedin", 5), ("work", 5), ("office", 4),
+                ("smb", 4), ("case study", 4), ("enrichment", 4),
+            )),
+            ("Devices", (
+                ("mac studio", 10), ("draw things", 8), ("gpu", 7), ("iphone", 6),
+                ("tesla", 6), ("zeekr", 6), ("device", 5), ("server", 4),
+                ("omlx", 4), ("grpc", 4), ("lan", 3),
+            )),
+            ("Travel / leisure", (
+                ("hokkaido", 9), ("japan", 7), ("travel", 7), ("trip", 5),
+                ("hotel", 4), ("flight", 4), ("restaurant", 4), ("food", 3),
+                ("watch", 3), ("shopback", 3),
+            )),
+            ("Creative / media", (
+                ("comic", 9), ("image", 6), ("prompt", 5), ("draw", 5),
+                ("video", 5), ("tts", 5), ("voice", 4), ("song", 4),
+                ("visual", 3),
+            )),
+            ("Finance / assets", (
+                ("finance", 8), ("net worth", 8), ("crypto", 7), ("property", 6),
+                ("mortgage", 6), ("income", 5), ("cashback", 5), ("investment", 5),
+                ("price", 2),
+            )),
+            ("Preferences", (
+                ("prefers", 8), ("preference", 8), ("likes", 5), ("wants", 5),
+                ("expects", 5), ("avoid", 5), ("tone", 4), ("style", 4),
+                ("dislikes", 4), ("correction", 3),
+            )),
+            ("Projects", (
+                ("project", 6), ("plugin", 5), ("github", 5), ("release", 5),
+                ("commit", 4), ("pr #", 4), ("pull request", 4), ("config", 2),
+            )),
         ]
+        scores: Counter[str] = Counter()
         for label, terms in buckets:
-            if any(term in hay for term in terms):
-                return label
-        return "Other"
+            for term, weight in terms:
+                if term in hay:
+                    scores[label] += weight
+        if not scores:
+            return "Other"
+        if scores.get("Health / wearables") and re.search(r"\b(health check|healthy state|system health|failing health)\b", hay):
+            scores["Health / wearables"] -= 8
+        if scores.get("Agent memory") and any(term in hay for term in ("dashboard", "labyrinth", "memory palace", "visualiser", "visualizer", "viewport")):
+            scores["Agent memory"] -= 7
+            scores["Dashboard / visualisers"] += 4
+        if scores.get("Home setup") and "whatsapp" in hay:
+            scores["Home setup"] -= 4
+        priority = {name: i for i, name in enumerate(DashboardStore._context_category_names())}
+        best, score = max(scores.items(), key=lambda item: (item[1], -priority.get(item[0], 999)))
+        return best if score > 0 else "Other"
 
     def today_digest(self, day: str = "", limit: int = 80) -> dict[str, Any]:
         day = (day or self._today_key())[:10]

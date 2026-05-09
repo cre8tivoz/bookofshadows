@@ -404,6 +404,20 @@ def test_memory_intelligence_read_only_views(tmp_path):
     assert constellation['edges']
 
 
+def test_memory_domain_classifier_keeps_dungeon_sections_meaningful():
+    classify = DashboardStore._category_for_text
+
+    assert classify('Hindsight daemon health check is healthy with DB connected') == 'Agent memory'
+    assert classify('Mnemosyne Labyrinth FPS viewport joystick fix for Memory Palace') == 'Dashboard / visualisers'
+    assert classify('whatsapp-cli sync watchdog restart service com.whatsapp-cli.sync') == 'Messaging / WhatsApp'
+    assert classify('YC uses WHOOP sleep recovery HRV and strain reports') == 'Health / wearables'
+    assert classify('Hokkaido April trip itinerary with Hakodate sakura') == 'Travel / leisure'
+    assert classify('Sheryl and Hope household helper permissions') == 'People'
+    assert classify('Home Assistant light sensor automation') == 'Home setup'
+    assert classify('Promptlybuilt marketing business LinkedIn case study') == 'Work / business'
+    assert classify('WhatsApp history must stay local-only and no cloud') == 'Privacy rules'
+
+
 def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     html = (ROOT / 'static' / 'index.html').read_text()
     js = (ROOT / 'static' / 'app.js').read_text()
@@ -505,7 +519,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'palaceFpsRooms' in js
     assert 'palaceFpsAddRoom' in js
     assert 'PerspectiveCamera(72' in js
-    assert 'walk forward — memories are grouped by topic' in js
+    assert 'walk forward — memories are grouped by domain' in js
     assert 'new THREE.PlaneGeometry(126, 104)' in js
     assert 'function palaceFpsTexture' in js
     assert 'new THREE.CanvasTexture' in js
@@ -513,10 +527,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "palaceFpsTexturedBasic(THREE, 'gold'" in js
     assert 'Mobile Chrome crushes subtle StandardMaterial lighting' in js
     assert 'walking straight never drops into blank space' in js
-    assert 'Group the first playable walk by memory category/topic' in js
+    assert 'Group the first playable walk by memory domain' in js
     assert 'featuredPath' in js
     assert 'Performance-first FPS: shadows and high DPR made desktop unplayably laggy' in js
-    assert 'walk forward — memories are grouped by topic' in js
+    assert 'walk forward — memories are grouped by domain' in js
     assert 'tap to scan memory:' in js
     assert 'palaceNearestMemory' in js
     assert 'walk nearer to a memory book, then tap to scan' in js
@@ -532,10 +546,12 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'nodes.forEach(n=>palaceFpsAddRelic' not in js
     assert 'lastVisibleObjectCount' in js
     assert 'cullTick % 8' in js
-    assert 'slice(0,40)' in js
+    assert 'slice(0,140)' in js
+    assert 'domainGroups' in js
+    assert 'round < 20' in js
     assert 'countByCat' in js
     assert 'pathSections' in js
-    assert 'Group the first playable walk by memory category/topic' in js
+    assert 'Group the first playable walk by memory domain' in js
     assert 'palaceFpsAddPathSections' in js
     assert 'pathGroup' in js
     assert 'kind:\'section\'' in js
