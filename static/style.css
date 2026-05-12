@@ -366,3 +366,29 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 /* Live memory infinite scroll */
 .live-memory-sentinel{height:1px;width:100%}
 .live-memory-status{text-align:center;margin:18px 0 6px;color:var(--muted)}
+
+/* Mnemosyne 2.6 live stream affordances */
+.memory-card.live-new{animation:liveGlow 5s ease-out;border-color:rgba(77,163,255,.55);box-shadow:0 0 0 1px rgba(77,163,255,.18),0 14px 34px rgba(77,163,255,.08)}
+.memory-card.live-updated{border-color:rgba(255,196,87,.55)}
+.memory-card.live-recalled{border-color:rgba(129,230,217,.55)}
+.memory-card.live-invalidated{opacity:.72;filter:saturate(.75)}
+.memory-card.live-consolidated{border-color:rgba(180,138,255,.6)}
+@keyframes liveGlow{0%{transform:translateY(-4px);box-shadow:0 0 0 2px rgba(77,163,255,.55),0 0 36px rgba(77,163,255,.28)}100%{transform:none}}
+.live-badge{margin:10px 0 0 14px;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800}
+.live-badge-new{background:rgba(77,163,255,.16);color:#8cc8ff;border-color:rgba(77,163,255,.38)}
+.live-badge-updated{background:rgba(255,196,87,.16);color:#ffd27a;border-color:rgba(255,196,87,.36)}
+.live-badge-recalled{background:rgba(129,230,217,.16);color:#9af0e6;border-color:rgba(129,230,217,.36)}
+.live-badge-invalidated{background:rgba(255,110,110,.16);color:#ffaaaa;border-color:rgba(255,110,110,.36)}
+.live-badge-consolidated{background:rgba(180,138,255,.16);color:#ccb3ff;border-color:rgba(180,138,255,.38)}
+.pattern-panel{padding:22px;margin-bottom:22px}
+.pattern-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:12px}
+.pattern-grid h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.pattern-chips{display:flex;flex-wrap:wrap;gap:8px}
+.pattern-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:7px 10px;background:rgba(255,255,255,.04)}
+.pattern-chip em{font-style:normal;color:var(--muted);font-size:12px}
+.pattern-signals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}
+.pattern-signal{text-align:left;border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.035);padding:12px;color:var(--text);cursor:pointer}
+.pattern-signal span{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+.pattern-signal strong{display:block;font-size:13px;line-height:1.35}
+.pattern-signal:hover{border-color:rgba(77,163,255,.45);transform:translateY(-1px)}
+@media (max-width: 760px){.pattern-grid,.pattern-signals{grid-template-columns:1fr}}

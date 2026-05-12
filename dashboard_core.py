@@ -211,8 +211,21 @@ class DashboardStore:
             "payload_policy": "private dashboard payload; memory content is streamed to authenticated dashboard clients, metadata_json is withheld",
         }
 
-    def realtime_event_snapshot(self, limit: int = 25) -> list[dict[str, Any]]:
-        """Return a private-dashboard event snapshot for SSE/bootstrap use."""
+    @staticmethod
+    def _realtime_signature(event: dict[str, Any]) -> str:
+        payload = {
+            "content": event.get("content") or "",
+            "timestamp": event.get("timestamp") or "",
+            "status": event.get("status") or "active",
+            "recall_count": int(event.get("recall_count") or 0),
+            "last_recalled": event.get("last_recalled") or "",
+            "superseded_by": event.get("superseded_by") or "",
+            "valid_until": event.get("valid_until") or "",
+            "summary_of": event.get("summary_of") or "",
+        }
+        return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+    def _realtime_event_rows(self, limit: int = 25, include_inactive: bool = False) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit or 25), 200))
         events: list[dict[str, Any]] = []
         with self.connect() as con:
@@ -225,20 +238,29 @@ class DashboardStore:
                 source_expr = "COALESCE(source, '')" if "source" in columns else "''"
                 timestamp_expr = "COALESCE(timestamp, created_at, '')" if "created_at" in columns else "COALESCE(timestamp, '')"
                 importance_expr = "COALESCE(importance, 0)" if "importance" in columns else "0"
+                recall_expr = "COALESCE(recall_count, 0)" if "recall_count" in columns else "0"
+                last_recalled_expr = "COALESCE(last_recalled, '')" if "last_recalled" in columns else "''"
+                valid_until_expr = "valid_until" if "valid_until" in columns else "NULL AS valid_until"
+                superseded_expr = "superseded_by" if "superseded_by" in columns else "NULL AS superseded_by"
+                summary_expr = "summary_of" if "summary_of" in columns else "NULL AS summary_of"
+                where = "1=1" if include_inactive else "(valid_until IS NULL OR valid_until > ?) AND superseded_by IS NULL"
+                params: tuple[Any, ...] = (limit,) if include_inactive else (_utc_now(), limit)
                 rows = con.execute(
                     f"""
                     SELECT id, content, {source_expr} AS source, {timestamp_expr} AS timestamp,
-                           {importance_expr} AS importance, {veracity_expr} AS veracity
+                           {importance_expr} AS importance, {veracity_expr} AS veracity,
+                           {recall_expr} AS recall_count, {last_recalled_expr} AS last_recalled,
+                           {valid_until_expr}, {superseded_expr}, {summary_expr}
                     FROM {table}
-                    WHERE (valid_until IS NULL OR valid_until > ?) AND superseded_by IS NULL
+                    WHERE {where}
                     ORDER BY timestamp DESC
                     LIMIT ?
                     """,
-                    (_utc_now(), limit),
+                    params,
                 ).fetchall()
                 for row in rows:
                     d = dict(row)
-                    events.append({
+                    event = {
                         "event_type": "MEMORY_SNAPSHOT",
                         "memory_id": d.get("id"),
                         "memory_kind": memory_kind,
@@ -247,20 +269,44 @@ class DashboardStore:
                         "timestamp": d.get("timestamp") or "",
                         "importance": float(d.get("importance") or 0),
                         "veracity": str(d.get("veracity") or "unknown").lower(),
-                    })
+                        "recall_count": int(d.get("recall_count") or 0),
+                        "last_recalled": d.get("last_recalled") or "",
+                        "valid_until": d.get("valid_until") or "",
+                        "superseded_by": d.get("superseded_by") or "",
+                        "summary_of": d.get("summary_of") or "",
+                    }
+                    event["status"] = self._memory_status(event)
+                    event["live_signature"] = self._realtime_signature(event)
+                    events.append(event)
         events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
         return events[:limit]
 
-    def realtime_event_delta(self, seen_ids: set[str] | list[str] | tuple[str, ...], limit: int = 25) -> list[dict[str, Any]]:
-        """Poll the DB for newly visible memories not yet sent over the dashboard SSE stream."""
-        seen = {str(item) for item in (seen_ids or []) if item}
+    def realtime_event_snapshot(self, limit: int = 25) -> list[dict[str, Any]]:
+        """Return a private-dashboard event snapshot for SSE/bootstrap use."""
+        return self._realtime_event_rows(limit=limit, include_inactive=False)
+
+    def realtime_event_delta(self, seen_ids: set[str] | list[str] | tuple[str, ...] | dict[str, str], limit: int = 25) -> list[dict[str, Any]]:
+        """Poll the DB for new or changed memories and map them to Mnemosyne-style event types."""
+        seen_state = {str(k): str(v) for k, v in seen_ids.items()} if isinstance(seen_ids, dict) else {}
+        seen = set(seen_state) if seen_state else {str(item) for item in (seen_ids or []) if item}
         delta: list[dict[str, Any]] = []
-        for event in self.realtime_event_snapshot(limit=limit):
+        for event in self._realtime_event_rows(limit=limit, include_inactive=True):
             memory_id = str(event.get("memory_id") or "")
-            if not memory_id or memory_id in seen:
+            if not memory_id:
                 continue
             next_event = dict(event)
-            next_event["event_type"] = "MEMORY_ADDED"
+            if memory_id not in seen:
+                next_event["event_type"] = "MEMORY_CONSOLIDATED" if next_event.get("summary_of") else "MEMORY_ADDED"
+                delta.append(next_event)
+                continue
+            if not seen_state or seen_state.get(memory_id) == str(event.get("live_signature") or ""):
+                continue
+            if next_event.get("status") != "active":
+                next_event["event_type"] = "MEMORY_INVALIDATED"
+            elif int(next_event.get("recall_count") or 0) > 0 and next_event.get("last_recalled"):
+                next_event["event_type"] = "MEMORY_RECALLED"
+            else:
+                next_event["event_type"] = "MEMORY_UPDATED"
             delta.append(next_event)
         return delta
 
@@ -1351,6 +1397,61 @@ class DashboardStore:
                 "needs_review": sum(1 for row in all_items if row.get("needs_review")),
                 "sensitive": sum(1 for row in all_items if row.get("sensitive")),
                 "types": type_summary,
+            },
+        }
+
+    def pattern_insights(self, limit: int = 10) -> dict[str, Any]:
+        """Read-only recurring pattern summary from active memories and triples."""
+        limit = max(3, min(int(limit or 10), 30))
+        memories = self.list_memories(kind="all", status="active", sort="importance", limit=500)
+        triples = self.triples(limit=500)
+        topic_counts: Counter[str] = Counter()
+        entity_counts: Counter[str] = Counter()
+        source_counts: Counter[str] = Counter()
+        signals: list[dict[str, Any]] = []
+
+        for m in memories:
+            content = str(m.get("content") or "")
+            category = self._category_for_text(content)
+            topic_counts[category] += 1
+            source_counts[str(m.get("source") or m.get("memory_kind") or "unknown")] += 1
+            for entity in self._entity_terms(content, limit=5):
+                entity_counts[entity] += 1
+            if len(signals) < limit:
+                signals.append({
+                    "label": content[:160],
+                    "kind": "memory",
+                    "category": category,
+                    "source": m.get("source") or "",
+                    "memory_id": m.get("id"),
+                    "timestamp": m.get("timestamp") or m.get("created_at") or "",
+                })
+
+        for t in triples:
+            text = f"{t.get('subject')} {t.get('predicate')} {t.get('object')}"
+            category = self._category_for_text(text)
+            topic_counts[category] += 1
+            source_counts[str(t.get("source") or "triple")] += 1
+            for entity in [t.get("subject"), t.get("object")]:
+                label = str(entity or "").strip()
+                if label:
+                    entity_counts[label[:80]] += 1
+
+        def ranked(counter: Counter[str]) -> list[dict[str, Any]]:
+            return [{"label": k, "count": v} for k, v in counter.most_common(limit) if k]
+
+        return {
+            "read_only": True,
+            "generated_at": _utc_now(),
+            "topics": ranked(topic_counts),
+            "entities": ranked(entity_counts),
+            "sources": ranked(source_counts),
+            "signals": signals,
+            "summary": {
+                "indexed_memories": len(memories),
+                "indexed_triples": len(triples),
+                "topics": len(topic_counts),
+                "entities": len(entity_counts),
             },
         }
 

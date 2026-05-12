@@ -74,7 +74,18 @@ function meta(item, opts={}){
   return `<div class="meta"><span class="badge">${esc(kind)}</span><span class="badge status-${esc(status)}">${esc(status)}</span>${veracityBadge}${lifecycleBadge}<span class="badge">importance ${Number(item.importance ?? 0).toFixed(2)}</span>${scopeBadge}${sessionBadge}${timeBadge}</div>`;
 }
 function roleOf(content){ const m = String(content || '').match(/^\[(USER|ASSISTANT|SYSTEM)\]/i); return m ? m[1].toLowerCase() : ''; }
-function memoryItem(item, opts={}){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; const selectedSet = opts.selectedSet || bulkSelection; const checkClass = opts.checkClass || 'memory-check'; const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="${esc(checkClass)}" data-id="${esc(item.id)}" ${selectedSet.has(item.id) ? 'checked' : ''} /></label>` : ''; return `<div class="item ${role ? 'has-role' : ''} ${opts.selectable ? 'selectable' : ''}" data-id="${esc(item.id)}">${selectable}${meta(item)}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
+function liveEventMeta(item){
+  const eventType = String(item.live_event_type || item.event_type || '').toUpperCase();
+  const map = {
+    MEMORY_ADDED: ['new', 'new', 'live-badge-new'],
+    MEMORY_UPDATED: ['updated', 'updated', 'live-badge-updated'],
+    MEMORY_RECALLED: ['recalled', 'recalled', 'live-badge-recalled'],
+    MEMORY_INVALIDATED: ['invalidated', 'invalidated', 'live-badge-invalidated'],
+    MEMORY_CONSOLIDATED: ['consolidated', 'consolidated', 'live-badge-consolidated'],
+  };
+  return map[eventType] || ['', ''];
+}
+function memoryItem(item, opts={}){ const role = roleOf(item.content); const roleBadge = role ? `<span class="role role-${role}">${role}</span>` : ''; const selectedSet = opts.selectedSet || bulkSelection; const checkClass = opts.checkClass || 'memory-check'; const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="${esc(checkClass)}" data-id="${esc(item.id)}" ${selectedSet.has(item.id) ? 'checked' : ''} /></label>` : ''; const [liveClass, liveLabel, liveBadgeClass] = liveEventMeta(item); const liveBadge = liveLabel ? `<span class="badge live-badge ${esc(liveBadgeClass)}">${esc(liveLabel)}</span>` : ''; return `<div class="item memory-card ${role ? 'has-role' : ''} ${opts.selectable ? 'selectable' : ''} ${liveClass ? `live-${esc(liveClass)}` : ''}" data-id="${esc(item.id)}">${selectable}${meta(item)}${liveBadge}${roleBadge}<div class="content">${esc(item.content)}</div></div>`; }
 function canonicalTab(tab){
   if(tab === 'constellation') return 'visualiserlegacy';
   if(tab === 'visualiser3d') return 'visualiser';
@@ -473,9 +484,14 @@ function addLiveMemoryEvent(event){
     importance: event.importance ?? existing?.importance ?? 0,
     veracity: event.veracity || existing?.veracity || 'unknown',
     memory_kind: event.memory_kind || existing?.memory_kind || 'memory',
-    status: existing?.status || 'active',
+    status: event.status || existing?.status || 'active',
+    live_event_type: event.event_type || 'MEMORY_ADDED',
   };
-  liveMemoryItems = [item, ...liveMemoryItems.filter(existingItem => existingItem.id !== item.id)];
+  if(event.event_type === 'MEMORY_INVALIDATED'){
+    liveMemoryItems = liveMemoryItems.map(existingItem => existingItem.id === item.id ? item : existingItem);
+  } else {
+    liveMemoryItems = [item, ...liveMemoryItems.filter(existingItem => existingItem.id !== item.id)];
+  }
   renderLiveMemoryStream();
 }
 function renderRealtimeEvents(){
@@ -902,8 +918,22 @@ function profileItem(row){
     <div class="context-meta"><span>${esc(prettyTime(row.timestamp) || row.timestamp || '')}</span>${provenance}</div>
   </div>`;
 }
+function renderPatternChips(items=[]){
+  return items.length ? items.map(item => `<span class="pattern-chip"><strong>${esc(item.label)}</strong><em>${esc(item.count)}</em></span>`).join('') : '<span class="muted">No patterns yet.</span>';
+}
+function renderPatternSignals(items=[]){
+  return items.length ? items.slice(0,5).map(item => `<button class="pattern-signal" data-memory-id="${esc(item.memory_id || '')}"><span>${esc(item.category || item.kind || 'signal')}</span><strong>${esc(item.label || '')}</strong></button>`).join('') : '<p class="muted">No recurring signals yet.</p>';
+}
+async function loadPatternInsights(){
+  const data = await api('/api/patterns?limit=10');
+  $('#patternTopics').innerHTML = renderPatternChips(data.topics || []);
+  $('#patternEntities').innerHTML = renderPatternChips(data.entities || []);
+  $('#patternSources').innerHTML = renderPatternChips(data.sources || []);
+  $('#patternSignals').innerHTML = renderPatternSignals(data.signals || []);
+  $$('#patternSignals .pattern-signal[data-memory-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.memoryId));
+}
 async function loadProfile(){
-  const data = await api('/api/profile/inferred?limit=10');
+  const [data] = await Promise.all([api('/api/profile/inferred?limit=10'), loadPatternInsights()]);
   $('#profileGrid').innerHTML = `${contextSummary(data)}${(data.sections || []).map(s => `<section class="profile-section glass"><div class="section-head mini"><h2>${esc(contextLabel(s.name))}</h2><span>${esc(s.count)} active item${Number(s.count) === 1 ? '' : 's'}</span></div>${(s.items || []).map(profileItem).join('')}</section>`).join('') || '<p class="muted">No inferred profile data found.</p>'}`;
   $$('#profileGrid .profile-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
   $$('#profileGrid .profile-item[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail'));

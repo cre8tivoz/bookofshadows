@@ -472,6 +472,47 @@ def test_realtime_event_delta_detects_cross_process_db_writes(tmp_path):
     assert delta[0]['event_type'] == 'MEMORY_ADDED'
     assert delta[0]['content'] == 'Realtime DB polling test memory'
 
+def test_realtime_event_delta_detects_updates_recalls_invalidations_and_consolidations(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+    initial = store.realtime_event_snapshot(limit=25)
+    seen_state = {event['memory_id']: event['live_signature'] for event in initial}
+
+    con = sqlite3.connect(db)
+    con.execute("UPDATE working_memory SET content=?, timestamp=? WHERE id='w1'", ('YC strongly prefers local-only WhatsApp memory', '2026-05-12T23:55:00'))
+    con.execute("UPDATE working_memory SET recall_count=recall_count+1, last_recalled=? WHERE id='w2'", ('2026-05-12T23:56:00',))
+    con.execute("UPDATE working_memory SET superseded_by=? WHERE id='w3'", ('w3-new',))
+    con.execute("INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,summary_of,veracity) VALUES (?,?,?,?,?,?,?,?,?)",
+                ('e-live-consolidated','Consolidated dashboard memory activity','consolidation','2026-05-12T23:57:00','s6',0.6,'session','w4','tool'))
+    con.commit()
+    con.close()
+
+    delta = store.realtime_event_delta(seen_ids=seen_state, limit=25)
+    by_id = {event['memory_id']: event for event in delta}
+
+    assert by_id['w1']['event_type'] == 'MEMORY_UPDATED'
+    assert by_id['w2']['event_type'] == 'MEMORY_RECALLED'
+    assert by_id['w3']['event_type'] == 'MEMORY_INVALIDATED'
+    assert by_id['e-live-consolidated']['event_type'] == 'MEMORY_CONSOLIDATED'
+    assert by_id['w3']['status'] == 'superseded'
+    assert all('metadata_json' not in event for event in delta)
+
+
+def test_pattern_insights_surface_recurring_topics_entities_and_sources(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    insights = store.pattern_insights(limit=5)
+
+    assert insights['read_only'] is True
+    assert insights['summary']['indexed_memories'] >= 1
+    assert any(item['label'] == 'Privacy rules' for item in insights['topics'])
+    assert any(item['label'] == 'YC' for item in insights['entities'])
+    assert any(item['label'] == 'preference' for item in insights['sources'])
+    assert insights['signals']
+
 def test_realtime_event_snapshot_orders_newest_first(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
@@ -684,6 +725,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="liveMemoryLoadMore"' not in html
     assert 'id="liveMemorySentinel"' in html
     assert 'id="liveMemoryStatus"' in html
+    assert 'id="patternInsights"' in html
+    assert 'id="patternTopics"' in html
+    assert 'id="patternEntities"' in html
+    assert 'id="patternSignals"' in html
     assert 'LIVE_MEMORY_PAGE_SIZE = 25' in js
     assert 'loadLiveMemoryStream(false)' in js
     assert 'loadLiveMemoryStream(true)' in js
@@ -709,6 +754,15 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '.settings-card .item-actions{margin-top:18px}' in css
     assert 'loadRealtimePanel' in js
     assert "section==='settings'" in js
+    assert '/api/patterns' in js
+    assert 'loadPatternInsights' in js
+    assert 'renderPatternChips' in js
+    assert 'live-badge-new' in js
+    assert 'live-badge-updated' in js
+    assert 'live-badge-recalled' in js
+    assert 'live-badge-invalidated' in js
+    assert 'live-badge-consolidated' in js
+    assert 'liveEventMeta' in js
     assert 'realtimeStatusCards' not in html
     assert 'realtimeEventFeed' not in html
     assert 'realtimePauseToggle' not in html
@@ -727,6 +781,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/static/style.css?v=stream-v2' in html
     assert 'stateHtml' in js
     assert 'state-empty' in css
+    assert '.memory-card.live-new' in css
+    assert '@keyframes liveGlow' in css
+    assert '.live-badge-new' in css
+    assert '.pattern-grid' in css
     assert 'state-loading' in css
     assert 'state-error' in css
     assert 'Search results for' in js

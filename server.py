@@ -105,18 +105,18 @@ class Handler(BaseHTTPRequestHandler):
         try:
             status = self.store.realtime_status()
             write_event("status", status)
-            seen_ids: set[str] = set()
+            seen_ids: dict[str, str] = {}
             poll_limit = max(25, int(status.get("snapshot_event_count") or 25))
             for event in events:
                 memory_id = str(event.get("memory_id") or "")
                 if memory_id:
-                    seen_ids.add(memory_id)
+                    seen_ids[memory_id] = str(event.get("live_signature") or "")
                 write_event("memory", event)
             for tick in range(900):
                 for event in self.store.realtime_event_delta(seen_ids=seen_ids, limit=poll_limit):
                     memory_id = str(event.get("memory_id") or "")
                     if memory_id:
-                        seen_ids.add(memory_id)
+                        seen_ids[memory_id] = str(event.get("live_signature") or "")
                     write_event("memory", event)
                 if tick % 8 == 0:
                     write_event("heartbeat", {"ok": True, "ts": time.time()})
@@ -247,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(self.store.lifecycle_dashboard(limit=_safe_int(q.get("limit"), 50, maximum=200)))
             if path == "/api/profile/inferred":
                 return self._send_json(self.store.inferred_profile(limit_per_section=_safe_int(q.get("limit"), 10, maximum=30)))
+            if path == "/api/patterns":
+                return self._send_json(self.store.pattern_insights(limit=_safe_int(q.get("limit"), 10, maximum=30)))
             if path == "/api/constellation":
                 return self._send_json(self.store.constellation(limit=_safe_int(q.get("limit"), 240, minimum=40, maximum=600)))
             if path == "/api/search":
