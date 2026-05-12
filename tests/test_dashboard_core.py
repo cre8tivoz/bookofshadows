@@ -678,6 +678,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/static/style.css?v=realtime-v1' in html
     assert 'realtime-event' in css
     assert 'realtime-page-grid' in css
+    assert '.realtime-panel>.item-actions' in css
+    assert 'margin:14px 0 18px' in css
+    assert '#realtimeEventFeed' in css
+    assert 'margin-top:18px' in css
+    assert '.realtime-panel .section-head.mini' in css
     assert 'stateHtml' in js
     assert 'state-empty' in css
     assert 'state-loading' in css
