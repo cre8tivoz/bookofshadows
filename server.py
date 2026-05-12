@@ -103,12 +103,24 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
-            write_event("status", self.store.realtime_status())
+            status = self.store.realtime_status()
+            write_event("status", status)
+            seen_ids: set[str] = set()
+            poll_limit = max(25, int(status.get("snapshot_event_count") or 25))
             for event in events:
+                memory_id = str(event.get("memory_id") or "")
+                if memory_id:
+                    seen_ids.add(memory_id)
                 write_event("memory", event)
-            for _ in range(120):
-                write_event("heartbeat", {"ok": True, "ts": time.time()})
-                time.sleep(15)
+            for tick in range(900):
+                for event in self.store.realtime_event_delta(seen_ids=seen_ids, limit=poll_limit):
+                    memory_id = str(event.get("memory_id") or "")
+                    if memory_id:
+                        seen_ids.add(memory_id)
+                    write_event("memory", event)
+                if tick % 8 == 0:
+                    write_event("heartbeat", {"ok": True, "ts": time.time()})
+                time.sleep(2)
         except (BrokenPipeError, ConnectionResetError):
             return
 

@@ -452,6 +452,26 @@ def test_realtime_event_snapshot_includes_private_dashboard_content_but_not_meta
 
 
 
+
+def test_realtime_event_delta_detects_cross_process_db_writes(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+    initial = store.realtime_event_snapshot(limit=25)
+    seen = {event['memory_id'] for event in initial}
+
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,veracity) VALUES (?,?,?,?,?,?,?,?)",
+                ('w-live','Realtime DB polling test memory','test','2026-05-12T23:59:59','s-live',0.8,'global','tool'))
+    con.commit()
+    con.close()
+
+    delta = store.realtime_event_delta(seen_ids=seen, limit=25)
+
+    assert [event['memory_id'] for event in delta] == ['w-live']
+    assert delta[0]['event_type'] == 'MEMORY_ADDED'
+    assert delta[0]['content'] == 'Realtime DB polling test memory'
+
 def test_realtime_event_snapshot_orders_newest_first(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)

@@ -251,6 +251,19 @@ class DashboardStore:
         events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
         return events[:limit]
 
+    def realtime_event_delta(self, seen_ids: set[str] | list[str] | tuple[str, ...], limit: int = 25) -> list[dict[str, Any]]:
+        """Poll the DB for newly visible memories not yet sent over the dashboard SSE stream."""
+        seen = {str(item) for item in (seen_ids or []) if item}
+        delta: list[dict[str, Any]] = []
+        for event in self.realtime_event_snapshot(limit=limit):
+            memory_id = str(event.get("memory_id") or "")
+            if not memory_id or memory_id in seen:
+                continue
+            next_event = dict(event)
+            next_event["event_type"] = "MEMORY_ADDED"
+            delta.append(next_event)
+        return delta
+
     def diagnostics(self) -> dict[str, Any]:
         path = self.db_path.expanduser()
         info: dict[str, Any] = {
