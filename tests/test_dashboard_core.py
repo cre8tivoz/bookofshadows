@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.11.3'
+    assert project_version == '0.11.4'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -511,7 +511,7 @@ def test_pattern_insights_surface_recurring_topics_entities_and_sources(tmp_path
     assert any(item['label'] == 'Privacy rules' for item in insights['topics'])
     assert any(item['label'] == 'YC' for item in insights['entities'])
     assert any(item['label'] == 'preference' for item in insights['sources'])
-    assert insights['signals']
+    assert insights['signals'] == []
 
 def test_realtime_event_snapshot_orders_newest_first(tmp_path):
     db = tmp_path / 'mnemosyne.db'
@@ -739,7 +739,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="patternInsights"' in html
     assert 'id="patternTopics"' in html
     assert 'id="patternEntities"' in html
-    assert 'id="patternSignals"' in html
+    assert 'id="patternSignals"' not in html
+    assert 'renderPatternSignals' not in js
+    assert 'pattern-signal' not in js
     assert 'LIVE_MEMORY_PAGE_SIZE = 25' in js
     assert 'loadLiveMemoryStream(false)' in js
     assert 'loadLiveMemoryStream(true)' in js

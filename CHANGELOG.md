@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.4
+
+- Remove one-off source memory cards from Pattern insights so the panel only shows aggregate recurring topics, entities, and sources.
+
 ## 0.11.3
 
 - Remove the confusing Overview Memory stream diagnostics card; realtime diagnostics remain in Settings.

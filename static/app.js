@@ -903,16 +903,11 @@ function profileItem(row){
 function renderPatternChips(items=[]){
   return items.length ? items.map(item => `<span class="pattern-chip"><strong>${esc(item.label)}</strong><em>${esc(item.count)}</em></span>`).join('') : '<span class="muted">No patterns yet.</span>';
 }
-function renderPatternSignals(items=[]){
-  return items.length ? items.slice(0,5).map(item => `<button class="pattern-signal" data-memory-id="${esc(item.memory_id || '')}"><span>${esc(item.category || item.kind || 'signal')}</span><strong>${esc(item.label || '')}</strong></button>`).join('') : '<p class="muted">No recurring signals yet.</p>';
-}
 async function loadPatternInsights(){
   const data = await api('/api/patterns?limit=10');
   $('#patternTopics').innerHTML = renderPatternChips(data.topics || []);
   $('#patternEntities').innerHTML = renderPatternChips(data.entities || []);
   $('#patternSources').innerHTML = renderPatternChips(data.sources || []);
-  $('#patternSignals').innerHTML = renderPatternSignals(data.signals || []);
-  $$('#patternSignals .pattern-signal[data-memory-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.memoryId));
 }
 async function loadProfile(){
   const [data] = await Promise.all([api('/api/profile/inferred?limit=10'), loadPatternInsights()]);

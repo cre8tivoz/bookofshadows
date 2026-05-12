@@ -1408,7 +1408,6 @@ class DashboardStore:
         topic_counts: Counter[str] = Counter()
         entity_counts: Counter[str] = Counter()
         source_counts: Counter[str] = Counter()
-        signals: list[dict[str, Any]] = []
 
         for m in memories:
             content = str(m.get("content") or "")
@@ -1417,15 +1416,6 @@ class DashboardStore:
             source_counts[str(m.get("source") or m.get("memory_kind") or "unknown")] += 1
             for entity in self._entity_terms(content, limit=5):
                 entity_counts[entity] += 1
-            if len(signals) < limit:
-                signals.append({
-                    "label": content[:160],
-                    "kind": "memory",
-                    "category": category,
-                    "source": m.get("source") or "",
-                    "memory_id": m.get("id"),
-                    "timestamp": m.get("timestamp") or m.get("created_at") or "",
-                })
 
         for t in triples:
             text = f"{t.get('subject')} {t.get('predicate')} {t.get('object')}"
@@ -1446,7 +1436,7 @@ class DashboardStore:
             "topics": ranked(topic_counts),
             "entities": ranked(entity_counts),
             "sources": ranked(source_counts),
-            "signals": signals,
+            "signals": [],
             "summary": {
                 "indexed_memories": len(memories),
                 "indexed_triples": len(triples),
