@@ -208,7 +208,7 @@ class DashboardStore:
             "db_modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(timespec="seconds") if stat else "",
             "snapshot_event_count": len(self.realtime_event_snapshot(limit=25)) if path.exists() else 0,
             "transport": "sse",
-            "payload_policy": "sanitized metadata only; memory content and metadata_json are not streamed",
+            "payload_policy": "private dashboard payload; memory content is streamed to authenticated dashboard clients, metadata_json is withheld",
         }
 
     def realtime_event_snapshot(self, limit: int = 25) -> list[dict[str, Any]]:
@@ -227,7 +227,7 @@ class DashboardStore:
                 importance_expr = "COALESCE(importance, 0)" if "importance" in columns else "0"
                 rows = con.execute(
                     f"""
-                    SELECT id, {source_expr} AS source, {timestamp_expr} AS timestamp,
+                    SELECT id, content, {source_expr} AS source, {timestamp_expr} AS timestamp,
                            {importance_expr} AS importance, {veracity_expr} AS veracity
                     FROM {table}
                     WHERE (valid_until IS NULL OR valid_until > ?) AND superseded_by IS NULL
@@ -242,6 +242,7 @@ class DashboardStore:
                         "event_type": "MEMORY_SNAPSHOT",
                         "memory_id": d.get("id"),
                         "memory_kind": memory_kind,
+                        "content": d.get("content") or "",
                         "source": d.get("source") or "",
                         "timestamp": d.get("timestamp") or "",
                         "importance": float(d.get("importance") or 0),

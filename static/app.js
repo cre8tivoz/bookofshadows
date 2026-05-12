@@ -410,9 +410,15 @@ function renderRealtimeEvents(){
     const label = ev.event_type || 'MEMORY_EVENT';
     const when = ev.timestamp ? prettyTime(ev.timestamp) : 'just now';
     const source = ev.source ? `<span class="badge">${esc(ev.source)}</span>` : '';
-    return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || '')}"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || 'unknown'))}</span><span class="badge trust-${esc(ev.veracity || 'unknown')}">${esc(ev.veracity || 'unknown')}</span>${source}<span class="meta-time">${esc(when)}</span></div></div>`;
-  }).join('') : '<div class="state-empty">Waiting for sanitized memory events…</div>';
-  feeds.forEach(feed => { feed.innerHTML = html; });
+    return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || '')}" tabindex="0" role="button"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || 'unknown'))}</span><span class="badge trust-${esc(ev.veracity || 'unknown')}">${esc(ev.veracity || 'unknown')}</span>${source}<span class="meta-time">${esc(when)}</span></div><div class="content realtime-content">${esc(ev.content || '')}</div></div>`;
+  }).join('') : '<div class="state-empty">Waiting for memory events…</div>';
+  feeds.forEach(feed => {
+    feed.innerHTML = html;
+    feed.querySelectorAll('.realtime-event').forEach(row => {
+      row.onclick = () => openMemoryDetail(row.dataset.memoryId || '');
+      row.onkeydown = e => { if(e.key === 'Enter' || e.key === ' ') openMemoryDetail(row.dataset.memoryId || ''); };
+    });
+  });
 }
 function renderRealtimePanel(){
   const status = realtimeState.status || {};

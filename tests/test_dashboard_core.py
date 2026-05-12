@@ -437,18 +437,18 @@ def test_realtime_status_detects_mnemosyne_streaming_and_deltasync(tmp_path):
     assert 'posting_credential' not in str(status)
 
 
-def test_realtime_event_snapshot_is_sanitized_and_content_free(tmp_path):
+def test_realtime_event_snapshot_includes_private_dashboard_content_but_not_metadata_json(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
-    events = DashboardStore(db).realtime_event_snapshot(limit=3)
+    events = DashboardStore(db).realtime_event_snapshot(limit=6)
 
     assert events
     assert all(event['event_type'] == 'MEMORY_SNAPSHOT' for event in events)
-    assert all('content' not in event for event in events)
-    assert all('metadata_json' not in event for event in events)
     assert all(event['memory_id'] for event in events)
     assert all(event['memory_kind'] in {'working', 'episodic'} for event in events)
-    assert 'YC prefers local-only WhatsApp memory' not in str(events)
+    assert all('content' in event for event in events)
+    assert 'YC prefers local-only WhatsApp memory' in str(events)
+    assert all('metadata_json' not in event for event in events)
 
 def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     html = (ROOT / 'static' / 'index.html').read_text()
@@ -653,6 +653,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'toggleLiveUpdates' in js
     assert 'loadRealtimePanel' in js
     assert "section==='realtime'" in js
+    assert 'openMemoryDetail(row.dataset.memoryId' in js
+    assert 'Raw memory content is shown because this dashboard is private' in html
+    assert 'metadata-only SSE' not in html
     assert '/static/app.js?v=realtime-v1' in html
     assert '/static/style.css?v=realtime-v1' in html
     assert 'realtime-event' in css
