@@ -351,3 +351,14 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
   .realtime-panel>.item-actions button{width:100%;min-height:46px;border-radius:16px}
   #realtimeEventFeed{margin-top:20px;padding-top:14px}
 }
+
+/* Settings page card spacing and IA order polish */
+.settings-grid{display:flex;flex-direction:column;gap:22px;align-items:stretch}
+.settings-card{padding:24px;border-radius:22px}
+.settings-card>*+*{margin-top:14px}
+.settings-card .item-actions{margin-top:18px}
+.settings-card .diag-grid,.settings-card .realtime-deltasync{margin-top:16px}
+@media(max-width:760px),(max-width:940px) and (max-height:520px){
+  .settings-grid{display:flex;flex-direction:column;gap:18px}
+  .settings-card{padding:18px;border-radius:20px}
+}

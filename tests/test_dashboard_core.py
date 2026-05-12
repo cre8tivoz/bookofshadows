@@ -691,6 +691,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "bindMemoryClicks($('#liveMemoryStream'))" in js
     assert 'id="settingsDeltaSync"' in html
     assert 'Sync diagnostics' in html
+    settings_order = ['Password auth', 'Server + database', 'Memory maintenance', 'Database diagnostics', 'Sync diagnostics']
+    settings_section = html[html.index('<section id="settings"'):html.index('</section>', html.index('<section id="settings"'))]
+    assert [settings_section.index(label) for label in settings_order] == sorted(settings_section.index(label) for label in settings_order)
+    assert '.settings-grid{display:flex;flex-direction:column;gap:22px' in css
+    assert '.settings-card{padding:24px' in css
+    assert '.settings-card>*+*{margin-top:14px}' in css
+    assert '.settings-card .item-actions{margin-top:18px}' in css
     assert 'loadRealtimePanel' in js
     assert "section==='settings'" in js
     assert 'realtimeStatusCards' not in html

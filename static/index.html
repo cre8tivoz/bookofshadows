@@ -347,6 +347,14 @@
           <div class="section-head"><h2>Settings</h2><span>access control</span></div>
           <div class="settings-grid">
             <div class="glass settings-card">
+              <div class="breakdown-title">Password auth</div>
+              <p class="muted">Optional. If enabled, users must enter the password before API data loads. Required for memory admin mode when the dashboard is exposed on LAN/non-local hosts.</p>
+              <label class="check-row"><input id="authEnabled" type="checkbox" /> Enable password</label>
+              <input id="authPassword" type="password" placeholder="Set / change password" />
+              <div class="item-actions"><button id="saveAuth" class="primary">Save auth settings</button><button id="clearAuth">Disable + clear password</button><button id="logoutAuth">Logout</button></div>
+              <p id="authStatus" class="muted"></p>
+            </div>
+            <div class="glass settings-card">
               <div class="breakdown-title">Server + database</div>
               <p class="muted">Controls where the dashboard binds and which Mnemosyne SQLite database it reads. Save here, then restart the dashboard for host, port, or database path changes to take effect.</p>
               <label class="field-label" for="configHost">Address / host</label>
@@ -359,6 +367,14 @@
               <div class="item-actions"><button id="saveRuntimeConfig" class="primary">Save server settings</button></div>
               <p id="configStatus" class="muted"></p>
             </div>
+            <div class="glass settings-card danger-card">
+              <div class="breakdown-title">Memory maintenance</div>
+              <p class="muted">Safe correction actions for the agent brain. Bulk actions are allowed only for selected active memories. This enables expire, supersede, trust/veracity, expiry, and importance edits only — no lifecycle-tier edits, raw content overwrite, or hard delete.</p>
+              <label class="check-row"><input id="memoryAdminEnabled" type="checkbox" /> Enable admin maintenance mode</label>
+              <label class="check-row"><input id="backupBeforeMutation" type="checkbox" checked /> Backup database before every mutation</label>
+              <div class="item-actions"><button id="saveMemoryAdmin" class="primary">Save admin mode</button><button id="createBackup">Create backup now</button><button id="viewAuditLog">View audit log</button></div>
+              <p id="memoryAdminStatus" class="muted"></p>
+            </div>
             <div class="glass settings-card">
               <div class="breakdown-title">Database diagnostics</div>
               <p class="muted">Install health check for the configured Mnemosyne SQLite database.</p>
@@ -367,25 +383,9 @@
               <p id="diagnosticsStatus" class="muted"></p>
             </div>
             <div class="glass settings-card">
-              <div class="breakdown-title">Password auth</div>
-              <p class="muted">Optional. If enabled, users must enter the password before API data loads. Required for memory admin mode when the dashboard is exposed on LAN/non-local hosts.</p>
-              <label class="check-row"><input id="authEnabled" type="checkbox" /> Enable password</label>
-              <input id="authPassword" type="password" placeholder="Set / change password" />
-              <div class="item-actions"><button id="saveAuth" class="primary">Save auth settings</button><button id="clearAuth">Disable + clear password</button><button id="logoutAuth">Logout</button></div>
-              <p id="authStatus" class="muted"></p>
-            </div>
-            <div class="glass settings-card">
               <div class="breakdown-title">Sync diagnostics</div>
               <p class="muted">Read-only Mnemosyne streaming and DeltaSync readiness. Useful for debugging future multi-machine sync, not daily memory browsing.</p>
               <div id="settingsDeltaSync" class="realtime-deltasync"></div>
-            </div>
-            <div class="glass settings-card danger-card">
-              <div class="breakdown-title">Memory maintenance</div>
-              <p class="muted">Safe correction actions for the agent brain. Bulk actions are allowed only for selected active memories. This enables expire, supersede, trust/veracity, expiry, and importance edits only — no lifecycle-tier edits, raw content overwrite, or hard delete.</p>
-              <label class="check-row"><input id="memoryAdminEnabled" type="checkbox" /> Enable admin maintenance mode</label>
-              <label class="check-row"><input id="backupBeforeMutation" type="checkbox" checked /> Backup database before every mutation</label>
-              <div class="item-actions"><button id="saveMemoryAdmin" class="primary">Save admin mode</button><button id="createBackup">Create backup now</button><button id="viewAuditLog">View audit log</button></div>
-              <p id="memoryAdminStatus" class="muted"></p>
             </div>
           </div>
         </section>
