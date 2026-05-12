@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.11.4'
+    assert project_version == '0.12.0'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -508,9 +508,15 @@ def test_pattern_insights_surface_recurring_topics_entities_and_sources(tmp_path
 
     assert insights['read_only'] is True
     assert insights['summary']['indexed_memories'] >= 1
+    assert all(item['label'] != 'Other' for item in insights['topics'])
+    assert any(item['label'] == 'Unclassified' for item in insights['topics'])
     assert any(item['label'] == 'Privacy rules' for item in insights['topics'])
     assert any(item['label'] == 'YC' for item in insights['entities'])
-    assert any(item['label'] == 'preference' for item in insights['sources'])
+    assert any(item['label'] == 'Privacy rule' for item in insights['memory_types'])
+    assert any(item['label'] == 'Relationship' for item in insights['memory_types'])
+    assert any(item['label'] == 'Direct memory' for item in insights['origins'])
+    assert all(item['label'] not in {'USER', 'ASSISTANT', 'API'} for item in insights['entities'])
+    assert insights['hidden_noise_terms'] >= 0
     assert insights['signals'] == []
 
 def test_realtime_event_snapshot_orders_newest_first(tmp_path):
@@ -739,6 +745,17 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="patternInsights"' in html
     assert 'id="patternTopics"' in html
     assert 'id="patternEntities"' in html
+    assert 'id="patternOrigins"' in html
+    assert 'id="patternTypes"' in html
+    assert 'id="patternSummary"' in html
+    assert 'renderPatternBars' in js
+    assert 'applyPatternFilter' in js
+    assert 'data-pattern-kind' in js
+    assert 'pattern-bar' in js
+    assert '.pattern-bar-fill' in css
+    assert '.pattern-summary' in css
+    assert 'Memory types' in html
+    assert 'Origins' in html
     assert 'id="patternSignals"' not in html
     assert 'renderPatternSignals' not in js
     assert 'pattern-signal' not in js

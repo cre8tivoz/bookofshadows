@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0
+
+- Upgrade Pattern insights into clickable horizontal bar charts with summary stats.
+- Rename `Other` topics to `Unclassified` and hide noisy entity terms such as dates, generic system roles, API labels, and ID-like tokens.
+- Split source-style aggregates into clearer `Origins` and `Memory types` panels.
+
 ## 0.11.4
 
 - Remove one-off source memory cards from Pattern insights so the panel only shows aggregate recurring topics, entities, and sources.

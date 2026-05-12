@@ -1400,48 +1400,102 @@ class DashboardStore:
             },
         }
 
+    @staticmethod
+    def _pattern_origin_label(source: object, kind: str = "memory") -> str:
+        raw = str(source or "").strip().lower()
+        if kind == "triple" or raw == "triple":
+            return "Knowledge graph"
+        if not raw or raw in {"preference", "fact", "health", "task", "memory"}:
+            return "Direct memory"
+        if "hindsight" in raw:
+            return "Hindsight"
+        if "regex" in raw or "rule" in raw:
+            return "Rule extraction"
+        if "import" in raw or "migration" in raw:
+            return "Migration"
+        if "infer" in raw or "assistant" in raw or "agent" in raw:
+            return "Agent inference"
+        return raw.replace("_", " ").replace("-", " ").title()
+
+    @staticmethod
+    def _pattern_entity_is_noise(label: str) -> bool:
+        text = str(label or "").strip()
+        upper = text.upper()
+        if not text:
+            return True
+        if upper in {"USER", "ASSISTANT", "SYSTEM", "API", "HTTP", "HTTPS", "JSON", "SQL", "CLI"}:
+            return True
+        if re.fullmatch(r"20\d{2}[-/]\d{2}[-/]\d{2}(?:T.*)?", text):
+            return True
+        if re.fullmatch(r"[0-9a-fA-F]{6,}", text):
+            return True
+        if re.fullmatch(r"[A-Z0-9_]{8,}", text) and any(ch.isdigit() for ch in text):
+            return True
+        return False
+
     def pattern_insights(self, limit: int = 10) -> dict[str, Any]:
-        """Read-only recurring pattern summary from active memories and triples."""
+        """Read-only aggregate recurring pattern summary from active memories and triples."""
         limit = max(3, min(int(limit or 10), 30))
         memories = self.list_memories(kind="all", status="active", sort="importance", limit=500)
         triples = self.triples(limit=500)
         topic_counts: Counter[str] = Counter()
         entity_counts: Counter[str] = Counter()
-        source_counts: Counter[str] = Counter()
+        origin_counts: Counter[str] = Counter()
+        memory_type_counts: Counter[str] = Counter()
+        hidden_noise_terms = 0
 
         for m in memories:
             content = str(m.get("content") or "")
             category = self._category_for_text(content)
-            topic_counts[category] += 1
-            source_counts[str(m.get("source") or m.get("memory_kind") or "unknown")] += 1
+            topic_counts["Unclassified" if category == "Other" else category] += 1
+            origin_counts[self._pattern_origin_label(m.get("source"), "memory")] += 1
+            context_type, _ = self._context_type(content, category, "memory")
+            memory_type_counts[context_type] += 1
             for entity in self._entity_terms(content, limit=5):
+                if self._pattern_entity_is_noise(entity):
+                    hidden_noise_terms += 1
+                    continue
                 entity_counts[entity] += 1
 
         for t in triples:
             text = f"{t.get('subject')} {t.get('predicate')} {t.get('object')}"
             category = self._category_for_text(text)
-            topic_counts[category] += 1
-            source_counts[str(t.get("source") or "triple")] += 1
+            topic_counts["Unclassified" if category == "Other" else category] += 1
+            origin_counts[self._pattern_origin_label(t.get("source"), "triple")] += 1
+            memory_type_counts["Relationship"] += 1
             for entity in [t.get("subject"), t.get("object")]:
-                label = str(entity or "").strip()
-                if label:
-                    entity_counts[label[:80]] += 1
+                label = str(entity or "").strip()[:80]
+                if not label:
+                    continue
+                if self._pattern_entity_is_noise(label):
+                    hidden_noise_terms += 1
+                    continue
+                entity_counts[label] += 1
 
         def ranked(counter: Counter[str]) -> list[dict[str, Any]]:
-            return [{"label": k, "count": v} for k, v in counter.most_common(limit) if k]
+            total = sum(counter.values()) or 1
+            return [
+                {"label": k, "count": v, "percent": round((v / total) * 100, 1), "query": "" if k == "Unclassified" else k}
+                for k, v in counter.most_common(limit)
+                if k
+            ]
 
         return {
             "read_only": True,
             "generated_at": _utc_now(),
             "topics": ranked(topic_counts),
             "entities": ranked(entity_counts),
-            "sources": ranked(source_counts),
+            "origins": ranked(origin_counts),
+            "memory_types": ranked(memory_type_counts),
+            "sources": ranked(origin_counts),
+            "hidden_noise_terms": hidden_noise_terms,
             "signals": [],
             "summary": {
                 "indexed_memories": len(memories),
                 "indexed_triples": len(triples),
                 "topics": len(topic_counts),
                 "entities": len(entity_counts),
+                "hidden_noise_terms": hidden_noise_terms,
             },
         }
 

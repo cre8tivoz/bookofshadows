@@ -900,14 +900,49 @@ function profileItem(row){
     <div class="context-meta"><span>${esc(prettyTime(row.timestamp) || row.timestamp || '')}</span>${provenance}</div>
   </div>`;
 }
-function renderPatternChips(items=[]){
-  return items.length ? items.map(item => `<span class="pattern-chip"><strong>${esc(item.label)}</strong><em>${esc(item.count)}</em></span>`).join('') : '<span class="muted">No patterns yet.</span>';
+function patternSummary(data={}){
+  const s = data.summary || {};
+  const items = [
+    ['Memories scanned', s.indexed_memories || 0],
+    ['Triples scanned', s.indexed_triples || 0],
+    ['Topics found', s.topics || 0],
+    ['Noisy terms hidden', data.hidden_noise_terms || s.hidden_noise_terms || 0],
+  ];
+  return items.map(([label,value]) => `<div><span>${esc(label)}</span><strong>${Number(value || 0).toLocaleString()}</strong></div>`).join('');
+}
+function renderPatternBars(items=[], kind='pattern'){
+  if(!items.length) return '<span class="muted">No patterns yet.</span>';
+  const max = Math.max(...items.map(item => Number(item.count || 0)), 1);
+  return items.map(item => {
+    const count = Number(item.count || 0);
+    const pct = Math.max(5, Math.round((count / max) * 100));
+    const query = item.query ?? item.label ?? '';
+    return `<button class="pattern-bar" data-pattern-kind="${esc(kind)}" data-pattern-query="${esc(query)}" title="Filter memories for ${esc(item.label || '')}"><span class="pattern-bar-fill" style="width:${pct}%"></span><span class="pattern-bar-label">${esc(item.label || '')}</span><strong>${count.toLocaleString()}</strong></button>`;
+  }).join('');
+}
+function renderPatternChips(items=[]){ return renderPatternBars(items); }
+function applyPatternFilter(kind='', query=''){
+  switchTab('memories');
+  $('#memoryKind').value = 'all';
+  $('#memoryStatus').value = 'active';
+  $('#memorySort').value = 'importance';
+  $('#memorySource').value = '';
+  $('#memoryScope').value = '';
+  $('#memorySession').value = '';
+  $('#memoryVeracity').value = '';
+  $('#memoryDegradation').value = '';
+  $('#memoryTrustPreset').value = '';
+  $('#memoryQuery').value = query || '';
+  loadMemories();
 }
 async function loadPatternInsights(){
   const data = await api('/api/patterns?limit=10');
-  $('#patternTopics').innerHTML = renderPatternChips(data.topics || []);
-  $('#patternEntities').innerHTML = renderPatternChips(data.entities || []);
-  $('#patternSources').innerHTML = renderPatternChips(data.sources || []);
+  $('#patternSummary').innerHTML = patternSummary(data);
+  $('#patternTopics').innerHTML = renderPatternBars(data.topics || [], 'topic');
+  $('#patternEntities').innerHTML = renderPatternBars(data.entities || [], 'entity');
+  $('#patternOrigins').innerHTML = renderPatternBars(data.origins || data.sources || [], 'origin');
+  $('#patternTypes').innerHTML = renderPatternBars(data.memory_types || [], 'type');
+  $$('#patternInsights .pattern-bar').forEach(el => el.onclick = () => applyPatternFilter(el.dataset.patternKind || '', el.dataset.patternQuery || ''));
 }
 async function loadProfile(){
   const [data] = await Promise.all([api('/api/profile/inferred?limit=10'), loadPatternInsights()]);
