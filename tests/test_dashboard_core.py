@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.11.2'
+    assert project_version == '0.11.3'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -725,6 +725,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Realtime</button>' not in html
     assert 'Recent memories' not in html
     assert 'id="recent"' not in html
+    assert 'id="liveStatusCard"' not in html
+    assert 'id="liveStatus"' not in html
+    assert '<div class="status-label">Memory stream</div>' not in html
+    assert 'snapshot events' not in js
+    assert 'live ready' not in js
+    assert 'poll fallback' not in js
+    assert 'realtimeStatusLabel' not in js
     assert 'id="liveMemoryStream"' in html
     assert 'id="liveMemoryLoadMore"' not in html
     assert 'id="liveMemorySentinel"' in html

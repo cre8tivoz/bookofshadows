@@ -400,22 +400,8 @@ async function loadStats(){
   bindBreakdownClicks();
   loadLiveMemoryStream(false);
 }
-function realtimeStatusLabel(status){
-  if(realtimeState.paused) return 'paused';
-  if(!status) return 'connecting…';
-  const version = status.mnemosyne_version && status.mnemosyne_version !== 'unknown' ? ` · Mnemosyne ${status.mnemosyne_version}` : '';
-  const mode = status.streaming_supported ? 'live ready' : 'poll fallback';
-  return `${mode}${version} · ${status.snapshot_event_count || 0} snapshot events`;
-}
-function renderRealtimeStatus(status=realtimeState.status){
-  const el = $('#liveStatus');
-  if(!el) return;
-  el.classList.remove('state-loading','state-error','state-empty');
-  if(realtimeState.paused) el.classList.add('state-empty');
-  else if(!status) el.classList.add('state-loading');
-  el.textContent = realtimeStatusLabel(status);
-  const toggle = $('#livePauseToggle');
-  if(toggle) toggle.textContent = realtimeState.paused ? 'Resume live' : 'Pause live';
+function renderRealtimeStatus(){
+  // Realtime diagnostics belong in Settings, not the Overview hero.
 }
 function sortRealtimeEventsNewestFirst(events){
   return [...events].sort((a,b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0));
@@ -552,8 +538,6 @@ async function initRealtime(){
     renderRealtimeStatus();
     renderRealtimeEvents();
   } catch(e) {
-    const el = $('#liveStatus');
-    if(el){ el.textContent = `realtime unavailable: ${e.message}`; el.classList.add('state-error'); }
     return;
   }
   if(!('EventSource' in window)) return;
@@ -562,8 +546,6 @@ async function initRealtime(){
   realtimeState.source = source;
   source.addEventListener('status', e => { realtimeState.status = JSON.parse(e.data); renderRealtimeStatus(); });
   source.addEventListener('memory', e => addRealtimeEvent(JSON.parse(e.data)));
-  source.addEventListener('heartbeat', () => renderRealtimeStatus());
-  source.onerror = () => { if(!realtimeState.paused){ const el = $('#liveStatus'); if(el){ el.textContent = 'reconnecting…'; el.classList.add('state-loading'); } } };
 }
 function bindBreakdownClicks(){
   $$('#sourceBreakdown .break-row').forEach(row => row.onclick = () => { $('#memorySource').value = row.dataset.filter || ''; switchTab('memories'); });

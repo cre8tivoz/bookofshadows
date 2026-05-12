@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.3
+
+- Remove the confusing Overview Memory stream diagnostics card; realtime diagnostics remain in Settings.
+
 ## 0.11.2
 
 - Make the desktop sidebar independently scrollable so the Theme switch remains reachable on shorter viewports.
