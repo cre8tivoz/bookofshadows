@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+- Add the Overview Live memory stream with infinite scroll and live badges for new, updated, recalled, invalidated, and consolidated memories.
+- Add cross-process DB-polling signature detection so the dashboard can surface Mnemosyne 2.6 memory changes despite in-process-only native streams.
+- Add Context Bank Pattern insights for recurring topics, entities, sources, and clickable source memory signals.
+
 ## 0.10.0
 
 - Hide the experimental Mnemosyne Labyrinth/Memory Palace entry from the main sidebar while keeping the route and implementation available for direct testing.
