@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.0
+
+- Make Pattern insights use Mnemosyne's real `mnemosyne.core.PatternDetector.summarize_patterns()` output.
+- Split dashboard-only domain taxonomy into a separate Context domains panel so fixed categories are no longer mislabeled as Mnemosyne patterns.
+
 ## 0.12.1
 
 - Fix Pattern insights mobile header wrapping so the title no longer collapses into one letter per line.

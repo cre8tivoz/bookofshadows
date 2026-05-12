@@ -905,10 +905,10 @@ function patternSummary(data={}){
   const items = [
     ['Memories scanned', s.indexed_memories || 0],
     ['Triples scanned', s.indexed_triples || 0],
-    ['Topics found', s.topics || 0],
-    ['Noisy terms hidden', data.hidden_noise_terms || s.hidden_noise_terms || 0],
+    ['Patterns found', s.patterns_found || data.mnemosyne_summary?.patterns_found || 0],
+    ['Provider', data.provider ? 'Mnemosyne' : 'Dashboard'],
   ];
-  return items.map(([label,value]) => `<div><span>${esc(label)}</span><strong>${Number(value || 0).toLocaleString()}</strong></div>`).join('');
+  return items.map(([label,value]) => `<div><span>${esc(label)}</span><strong>${typeof value === 'number' ? Number(value || 0).toLocaleString() : esc(value || '')}</strong></div>`).join('');
 }
 function renderPatternBars(items=[], kind='pattern'){
   if(!items.length) return '<span class="muted">No patterns yet.</span>';
@@ -938,11 +938,13 @@ function applyPatternFilter(kind='', query=''){
 async function loadPatternInsights(){
   const data = await api('/api/patterns?limit=10');
   $('#patternSummary').innerHTML = patternSummary(data);
-  $('#patternTopics').innerHTML = renderPatternBars(data.topics || [], 'topic');
-  $('#patternEntities').innerHTML = renderPatternBars(data.entities || [], 'entity');
+  $('#patternContent').innerHTML = renderPatternBars(data.content_patterns || [], 'content-pattern');
+  $('#patternTemporal').innerHTML = renderPatternBars(data.temporal_patterns || [], 'temporal-pattern');
+  $('#patternSequence').innerHTML = renderPatternBars(data.sequence_patterns || [], 'sequence-pattern');
+  $('#contextDomainBars').innerHTML = renderPatternBars(data.context_domains || [], 'context-domain');
   $('#patternOrigins').innerHTML = renderPatternBars(data.origins || data.sources || [], 'origin');
   $('#patternTypes').innerHTML = renderPatternBars(data.memory_types || [], 'type');
-  $$('#patternInsights .pattern-bar').forEach(el => el.onclick = () => applyPatternFilter(el.dataset.patternKind || '', el.dataset.patternQuery || ''));
+  $$('#patternInsights .pattern-bar,#contextDomains .pattern-bar').forEach(el => el.onclick = () => applyPatternFilter(el.dataset.patternKind || '', el.dataset.patternQuery || ''));
 }
 async function loadProfile(){
   const [data] = await Promise.all([api('/api/profile/inferred?limit=10'), loadPatternInsights()]);

@@ -12,6 +12,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+try:
+    from mnemosyne.core import PatternDetector
+except Exception:  # pragma: no cover - dashboard degrades when package is unavailable
+    PatternDetector = None
+
 
 def plugin_data_dir() -> Path:
     home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
@@ -1433,16 +1438,37 @@ class DashboardStore:
             return True
         return False
 
+    @staticmethod
+    def _pattern_item(pattern: Any) -> dict[str, Any]:
+        data = pattern.to_dict() if hasattr(pattern, "to_dict") else dict(pattern or {})
+        metadata = data.get("metadata") or {}
+        description = str(data.get("description") or data.get("pattern_type") or "Pattern")
+        confidence = float(data.get("confidence") or 0)
+        count = metadata.get("count") or metadata.get("total") or metadata.get("hour") or round(confidence * 100)
+        try:
+            count_value = int(count)
+        except Exception:
+            count_value = round(confidence * 100)
+        query = metadata.get("word") or metadata.get("word1") or metadata.get("source1") or description
+        return {
+            "label": description,
+            "count": count_value,
+            "confidence": round(confidence, 3),
+            "percent": round(confidence * 100, 1),
+            "query": str(query or ""),
+            "pattern_type": data.get("pattern_type") or "pattern",
+            "samples": data.get("samples") or [],
+            "metadata": metadata,
+        }
+
     def pattern_insights(self, limit: int = 10) -> dict[str, Any]:
-        """Read-only aggregate recurring pattern summary from active memories and triples."""
+        """Read-only pattern summary using Mnemosyne's PatternDetector plus separate dashboard taxonomy."""
         limit = max(3, min(int(limit or 10), 30))
         memories = self.list_memories(kind="all", status="active", sort="importance", limit=500)
         triples = self.triples(limit=500)
         topic_counts: Counter[str] = Counter()
-        entity_counts: Counter[str] = Counter()
         origin_counts: Counter[str] = Counter()
         memory_type_counts: Counter[str] = Counter()
-        hidden_noise_terms = 0
 
         for m in memories:
             content = str(m.get("content") or "")
@@ -1451,11 +1477,6 @@ class DashboardStore:
             origin_counts[self._pattern_origin_label(m.get("source"), "memory")] += 1
             context_type, _ = self._context_type(content, category, "memory")
             memory_type_counts[context_type] += 1
-            for entity in self._entity_terms(content, limit=5):
-                if self._pattern_entity_is_noise(entity):
-                    hidden_noise_terms += 1
-                    continue
-                entity_counts[entity] += 1
 
         for t in triples:
             text = f"{t.get('subject')} {t.get('predicate')} {t.get('object')}"
@@ -1463,14 +1484,6 @@ class DashboardStore:
             topic_counts["Unclassified" if category == "Other" else category] += 1
             origin_counts[self._pattern_origin_label(t.get("source"), "triple")] += 1
             memory_type_counts["Relationship"] += 1
-            for entity in [t.get("subject"), t.get("object")]:
-                label = str(entity or "").strip()[:80]
-                if not label:
-                    continue
-                if self._pattern_entity_is_noise(label):
-                    hidden_noise_terms += 1
-                    continue
-                entity_counts[label] += 1
 
         def ranked(counter: Counter[str]) -> list[dict[str, Any]]:
             total = sum(counter.values()) or 1
@@ -1480,22 +1493,43 @@ class DashboardStore:
                 if k
             ]
 
+        detector_summary: dict[str, Any]
+        if PatternDetector is None:
+            detector_summary = {
+                "total_memories": len(memories),
+                "patterns_found": 0,
+                "temporal_patterns": [],
+                "content_patterns": [],
+                "sequence_patterns": [],
+                "top_pattern": None,
+                "error": "mnemosyne.core.PatternDetector unavailable",
+            }
+        else:
+            detector = PatternDetector(min_confidence=0.35)
+            detector_summary = detector.summarize_patterns(memories)
+
+        content_patterns = [self._pattern_item(p) for p in detector_summary.get("content_patterns", [])][:limit]
+        temporal_patterns = [self._pattern_item(p) for p in detector_summary.get("temporal_patterns", [])][:limit]
+        sequence_patterns = [self._pattern_item(p) for p in detector_summary.get("sequence_patterns", [])][:limit]
+
         return {
             "read_only": True,
+            "provider": "mnemosyne.core.PatternDetector",
             "generated_at": _utc_now(),
-            "topics": ranked(topic_counts),
-            "entities": ranked(entity_counts),
+            "mnemosyne_summary": detector_summary,
+            "content_patterns": content_patterns,
+            "temporal_patterns": temporal_patterns,
+            "sequence_patterns": sequence_patterns,
+            "context_domains": ranked(topic_counts),
             "origins": ranked(origin_counts),
             "memory_types": ranked(memory_type_counts),
             "sources": ranked(origin_counts),
-            "hidden_noise_terms": hidden_noise_terms,
             "signals": [],
             "summary": {
                 "indexed_memories": len(memories),
                 "indexed_triples": len(triples),
-                "topics": len(topic_counts),
-                "entities": len(entity_counts),
-                "hidden_noise_terms": hidden_noise_terms,
+                "patterns_found": detector_summary.get("patterns_found", 0),
+                "context_domains": len(topic_counts),
             },
         }
 

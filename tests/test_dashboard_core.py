@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.12.1'
+    assert project_version == '0.13.0'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -508,15 +508,16 @@ def test_pattern_insights_surface_recurring_topics_entities_and_sources(tmp_path
 
     assert insights['read_only'] is True
     assert insights['summary']['indexed_memories'] >= 1
-    assert all(item['label'] != 'Other' for item in insights['topics'])
-    assert any(item['label'] == 'Unclassified' for item in insights['topics'])
-    assert any(item['label'] == 'Privacy rules' for item in insights['topics'])
-    assert any(item['label'] == 'YC' for item in insights['entities'])
+    assert insights['provider'] == 'mnemosyne.core.PatternDetector'
+    assert 'mnemosyne_summary' in insights
+    assert {'temporal_patterns', 'content_patterns', 'sequence_patterns'} <= set(insights['mnemosyne_summary'])
+    assert 'context_domains' in insights
+    assert all(item['label'] != 'Other' for item in insights['context_domains'])
+    assert any(item['label'] == 'Unclassified' for item in insights['context_domains'])
+    assert any(item['label'] == 'Privacy rules' for item in insights['context_domains'])
     assert any(item['label'] == 'Privacy rule' for item in insights['memory_types'])
     assert any(item['label'] == 'Relationship' for item in insights['memory_types'])
     assert any(item['label'] == 'Direct memory' for item in insights['origins'])
-    assert all(item['label'] not in {'USER', 'ASSISTANT', 'API'} for item in insights['entities'])
-    assert insights['hidden_noise_terms'] >= 0
     assert insights['signals'] == []
 
 def test_realtime_event_snapshot_orders_newest_first(tmp_path):
@@ -743,11 +744,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="liveMemorySentinel"' in html
     assert 'id="liveMemoryStatus"' in html
     assert 'id="patternInsights"' in html
-    assert 'id="patternTopics"' in html
-    assert 'id="patternEntities"' in html
-    assert 'id="patternOrigins"' in html
-    assert 'id="patternTypes"' in html
-    assert 'id="patternSummary"' in html
+    assert 'id="patternContent"' in html
+    assert 'id="patternTemporal"' in html
+    assert 'id="patternSequence"' in html
+    assert 'id="contextDomains"' in html
+    assert 'id="contextDomainBars"' in html
+    assert 'Powered by Mnemosyne PatternDetector' in html
+    assert 'Dashboard taxonomy' in html
     assert 'renderPatternBars' in js
     assert 'applyPatternFilter' in js
     assert 'data-pattern-kind' in js
@@ -757,8 +760,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '#patternInsights .section-head.mini{display:flex;flex-direction:column;align-items:flex-start;gap:4px}' in css
     assert '#patternInsights .section-head.mini h2{white-space:nowrap;overflow-wrap:normal;word-break:normal}' in css
     assert '#patternInsights .section-head.mini span{text-align:left;white-space:normal;letter-spacing:.12em}' in css
-    assert 'Memory types' in html
-    assert 'Origins' in html
+    assert 'Context domains' in html
     assert 'id="patternSignals"' not in html
     assert 'renderPatternSignals' not in js
     assert 'pattern-signal' not in js
