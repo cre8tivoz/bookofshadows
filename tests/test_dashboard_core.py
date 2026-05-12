@@ -667,8 +667,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'openMemoryDetail(row.dataset.memoryId' in js
     assert 'sortRealtimeEventsNewestFirst' in js
     assert 'Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0)' in js
-    assert 'Raw memory content is shown because this dashboard is private' in html
+    assert '<h2>Live memory stream</h2>' in html
+    assert '<span>Realtime memory</span>' in html
+    assert 'Raw memory content is shown because this dashboard is private' not in html
+    assert 'private authenticated stream' not in html
+    assert 'private and authenticated' not in html
     assert 'metadata-only SSE' not in html
+    assert 'metadata_json is still kept out' not in html
     assert '/static/app.js?v=realtime-v1' in html
     assert '/static/style.css?v=realtime-v1' in html
     assert 'realtime-event' in css
