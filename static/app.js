@@ -10,6 +10,8 @@ const LIVE_MEMORY_PAGE_SIZE = 25;
 let liveMemoryItems = [];
 let liveMemoryOffset = 0;
 let liveMemoryHasMore = true;
+let liveMemoryLoading = false;
+let liveMemoryObserver = null;
 let currentRoute = { tab: 'overview' };
 let applyingHistory = false;
 let bulkSelection = new Set();
@@ -412,16 +414,17 @@ function renderLiveMemoryStream(){
   if(!list) return;
   list.innerHTML = liveMemoryItems.length ? liveMemoryItems.map(memoryItem).join('') : stateHtml('empty', 'No memories found.', 'The memory stream will appear here once memories exist.');
   bindMemoryClicks($('#liveMemoryStream'));
-  const more = $('#liveMemoryLoadMore');
-  if(more){
-    more.textContent = liveMemoryHasMore ? `Load ${LIVE_MEMORY_PAGE_SIZE} more` : 'No more memories';
-    more.disabled = !liveMemoryHasMore;
+  const status = $('#liveMemoryStatus');
+  if(status){
+    status.textContent = liveMemoryLoading ? 'Loading older memories…' : liveMemoryHasMore ? 'Scroll to load older memories.' : 'End of memory stream.';
   }
 }
 async function loadLiveMemoryStream(append=false){
+  if(liveMemoryLoading) return;
+  if(append && !liveMemoryHasMore) return;
+  liveMemoryLoading = true;
+  renderLiveMemoryStream();
   if(!append){ liveMemoryItems = []; liveMemoryOffset = 0; liveMemoryHasMore = true; }
-  const more = $('#liveMemoryLoadMore');
-  if(more) more.disabled = true;
   const params = new URLSearchParams({
     kind: 'all',
     status: 'active',
@@ -429,13 +432,32 @@ async function loadLiveMemoryStream(append=false){
     limit: String(LIVE_MEMORY_PAGE_SIZE),
     offset: String(liveMemoryOffset),
   });
-  const data = await api(`/api/memories?${params.toString()}`);
-  const items = data.items || [];
-  const seen = new Set(liveMemoryItems.map(item => item.id));
-  liveMemoryItems = append ? [...liveMemoryItems, ...items.filter(item => !seen.has(item.id))] : items;
-  liveMemoryOffset += items.length;
-  liveMemoryHasMore = items.length === LIVE_MEMORY_PAGE_SIZE;
-  renderLiveMemoryStream();
+  try {
+    const data = await api(`/api/memories?${params.toString()}`);
+    const items = data.items || [];
+    const seen = new Set(liveMemoryItems.map(item => item.id));
+    liveMemoryItems = append ? [...liveMemoryItems, ...items.filter(item => !seen.has(item.id))] : items;
+    liveMemoryOffset += items.length;
+    liveMemoryHasMore = items.length === LIVE_MEMORY_PAGE_SIZE;
+  } finally {
+    liveMemoryLoading = false;
+    renderLiveMemoryStream();
+  }
+}
+function initLiveMemoryInfiniteScroll(){
+  const sentinel = $('#liveMemorySentinel');
+  if(!sentinel) return;
+  if(liveMemoryObserver) liveMemoryObserver.disconnect();
+  if(!('IntersectionObserver' in window)){
+    window.addEventListener('scroll', () => {
+      if(liveMemoryHasMore && !liveMemoryLoading && window.innerHeight + window.scrollY >= document.body.offsetHeight - 700) loadLiveMemoryStream(true);
+    }, {passive:true});
+    return;
+  }
+  liveMemoryObserver = new IntersectionObserver(entries => {
+    if(entries.some(entry => entry.isIntersecting)) loadLiveMemoryStream(true);
+  }, {rootMargin:'700px 0px'});
+  liveMemoryObserver.observe(sentinel);
 }
 function addLiveMemoryEvent(event){
   if(!event || !event.memory_id) return;
@@ -3424,7 +3446,7 @@ $('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {});
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
-$('#liveMemoryLoadMore').onclick = () => loadLiveMemoryStream(true);
+initLiveMemoryInfiniteScroll();
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 initTheme();
 const initialRoute = urlToRoute();

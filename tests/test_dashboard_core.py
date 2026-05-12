@@ -681,10 +681,17 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Recent memories' not in html
     assert 'id="recent"' not in html
     assert 'id="liveMemoryStream"' in html
-    assert 'id="liveMemoryLoadMore"' in html
+    assert 'id="liveMemoryLoadMore"' not in html
+    assert 'id="liveMemorySentinel"' in html
+    assert 'id="liveMemoryStatus"' in html
     assert 'LIVE_MEMORY_PAGE_SIZE = 25' in js
     assert 'loadLiveMemoryStream(false)' in js
     assert 'loadLiveMemoryStream(true)' in js
+    assert 'IntersectionObserver' in js
+    assert 'initLiveMemoryInfiniteScroll' in js
+    assert 'liveMemoryObserver' in js
+    assert "rootMargin:'700px 0px'" in js
+    assert 'liveMemoryLoading' in js
     assert "limit: String(LIVE_MEMORY_PAGE_SIZE)" in js
     assert "offset: String(liveMemoryOffset)" in js
     assert "liveMemoryItems.map(memoryItem)" in js

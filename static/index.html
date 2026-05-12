@@ -94,7 +94,8 @@
           </div>
           <div class="section-head"><h2>Live memory stream</h2><span>25 latest memories</span></div>
           <div id="liveMemoryStream" class="list memory-grid" aria-live="polite"></div>
-          <div class="toolbar glass live-memory-loadbar"><button id="liveMemoryLoadMore" class="primary">Load 25 more</button></div>
+          <div id="liveMemorySentinel" class="live-memory-sentinel" aria-hidden="true"></div>
+          <p id="liveMemoryStatus" class="muted live-memory-status">Scroll to load older memories.</p>
         </section>
 
         <section id="today" class="tab">
