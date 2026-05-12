@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.2
+
+- Make the desktop sidebar independently scrollable so the Theme switch remains reachable on shorter viewports.
+- Add spacing below the sidebar search box so it no longer touches the Overview nav card.
+
 ## 0.11.1
 
 - Align Live memory stream event badges flush with the card content column.

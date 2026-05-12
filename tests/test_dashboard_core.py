@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.11.1'
+    assert project_version == '0.11.2'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -563,6 +563,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="menuSearchQuery"' in html
     assert 'id="menuSearchButton"' in html
     assert html.index('id="menuSearchQuery"') < html.index('<nav>')
+    assert '.sidebar{max-height:100vh;overflow-y:auto;overscroll-behavior:contain' in css
+    assert '.sidebar-menu{padding-bottom:28px}' in css
+    assert '.menu-search{margin:12px 0 16px' in css
+    assert 'overflow-y:hidden' not in css[css.rfind('/* Desktop sidebar scroll polish */'):]
     assert 'data-tab="explore"' not in html
     assert '>History<' in html
     assert 'chronological memory events + consolidation history' in html

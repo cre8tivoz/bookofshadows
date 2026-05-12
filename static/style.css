@@ -392,3 +392,8 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 .pattern-signal strong{display:block;font-size:13px;line-height:1.35}
 .pattern-signal:hover{border-color:rgba(77,163,255,.45);transform:translateY(-1px)}
 @media (max-width: 760px){.pattern-grid,.pattern-signals{grid-template-columns:1fr}}
+
+/* Desktop sidebar scroll polish */
+.sidebar{max-height:100vh;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-bottom:18px}
+.sidebar-menu{padding-bottom:28px}
+.menu-search{margin:12px 0 16px}
