@@ -453,7 +453,7 @@ function addLiveMemoryEvent(event){
     memory_kind: event.memory_kind || existing?.memory_kind || 'memory',
     status: existing?.status || 'active',
   };
-  liveMemoryItems = [item, ...liveMemoryItems.filter(existingItem => existingItem.id !== item.id)].slice(0, Math.max(liveMemoryOffset, LIVE_MEMORY_PAGE_SIZE));
+  liveMemoryItems = [item, ...liveMemoryItems.filter(existingItem => existingItem.id !== item.id)];
   renderLiveMemoryStream();
 }
 function renderRealtimeEvents(){

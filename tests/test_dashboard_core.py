@@ -689,6 +689,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "offset: String(liveMemoryOffset)" in js
     assert "liveMemoryItems.map(memoryItem)" in js
     assert "bindMemoryClicks($('#liveMemoryStream'))" in js
+    assert "liveMemoryItems = [item, ...liveMemoryItems.filter(existingItem => existingItem.id !== item.id)];" in js
+    assert "].slice(0, Math.max(liveMemoryOffset, LIVE_MEMORY_PAGE_SIZE))" not in js
     assert 'id="settingsDeltaSync"' in html
     assert 'Sync diagnostics' in html
     settings_order = ['Password auth', 'Server + database', 'Memory maintenance', 'Database diagnostics', 'Sync diagnostics']
