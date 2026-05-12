@@ -374,7 +374,7 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 .memory-card.live-invalidated{opacity:.72;filter:saturate(.75)}
 .memory-card.live-consolidated{border-color:rgba(180,138,255,.6)}
 @keyframes liveGlow{0%{transform:translateY(-4px);box-shadow:0 0 0 2px rgba(77,163,255,.55),0 0 36px rgba(77,163,255,.28)}100%{transform:none}}
-.live-badge{margin:10px 0 0 14px;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800}
+.live-badge{margin:10px 0 0 0;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:800}
 .live-badge-new{background:rgba(77,163,255,.16);color:#8cc8ff;border-color:rgba(77,163,255,.38)}
 .live-badge-updated{background:rgba(255,196,87,.16);color:#ffd27a;border-color:rgba(255,196,87,.36)}
 .live-badge-recalled{background:rgba(129,230,217,.16);color:#9af0e6;border-color:rgba(129,230,217,.36)}

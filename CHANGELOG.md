@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1
+
+- Align Live memory stream event badges flush with the card content column.
+
 ## 0.11.0
 
 - Add the Overview Live memory stream with infinite scroll and live badges for new, updated, recalled, invalidated, and consolidated memories.

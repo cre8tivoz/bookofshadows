@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.11.0'
+    assert project_version == '0.11.1'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -784,6 +784,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '.memory-card.live-new' in css
     assert '@keyframes liveGlow' in css
     assert '.live-badge-new' in css
+    assert '.live-badge{margin:10px 0 0 0' in css
+    assert '.live-badge{margin:10px 0 0 14px' not in css
     assert '.pattern-grid' in css
     assert 'state-loading' in css
     assert 'state-error' in css
