@@ -534,8 +534,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=realtime-v1' in html
-    assert '/static/style.css?v=realtime-v1' in html
+    assert '/static/app.js?v=stream-v2' in html
+    assert '/static/style.css?v=stream-v2' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -655,37 +655,40 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/api/realtime/status' in js
     assert '/api/realtime/events' in js
     assert 'EventSource' in js
-    assert 'data-tab="realtime"' in html
-    assert '<section id="realtime"' in html
-    assert 'id="realtimeStatusCards"' in html
-    assert 'id="realtimeEventFeed"' in html
-    assert 'liveStatus' in html
-    assert 'liveEventFeed' in html
-    assert 'toggleLiveUpdates' in js
+    assert 'data-tab="realtime"' not in html
+    assert '<section id="realtime"' not in html
+    assert 'Realtime</button>' not in html
+    assert 'Recent memories' not in html
+    assert 'id="recent"' not in html
+    assert 'id="liveMemoryStream"' in html
+    assert 'id="liveMemoryLoadMore"' in html
+    assert 'LIVE_MEMORY_PAGE_SIZE = 25' in js
+    assert 'loadLiveMemoryStream(false)' in js
+    assert 'loadLiveMemoryStream(true)' in js
+    assert "limit: String(LIVE_MEMORY_PAGE_SIZE)" in js
+    assert "offset: String(liveMemoryOffset)" in js
+    assert "liveMemoryItems.map(memoryItem)" in js
+    assert "bindMemoryClicks($('#liveMemoryStream'))" in js
+    assert 'id="settingsDeltaSync"' in html
+    assert 'Sync diagnostics' in html
     assert 'loadRealtimePanel' in js
-    assert "section==='realtime'" in js
-    assert 'openMemoryDetail(row.dataset.memoryId' in js
-    assert 'sortRealtimeEventsNewestFirst' in js
-    assert 'Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0)' in js
+    assert "section==='settings'" in js
+    assert 'realtimeStatusCards' not in html
+    assert 'realtimeEventFeed' not in html
+    assert 'realtimePauseToggle' not in html
+    assert 'realtimeRefresh' not in html
+    assert 'livePauseToggle' not in html
+    assert 'Pause live' not in html
     assert '<h2>Live memory stream</h2>' in html
-    assert '<span>Realtime memory</span>' in html
+    assert '<span>25 latest memories</span>' in html
     assert 'Raw memory content is shown because this dashboard is private' not in html
     assert 'private authenticated stream' not in html
     assert 'private and authenticated' not in html
     assert 'metadata-only SSE' not in html
     assert 'sanitized metadata only' not in html
-    assert html.count('<h2>Live memory stream</h2>') >= 2
-    assert html.count('<span>Realtime memory</span>') >= 2
     assert 'metadata_json is still kept out' not in html
-    assert '/static/app.js?v=realtime-v1' in html
-    assert '/static/style.css?v=realtime-v1' in html
-    assert 'realtime-event' in css
-    assert 'realtime-page-grid' in css
-    assert '.realtime-panel>.item-actions' in css
-    assert 'margin:14px 0 18px' in css
-    assert '#realtimeEventFeed' in css
-    assert 'margin-top:18px' in css
-    assert '.realtime-panel .section-head.mini' in css
+    assert '/static/app.js?v=stream-v2' in html
+    assert '/static/style.css?v=stream-v2' in html
     assert 'stateHtml' in js
     assert 'state-empty' in css
     assert 'state-loading' in css

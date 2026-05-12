@@ -6,6 +6,10 @@ let graphState = { nodes: [], edges: [], byId: {} };
 let consolidationState = [];
 let authState = { config: {}, auth_enabled: false, authenticated: true };
 let realtimeState = { paused: false, source: null, events: [], status: null };
+const LIVE_MEMORY_PAGE_SIZE = 25;
+let liveMemoryItems = [];
+let liveMemoryOffset = 0;
+let liveMemoryHasMore = true;
 let currentRoute = { tab: 'overview' };
 let applyingHistory = false;
 let bulkSelection = new Set();
@@ -357,12 +361,11 @@ function switchTab(name, opts={}){
   if(section==='today') loadTodayDigest();
   if(section==='profile') loadProfile();
   if(section==='review') loadReview();
-  if(section==='realtime') loadRealtimePanel();
   if(section==='lifecycle') loadLifecycle();
   if(section==='constellation') loadConstellation();
   if(section==='visualiser3d') loadThreeVisualiser();
   if(section==='memoryPalace') loadMemoryPalace();
-  if(section==='settings') { loadAuthStatus(); loadDiagnostics(); }
+  if(section==='settings') { loadAuthStatus(); loadDiagnostics(); loadRealtimePanel(); }
 }
 
 async function loadStats(){
@@ -381,9 +384,8 @@ async function loadStats(){
   fillSelect($('#memorySource'), optionsFrom(s.by_source, 'source'), 'all sources');
   fillSelect($('#memoryScope'), optionsFrom(s.by_scope, 'scope'), 'all scopes');
   fillSelect($('#memorySession'), optionsFrom(s.by_session, 'session_id'), 'all sessions');
-  $('#recent').innerHTML = s.recent.map(memoryItem).join('');
-  bindMemoryClicks($('#recent'));
   bindBreakdownClicks();
+  loadLiveMemoryStream(false);
 }
 function realtimeStatusLabel(status){
   if(realtimeState.paused) return 'paused';
@@ -404,6 +406,55 @@ function renderRealtimeStatus(status=realtimeState.status){
 }
 function sortRealtimeEventsNewestFirst(events){
   return [...events].sort((a,b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0));
+}
+function renderLiveMemoryStream(){
+  const list = $('#liveMemoryStream');
+  if(!list) return;
+  list.innerHTML = liveMemoryItems.length ? liveMemoryItems.map(memoryItem).join('') : stateHtml('empty', 'No memories found.', 'The memory stream will appear here once memories exist.');
+  bindMemoryClicks($('#liveMemoryStream'));
+  const more = $('#liveMemoryLoadMore');
+  if(more){
+    more.textContent = liveMemoryHasMore ? `Load ${LIVE_MEMORY_PAGE_SIZE} more` : 'No more memories';
+    more.disabled = !liveMemoryHasMore;
+  }
+}
+async function loadLiveMemoryStream(append=false){
+  if(!append){ liveMemoryItems = []; liveMemoryOffset = 0; liveMemoryHasMore = true; }
+  const more = $('#liveMemoryLoadMore');
+  if(more) more.disabled = true;
+  const params = new URLSearchParams({
+    kind: 'all',
+    status: 'active',
+    sort: 'recent',
+    limit: String(LIVE_MEMORY_PAGE_SIZE),
+    offset: String(liveMemoryOffset),
+  });
+  const data = await api(`/api/memories?${params.toString()}`);
+  const items = data.items || [];
+  const seen = new Set(liveMemoryItems.map(item => item.id));
+  liveMemoryItems = append ? [...liveMemoryItems, ...items.filter(item => !seen.has(item.id))] : items;
+  liveMemoryOffset += items.length;
+  liveMemoryHasMore = items.length === LIVE_MEMORY_PAGE_SIZE;
+  renderLiveMemoryStream();
+}
+function addLiveMemoryEvent(event){
+  if(!event || !event.memory_id) return;
+  const existing = liveMemoryItems.find(item => item.id === event.memory_id);
+  if(existing && event.event_type === 'MEMORY_SNAPSHOT') return;
+  const item = {
+    ...(existing || {}),
+    id: event.memory_id,
+    content: event.content || existing?.content || '',
+    source: event.source || existing?.source || '',
+    timestamp: event.timestamp || existing?.timestamp || '',
+    created_at: event.timestamp || existing?.created_at || '',
+    importance: event.importance ?? existing?.importance ?? 0,
+    veracity: event.veracity || existing?.veracity || 'unknown',
+    memory_kind: event.memory_kind || existing?.memory_kind || 'memory',
+    status: existing?.status || 'active',
+  };
+  liveMemoryItems = [item, ...liveMemoryItems.filter(existingItem => existingItem.id !== item.id)].slice(0, Math.max(liveMemoryOffset, LIVE_MEMORY_PAGE_SIZE));
+  renderLiveMemoryStream();
 }
 function renderRealtimeEvents(){
   const feeds = ['#liveEventFeed', '#realtimeEventFeed'].map(sel => $(sel)).filter(Boolean);
@@ -432,13 +483,8 @@ function renderRealtimePanel(){
     ['Version', status.mnemosyne_version || 'unknown'],
     ['Events', status.snapshot_event_count || 0],
   ];
-  const cardsEl = $('#realtimeStatusCards');
-  if(cardsEl) cardsEl.innerHTML = cards.map(([label,num]) => `<div class="card"><div class="num realtime-num">${esc(num)}</div><div class="label">${esc(label)}</div></div>`).join('');
-  const delta = $('#realtimeDeltaSync');
-  if(delta) delta.innerHTML = `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || 'sse')}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || 'metadata only')}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || '')}</span></div>`;
-  const panelToggle = $('#realtimePauseToggle');
-  if(panelToggle) panelToggle.textContent = realtimeState.paused ? 'Resume live' : 'Pause live';
-  renderRealtimeEvents();
+  const delta = $('#settingsDeltaSync');
+  if(delta) delta.innerHTML = cards.map(([label,num]) => `<div class="realtime-kv"><strong>${esc(label)}</strong><span>${esc(num)}</span></div>`).join('') + `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || 'sse')}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || 'metadata only')}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || '')}</span></div>`;
 }
 async function loadRealtimePanel(){
   try {
@@ -446,8 +492,8 @@ async function loadRealtimePanel(){
     renderRealtimeStatus();
     renderRealtimePanel();
   } catch(e) {
-    const cardsEl = $('#realtimeStatusCards');
-    if(cardsEl) cardsEl.innerHTML = `<div class="state-card state-error"><strong>Realtime unavailable</strong><p>${esc(e.message)}</p></div>`;
+    const delta = $('#settingsDeltaSync');
+    if(delta) delta.innerHTML = `<div class="state-card state-error"><strong>Sync diagnostics unavailable</strong><p>${esc(e.message)}</p></div>`;
   }
 }
 function addRealtimeEvent(event){
@@ -455,6 +501,7 @@ function addRealtimeEvent(event){
   if(!event || !event.memory_id) return;
   realtimeState.events = sortRealtimeEventsNewestFirst([event, ...realtimeState.events.filter(e => `${e.event_type}:${e.memory_id}:${e.timestamp}` !== `${event.event_type}:${event.memory_id}:${event.timestamp}`)]).slice(0, 50);
   renderRealtimeEvents();
+  addLiveMemoryEvent(event);
 }
 function toggleLiveUpdates(){
   realtimeState.paused = !realtimeState.paused;
@@ -3377,9 +3424,7 @@ $('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {});
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
-$('#livePauseToggle').onclick = toggleLiveUpdates;
-$('#realtimePauseToggle').onclick = toggleLiveUpdates;
-$('#realtimeRefresh').onclick = loadRealtimePanel;
+$('#liveMemoryLoadMore').onclick = () => loadLiveMemoryStream(true);
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 initTheme();
 const initialRoute = urlToRoute();

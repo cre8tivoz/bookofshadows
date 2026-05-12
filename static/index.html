@@ -6,7 +6,7 @@
   <title>Mnemosyne Dashboard</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/brand-fonts.css" />
-  <link rel="stylesheet" href="/static/style.css?v=realtime-v1" />
+  <link rel="stylesheet" href="/static/style.css?v=stream-v2" />
 </head>
 <body>
   <div class="aurora aurora-one"></div>
@@ -45,7 +45,6 @@
         <button data-tab="palace" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>♜</span>Mnemosyne Labyrinth</button>
         <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
         <button data-tab="review"><span>⚑</span>Review</button>
-        <button data-tab="realtime"><span>◉</span>Realtime</button>
         <button data-tab="memories"><span>▦</span>Memories</button>
         <button data-tab="profile"><span>◌</span>Context Bank</button>
         <button data-tab="lifecycle"><span>◴</span>Lifecycle</button>
@@ -72,9 +71,8 @@
           <div id="dbPath" class="db-path">loading…</div>
         </div>
         <div class="status-card live-card" id="liveStatusCard">
-          <div class="status-label">Realtime</div>
+          <div class="status-label">Memory stream</div>
           <div id="liveStatus" class="live-status state-loading">connecting…</div>
-          <button id="livePauseToggle" class="live-toggle" type="button">Pause live</button>
         </div>
       </header>
 
@@ -94,29 +92,9 @@
             <button data-jump="timelineView">Latest activity</button>
             <button data-jump="graph">Open graph</button>
           </div>
-          <div class="section-head"><h2>Recent memories</h2><span>latest signals</span></div>
-          <div id="recent" class="list memory-grid"></div>
-          <div class="section-head realtime-head"><h2>Live memory stream</h2><span>Realtime memory</span></div>
-          <div id="liveEventFeed" class="live-event-feed glass" aria-live="polite"></div>
-        </section>
-
-        <section id="realtime" class="tab">
-          <div class="section-head"><h2>Realtime</h2><span>Mnemosyne 2.6 streaming + DeltaSync readiness</span></div>
-          <div id="realtimeStatusCards" class="cards realtime-status-cards"></div>
-          <div class="realtime-page-grid">
-            <div class="glass realtime-panel">
-              <div class="section-head mini"><h2>Live memory stream</h2><span>Realtime memory</span></div>
-              <div class="item-actions">
-                <button id="realtimePauseToggle" class="primary">Pause live</button>
-                <button id="realtimeRefresh">Refresh status</button>
-              </div>
-              <div id="realtimeEventFeed" class="live-event-feed" aria-live="polite"></div>
-            </div>
-            <div class="glass realtime-panel">
-              <div class="section-head mini"><h2>DeltaSync</h2><span>read-only status</span></div>
-              <div id="realtimeDeltaSync" class="realtime-deltasync"></div>
-            </div>
-          </div>
+          <div class="section-head"><h2>Live memory stream</h2><span>25 latest memories</span></div>
+          <div id="liveMemoryStream" class="list memory-grid" aria-live="polite"></div>
+          <div class="toolbar glass live-memory-loadbar"><button id="liveMemoryLoadMore" class="primary">Load 25 more</button></div>
         </section>
 
         <section id="today" class="tab">
@@ -396,6 +374,11 @@
               <div class="item-actions"><button id="saveAuth" class="primary">Save auth settings</button><button id="clearAuth">Disable + clear password</button><button id="logoutAuth">Logout</button></div>
               <p id="authStatus" class="muted"></p>
             </div>
+            <div class="glass settings-card">
+              <div class="breakdown-title">Sync diagnostics</div>
+              <p class="muted">Read-only Mnemosyne streaming and DeltaSync readiness. Useful for debugging future multi-machine sync, not daily memory browsing.</p>
+              <div id="settingsDeltaSync" class="realtime-deltasync"></div>
+            </div>
             <div class="glass settings-card danger-card">
               <div class="breakdown-title">Memory maintenance</div>
               <p class="muted">Safe correction actions for the agent brain. Bulk actions are allowed only for selected active memories. This enables expire, supersede, trust/veracity, expiry, and importance edits only — no lifecycle-tier edits, raw content overwrite, or hard delete.</p>
@@ -425,6 +408,6 @@
   </div>
 
   <div id="detail" class="drawer hidden"><button id="closeDetail" aria-label="Close detail">×</button><div class="drawer-title">Detail</div><pre id="detailBody"></pre></div>
-  <script src="/static/app.js?v=realtime-v1"></script>
+  <script src="/static/app.js?v=stream-v2"></script>
 </body>
 </html>
