@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import time
 import tomllib
 import urllib.parse
 from http import cookies
@@ -80,6 +81,36 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_json(self, obj: Any, status: int = 200, headers: dict[str, str] | None = None):
         self._send(status, _json_bytes(obj), headers=headers)
+
+    def _send_sse(self, events: list[dict[str, Any]]):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+        )
+        self.end_headers()
+
+        def write_event(name: str, data: dict[str, Any]):
+            payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+            self.wfile.write(f"event: {name}\ndata: {payload}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        try:
+            write_event("status", self.store.realtime_status())
+            for event in events:
+                write_event("memory", event)
+            for _ in range(120):
+                write_event("heartbeat", {"ok": True, "ts": time.time()})
+                time.sleep(15)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _send_file(self, path: Path):
         try:
@@ -181,6 +212,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": True, "config": public_config(self.cfg)})
             if path == "/api/diagnostics":
                 return self._send_json(self.store.diagnostics())
+            if path == "/api/realtime/status":
+                return self._send_json(self.store.realtime_status())
+            if path == "/api/realtime/events":
+                return self._send_sse(self.store.realtime_event_snapshot(limit=_safe_int(q.get("limit"), 25, maximum=100)))
             if path == "/api/admin/audit":
                 if not self._require_admin():
                     return

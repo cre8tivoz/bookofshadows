@@ -70,6 +70,11 @@
           <div class="status-label">Database</div>
           <div id="dbPath" class="db-path">loading…</div>
         </div>
+        <div class="status-card live-card" id="liveStatusCard">
+          <div class="status-label">Realtime</div>
+          <div id="liveStatus" class="live-status state-loading">connecting…</div>
+          <button id="livePauseToggle" class="live-toggle" type="button">Pause live</button>
+        </div>
       </header>
 
       <main>
@@ -90,6 +95,8 @@
           </div>
           <div class="section-head"><h2>Recent memories</h2><span>latest signals</span></div>
           <div id="recent" class="list memory-grid"></div>
+          <div class="section-head realtime-head"><h2>Live memory events</h2><span>sanitized metadata only</span></div>
+          <div id="liveEventFeed" class="live-event-feed glass" aria-live="polite"></div>
         </section>
 
         <section id="today" class="tab">

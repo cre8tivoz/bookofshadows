@@ -322,3 +322,14 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 @media(max-width:1420px){.lifecycle-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.lifecycle-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:420px){.lifecycle-cards{grid-template-columns:1fr}}
+
+/* Realtime event feed */
+.live-card{display:grid;gap:8px;align-content:start;min-width:220px}
+.live-status{font-weight:820;color:var(--soft);line-height:1.25}
+.live-toggle{justify-content:center;border-radius:12px;padding:7px 10px;font-size:12px}
+.realtime-head{margin-top:22px}
+.live-event-feed{display:grid;gap:10px;border:1px solid var(--line);border-radius:22px;padding:14px;margin-bottom:8px;min-height:74px;background:var(--glass-bg)}
+.realtime-event{border:1px solid var(--line);border-radius:16px;padding:12px 13px;background:var(--item-bg)}
+.realtime-event strong{color:var(--accent2);letter-spacing:.02em}
+.realtime-event .meta{margin:7px 0 0}
+@media(max-width:760px),(max-width:940px) and (max-height:520px){.live-card{display:none}.live-event-feed{border-radius:18px;padding:10px}.realtime-event{border-radius:14px;padding:10px}}

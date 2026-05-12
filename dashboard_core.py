@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
 import re
@@ -172,6 +173,82 @@ class DashboardStore:
             return r"a^"
         lookaheads = "".join(rf"(?=.*(?:^|[^\w]){re.escape(term)})" for term in terms)
         return lookaheads + r".*"
+
+    def realtime_status(self) -> dict[str, Any]:
+        """Feature-detect read-only realtime capabilities for the dashboard UI."""
+        event_types: list[str] = []
+        streaming_supported = False
+        deltasync_supported = False
+        mnemosyne_version = "unknown"
+        try:
+            mnemosyne_version = importlib.metadata.version("mnemosyne-memory")
+        except Exception:
+            pass
+        try:
+            from mnemosyne.core.streaming import DeltaSync, EventType, MemoryStream  # type: ignore
+
+            streaming_supported = bool(MemoryStream and EventType)
+            deltasync_supported = bool(DeltaSync)
+            event_types = [evt.name for evt in EventType]
+        except Exception:
+            event_types = []
+
+        path = self.db_path.expanduser()
+        stat = path.stat() if path.exists() else None
+        return {
+            "ok": True,
+            "read_only": True,
+            "live_enabled": streaming_supported,
+            "streaming_supported": streaming_supported,
+            "deltasync_supported": deltasync_supported,
+            "mnemosyne_version": mnemosyne_version,
+            "event_types": event_types,
+            "deltasync_tables": ["working_memory", "episodic_memory"] if deltasync_supported else [],
+            "db_path": str(path),
+            "db_modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(timespec="seconds") if stat else "",
+            "snapshot_event_count": len(self.realtime_event_snapshot(limit=25)) if path.exists() else 0,
+            "transport": "sse",
+            "payload_policy": "sanitized metadata only; memory content and metadata_json are not streamed",
+        }
+
+    def realtime_event_snapshot(self, limit: int = 25) -> list[dict[str, Any]]:
+        """Return a sanitized metadata-only event snapshot for SSE/bootstrap use."""
+        limit = max(1, min(int(limit or 25), 200))
+        events: list[dict[str, Any]] = []
+        with self.connect() as con:
+            tables = self._tables(con)
+            for table, memory_kind in (("working_memory", "working"), ("episodic_memory", "episodic")):
+                if table not in tables:
+                    continue
+                columns = self._columns(con, table)
+                veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
+                source_expr = "COALESCE(source, '')" if "source" in columns else "''"
+                timestamp_expr = "COALESCE(timestamp, created_at, '')" if "created_at" in columns else "COALESCE(timestamp, '')"
+                importance_expr = "COALESCE(importance, 0)" if "importance" in columns else "0"
+                rows = con.execute(
+                    f"""
+                    SELECT id, {source_expr} AS source, {timestamp_expr} AS timestamp,
+                           {importance_expr} AS importance, {veracity_expr} AS veracity
+                    FROM {table}
+                    WHERE (valid_until IS NULL OR valid_until > ?) AND superseded_by IS NULL
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                    """,
+                    (_utc_now(), limit),
+                ).fetchall()
+                for row in rows:
+                    d = dict(row)
+                    events.append({
+                        "event_type": "MEMORY_SNAPSHOT",
+                        "memory_id": d.get("id"),
+                        "memory_kind": memory_kind,
+                        "source": d.get("source") or "",
+                        "timestamp": d.get("timestamp") or "",
+                        "importance": float(d.get("importance") or 0),
+                        "veracity": str(d.get("veracity") or "unknown").lower(),
+                    })
+        events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
+        return events[:limit]
 
     def diagnostics(self) -> dict[str, Any]:
         path = self.db_path.expanduser()

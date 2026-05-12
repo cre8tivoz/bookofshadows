@@ -418,6 +418,38 @@ def test_memory_domain_classifier_keeps_dungeon_sections_meaningful():
     assert classify('WhatsApp history must stay local-only and no cloud') == 'Privacy rules'
 
 
+
+
+def test_realtime_status_detects_mnemosyne_streaming_and_deltasync(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    status = DashboardStore(db).realtime_status()
+
+    assert status['read_only'] is True
+    assert status['mnemosyne_version'] == '2.6.0'
+    assert status['streaming_supported'] is True
+    assert status['deltasync_supported'] is True
+    assert status['live_enabled'] is True
+    assert 'MEMORY_ADDED' in status['event_types']
+    assert 'MEMORY_UPDATED' in status['event_types']
+    assert status['deltasync_tables'] == ['working_memory', 'episodic_memory']
+    assert status['db_modified_at']
+    assert 'posting_credential' not in str(status)
+
+
+def test_realtime_event_snapshot_is_sanitized_and_content_free(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    events = DashboardStore(db).realtime_event_snapshot(limit=3)
+
+    assert events
+    assert all(event['event_type'] == 'MEMORY_SNAPSHOT' for event in events)
+    assert all('content' not in event for event in events)
+    assert all('metadata_json' not in event for event in events)
+    assert all(event['memory_id'] for event in events)
+    assert all(event['memory_kind'] in {'working', 'episodic'} for event in events)
+    assert 'YC prefers local-only WhatsApp memory' not in str(events)
+
 def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     html = (ROOT / 'static' / 'index.html').read_text()
     js = (ROOT / 'static' / 'app.js').read_text()
@@ -609,6 +641,13 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'fullscreenchange' in js
     assert 'by_veracity' in js
     assert 'by_degradation' in js
+    assert '/api/realtime/status' in js
+    assert '/api/realtime/events' in js
+    assert 'EventSource' in js
+    assert 'liveStatus' in html
+    assert 'liveEventFeed' in html
+    assert 'toggleLiveUpdates' in js
+    assert 'realtime-event' in css
     assert 'stateHtml' in js
     assert 'state-empty' in css
     assert 'state-loading' in css

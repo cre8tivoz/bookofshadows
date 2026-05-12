@@ -5,6 +5,7 @@ const VISUALISER_MODE_KEY = 'mnemosyne-dashboard-visualiser-mode';
 let graphState = { nodes: [], edges: [], byId: {} };
 let consolidationState = [];
 let authState = { config: {}, auth_enabled: false, authenticated: true };
+let realtimeState = { paused: false, source: null, events: [], status: null };
 let currentRoute = { tab: 'overview' };
 let applyingHistory = false;
 let bulkSelection = new Set();
@@ -382,6 +383,64 @@ async function loadStats(){
   $('#recent').innerHTML = s.recent.map(memoryItem).join('');
   bindMemoryClicks($('#recent'));
   bindBreakdownClicks();
+}
+function realtimeStatusLabel(status){
+  if(realtimeState.paused) return 'paused';
+  if(!status) return 'connecting…';
+  const version = status.mnemosyne_version && status.mnemosyne_version !== 'unknown' ? ` · Mnemosyne ${status.mnemosyne_version}` : '';
+  const mode = status.streaming_supported ? 'live ready' : 'poll fallback';
+  return `${mode}${version} · ${status.snapshot_event_count || 0} snapshot events`;
+}
+function renderRealtimeStatus(status=realtimeState.status){
+  const el = $('#liveStatus');
+  if(!el) return;
+  el.classList.remove('state-loading','state-error','state-empty');
+  if(realtimeState.paused) el.classList.add('state-empty');
+  else if(!status) el.classList.add('state-loading');
+  el.textContent = realtimeStatusLabel(status);
+  const toggle = $('#livePauseToggle');
+  if(toggle) toggle.textContent = realtimeState.paused ? 'Resume live' : 'Pause live';
+}
+function renderRealtimeEvents(){
+  const feed = $('#liveEventFeed');
+  if(!feed) return;
+  if(!realtimeState.events.length){ feed.innerHTML = '<div class="state-empty">Waiting for sanitized memory events…</div>'; return; }
+  feed.innerHTML = realtimeState.events.slice(0, 20).map(ev => {
+    const kind = ev.memory_kind || 'memory';
+    const label = ev.event_type || 'MEMORY_EVENT';
+    const when = ev.timestamp ? prettyTime(ev.timestamp) : 'just now';
+    const source = ev.source ? `<span class="badge">${esc(ev.source)}</span>` : '';
+    return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || '')}"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || 'unknown'))}</span><span class="badge trust-${esc(ev.veracity || 'unknown')}">${esc(ev.veracity || 'unknown')}</span>${source}<span class="meta-time">${esc(when)}</span></div></div>`;
+  }).join('');
+}
+function addRealtimeEvent(event){
+  if(realtimeState.paused) return;
+  if(!event || !event.memory_id) return;
+  realtimeState.events = [event, ...realtimeState.events.filter(e => `${e.event_type}:${e.memory_id}:${e.timestamp}` !== `${event.event_type}:${event.memory_id}:${event.timestamp}`)].slice(0, 50);
+  renderRealtimeEvents();
+}
+function toggleLiveUpdates(){
+  realtimeState.paused = !realtimeState.paused;
+  renderRealtimeStatus();
+}
+async function initRealtime(){
+  try {
+    realtimeState.status = await api('/api/realtime/status');
+    renderRealtimeStatus();
+    renderRealtimeEvents();
+  } catch(e) {
+    const el = $('#liveStatus');
+    if(el){ el.textContent = `realtime unavailable: ${e.message}`; el.classList.add('state-error'); }
+    return;
+  }
+  if(!('EventSource' in window)) return;
+  if(realtimeState.source) realtimeState.source.close();
+  const source = new EventSource('/api/realtime/events?limit=25');
+  realtimeState.source = source;
+  source.addEventListener('status', e => { realtimeState.status = JSON.parse(e.data); renderRealtimeStatus(); });
+  source.addEventListener('memory', e => addRealtimeEvent(JSON.parse(e.data)));
+  source.addEventListener('heartbeat', () => renderRealtimeStatus());
+  source.onerror = () => { if(!realtimeState.paused){ const el = $('#liveStatus'); if(el){ el.textContent = 'reconnecting…'; el.classList.add('state-loading'); } } };
 }
 function bindBreakdownClicks(){
   $$('#sourceBreakdown .break-row').forEach(row => row.onclick = () => { $('#memorySource').value = row.dataset.filter || ''; switchTab('memories'); });
@@ -3280,6 +3339,7 @@ $('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {});
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
+$('#livePauseToggle').onclick = toggleLiveUpdates;
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 initTheme();
 const initialRoute = urlToRoute();
@@ -3288,6 +3348,7 @@ refreshAuthState().then(async s => {
   if(s.auth_enabled && !s.authenticated) showLogin();
   else {
     await loadStats();
+    await initRealtime();
     if(initialRoute.tab !== 'overview' || initialRoute.drawer) await applyRoute(initialRoute);
   }
 }).catch(() => showLogin());
