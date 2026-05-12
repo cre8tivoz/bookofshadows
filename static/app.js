@@ -357,6 +357,7 @@ function switchTab(name, opts={}){
   if(section==='today') loadTodayDigest();
   if(section==='profile') loadProfile();
   if(section==='review') loadReview();
+  if(section==='realtime') loadRealtimePanel();
   if(section==='lifecycle') loadLifecycle();
   if(section==='constellation') loadConstellation();
   if(section==='visualiser3d') loadThreeVisualiser();
@@ -402,16 +403,42 @@ function renderRealtimeStatus(status=realtimeState.status){
   if(toggle) toggle.textContent = realtimeState.paused ? 'Resume live' : 'Pause live';
 }
 function renderRealtimeEvents(){
-  const feed = $('#liveEventFeed');
-  if(!feed) return;
-  if(!realtimeState.events.length){ feed.innerHTML = '<div class="state-empty">Waiting for sanitized memory events…</div>'; return; }
-  feed.innerHTML = realtimeState.events.slice(0, 20).map(ev => {
+  const feeds = ['#liveEventFeed', '#realtimeEventFeed'].map(sel => $(sel)).filter(Boolean);
+  if(!feeds.length) return;
+  const html = realtimeState.events.length ? realtimeState.events.slice(0, 20).map(ev => {
     const kind = ev.memory_kind || 'memory';
     const label = ev.event_type || 'MEMORY_EVENT';
     const when = ev.timestamp ? prettyTime(ev.timestamp) : 'just now';
     const source = ev.source ? `<span class="badge">${esc(ev.source)}</span>` : '';
     return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || '')}"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || 'unknown'))}</span><span class="badge trust-${esc(ev.veracity || 'unknown')}">${esc(ev.veracity || 'unknown')}</span>${source}<span class="meta-time">${esc(when)}</span></div></div>`;
-  }).join('');
+  }).join('') : '<div class="state-empty">Waiting for sanitized memory events…</div>';
+  feeds.forEach(feed => { feed.innerHTML = html; });
+}
+function renderRealtimePanel(){
+  const status = realtimeState.status || {};
+  const cards = [
+    ['Streaming', status.streaming_supported ? 'Ready' : 'Unavailable'],
+    ['DeltaSync', status.deltasync_supported ? 'Ready' : 'Unavailable'],
+    ['Version', status.mnemosyne_version || 'unknown'],
+    ['Events', status.snapshot_event_count || 0],
+  ];
+  const cardsEl = $('#realtimeStatusCards');
+  if(cardsEl) cardsEl.innerHTML = cards.map(([label,num]) => `<div class="card"><div class="num realtime-num">${esc(num)}</div><div class="label">${esc(label)}</div></div>`).join('');
+  const delta = $('#realtimeDeltaSync');
+  if(delta) delta.innerHTML = `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || 'sse')}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || 'metadata only')}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || '')}</span></div>`;
+  const panelToggle = $('#realtimePauseToggle');
+  if(panelToggle) panelToggle.textContent = realtimeState.paused ? 'Resume live' : 'Pause live';
+  renderRealtimeEvents();
+}
+async function loadRealtimePanel(){
+  try {
+    realtimeState.status = await api('/api/realtime/status');
+    renderRealtimeStatus();
+    renderRealtimePanel();
+  } catch(e) {
+    const cardsEl = $('#realtimeStatusCards');
+    if(cardsEl) cardsEl.innerHTML = `<div class="state-card state-error"><strong>Realtime unavailable</strong><p>${esc(e.message)}</p></div>`;
+  }
 }
 function addRealtimeEvent(event){
   if(realtimeState.paused) return;
@@ -422,6 +449,7 @@ function addRealtimeEvent(event){
 function toggleLiveUpdates(){
   realtimeState.paused = !realtimeState.paused;
   renderRealtimeStatus();
+  renderRealtimePanel();
 }
 async function initRealtime(){
   try {
@@ -3340,6 +3368,8 @@ function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'lig
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
 $('#livePauseToggle').onclick = toggleLiveUpdates;
+$('#realtimePauseToggle').onclick = toggleLiveUpdates;
+$('#realtimeRefresh').onclick = loadRealtimePanel;
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 initTheme();
 const initialRoute = urlToRoute();

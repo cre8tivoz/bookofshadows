@@ -523,8 +523,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Hammy drone' in html
     assert 'Mnemosyne Labyrinth' in html
     assert 'artifact rooms' in html
-    assert '/static/app.js?v=labyrinth-v22' in html
-    assert '/static/style.css?v=labyrinth-v22' in html
+    assert '/static/app.js?v=realtime-v1' in html
+    assert '/static/style.css?v=realtime-v1' in html
     assert 'id="constellationExitFullscreen"' in html
     assert 'id="threeExitFullscreen"' in html
     assert 'class="fullscreen-exit"' in html
@@ -644,10 +644,19 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '/api/realtime/status' in js
     assert '/api/realtime/events' in js
     assert 'EventSource' in js
+    assert 'data-tab="realtime"' in html
+    assert '<section id="realtime"' in html
+    assert 'id="realtimeStatusCards"' in html
+    assert 'id="realtimeEventFeed"' in html
     assert 'liveStatus' in html
     assert 'liveEventFeed' in html
     assert 'toggleLiveUpdates' in js
+    assert 'loadRealtimePanel' in js
+    assert "section==='realtime'" in js
+    assert '/static/app.js?v=realtime-v1' in html
+    assert '/static/style.css?v=realtime-v1' in html
     assert 'realtime-event' in css
+    assert 'realtime-page-grid' in css
     assert 'stateHtml' in js
     assert 'state-empty' in css
     assert 'state-loading' in css

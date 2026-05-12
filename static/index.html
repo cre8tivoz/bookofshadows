@@ -6,7 +6,7 @@
   <title>Mnemosyne Dashboard</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/brand-fonts.css" />
-  <link rel="stylesheet" href="/static/style.css?v=labyrinth-v22" />
+  <link rel="stylesheet" href="/static/style.css?v=realtime-v1" />
 </head>
 <body>
   <div class="aurora aurora-one"></div>
@@ -45,6 +45,7 @@
         <button data-tab="palace" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>♜</span>Mnemosyne Labyrinth</button>
         <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
         <button data-tab="review"><span>⚑</span>Review</button>
+        <button data-tab="realtime"><span>◉</span>Realtime</button>
         <button data-tab="memories"><span>▦</span>Memories</button>
         <button data-tab="profile"><span>◌</span>Context Bank</button>
         <button data-tab="lifecycle"><span>◴</span>Lifecycle</button>
@@ -97,6 +98,26 @@
           <div id="recent" class="list memory-grid"></div>
           <div class="section-head realtime-head"><h2>Live memory events</h2><span>sanitized metadata only</span></div>
           <div id="liveEventFeed" class="live-event-feed glass" aria-live="polite"></div>
+        </section>
+
+        <section id="realtime" class="tab">
+          <div class="section-head"><h2>Realtime</h2><span>Mnemosyne 2.6 streaming + DeltaSync readiness</span></div>
+          <div id="realtimeStatusCards" class="cards realtime-status-cards"></div>
+          <div class="realtime-page-grid">
+            <div class="glass realtime-panel">
+              <div class="section-head mini"><h2>Live event stream</h2><span>metadata-only SSE</span></div>
+              <p class="muted">This page shows sanitized memory event metadata. Raw memory content, WhatsApp bodies, paths, and metadata_json are intentionally not streamed.</p>
+              <div class="item-actions">
+                <button id="realtimePauseToggle" class="primary">Pause live</button>
+                <button id="realtimeRefresh">Refresh status</button>
+              </div>
+              <div id="realtimeEventFeed" class="live-event-feed" aria-live="polite"></div>
+            </div>
+            <div class="glass realtime-panel">
+              <div class="section-head mini"><h2>DeltaSync</h2><span>read-only status</span></div>
+              <div id="realtimeDeltaSync" class="realtime-deltasync"></div>
+            </div>
+          </div>
         </section>
 
         <section id="today" class="tab">
@@ -405,6 +426,6 @@
   </div>
 
   <div id="detail" class="drawer hidden"><button id="closeDetail" aria-label="Close detail">×</button><div class="drawer-title">Detail</div><pre id="detailBody"></pre></div>
-  <script src="/static/app.js?v=labyrinth-v22"></script>
+  <script src="/static/app.js?v=realtime-v1"></script>
 </body>
 </html>
