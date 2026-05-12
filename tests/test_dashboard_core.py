@@ -77,7 +77,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.12.0'
+    assert project_version == '0.12.1'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -754,6 +754,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'pattern-bar' in js
     assert '.pattern-bar-fill' in css
     assert '.pattern-summary' in css
+    assert '#patternInsights .section-head.mini{display:flex;flex-direction:column;align-items:flex-start;gap:4px}' in css
+    assert '#patternInsights .section-head.mini h2{white-space:nowrap;overflow-wrap:normal;word-break:normal}' in css
+    assert '#patternInsights .section-head.mini span{text-align:left;white-space:normal;letter-spacing:.12em}' in css
     assert 'Memory types' in html
     assert 'Origins' in html
     assert 'id="patternSignals"' not in html

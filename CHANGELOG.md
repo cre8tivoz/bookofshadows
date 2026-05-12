@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1
+
+- Fix Pattern insights mobile header wrapping so the title no longer collapses into one letter per line.
+
 ## 0.12.0
 
 - Upgrade Pattern insights into clickable horizontal bar charts with summary stats.
