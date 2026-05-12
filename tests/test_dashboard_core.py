@@ -673,6 +673,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'private authenticated stream' not in html
     assert 'private and authenticated' not in html
     assert 'metadata-only SSE' not in html
+    assert 'sanitized metadata only' not in html
+    assert html.count('<h2>Live memory stream</h2>') >= 2
+    assert html.count('<span>Realtime memory</span>') >= 2
     assert 'metadata_json is still kept out' not in html
     assert '/static/app.js?v=realtime-v1' in html
     assert '/static/style.css?v=realtime-v1' in html

@@ -212,7 +212,7 @@ class DashboardStore:
         }
 
     def realtime_event_snapshot(self, limit: int = 25) -> list[dict[str, Any]]:
-        """Return a sanitized metadata-only event snapshot for SSE/bootstrap use."""
+        """Return a private-dashboard event snapshot for SSE/bootstrap use."""
         limit = max(1, min(int(limit or 25), 200))
         events: list[dict[str, Any]] = []
         with self.connect() as con:
