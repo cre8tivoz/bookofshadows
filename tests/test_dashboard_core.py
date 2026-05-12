@@ -450,6 +450,17 @@ def test_realtime_event_snapshot_includes_private_dashboard_content_but_not_meta
     assert 'YC prefers local-only WhatsApp memory' in str(events)
     assert all('metadata_json' not in event for event in events)
 
+
+
+def test_realtime_event_snapshot_orders_newest_first(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    events = DashboardStore(db).realtime_event_snapshot(limit=6)
+    timestamps = [event['timestamp'] for event in events]
+
+    assert timestamps == sorted(timestamps, reverse=True)
+    assert events[0]['memory_id'] == 'e2'
+
 def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     html = (ROOT / 'static' / 'index.html').read_text()
     js = (ROOT / 'static' / 'app.js').read_text()
@@ -654,6 +665,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'loadRealtimePanel' in js
     assert "section==='realtime'" in js
     assert 'openMemoryDetail(row.dataset.memoryId' in js
+    assert 'sortRealtimeEventsNewestFirst' in js
+    assert 'Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0)' in js
     assert 'Raw memory content is shown because this dashboard is private' in html
     assert 'metadata-only SSE' not in html
     assert '/static/app.js?v=realtime-v1' in html

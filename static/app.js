@@ -402,10 +402,14 @@ function renderRealtimeStatus(status=realtimeState.status){
   const toggle = $('#livePauseToggle');
   if(toggle) toggle.textContent = realtimeState.paused ? 'Resume live' : 'Pause live';
 }
+function sortRealtimeEventsNewestFirst(events){
+  return [...events].sort((a,b) => Date.parse(b.timestamp || 0) - Date.parse(a.timestamp || 0));
+}
 function renderRealtimeEvents(){
   const feeds = ['#liveEventFeed', '#realtimeEventFeed'].map(sel => $(sel)).filter(Boolean);
   if(!feeds.length) return;
-  const html = realtimeState.events.length ? realtimeState.events.slice(0, 20).map(ev => {
+  const orderedEvents = sortRealtimeEventsNewestFirst(realtimeState.events);
+  const html = orderedEvents.length ? orderedEvents.slice(0, 20).map(ev => {
     const kind = ev.memory_kind || 'memory';
     const label = ev.event_type || 'MEMORY_EVENT';
     const when = ev.timestamp ? prettyTime(ev.timestamp) : 'just now';
@@ -449,7 +453,7 @@ async function loadRealtimePanel(){
 function addRealtimeEvent(event){
   if(realtimeState.paused) return;
   if(!event || !event.memory_id) return;
-  realtimeState.events = [event, ...realtimeState.events.filter(e => `${e.event_type}:${e.memory_id}:${e.timestamp}` !== `${event.event_type}:${event.memory_id}:${event.timestamp}`)].slice(0, 50);
+  realtimeState.events = sortRealtimeEventsNewestFirst([event, ...realtimeState.events.filter(e => `${e.event_type}:${e.memory_id}:${e.timestamp}` !== `${event.event_type}:${event.memory_id}:${event.timestamp}`)]).slice(0, 50);
   renderRealtimeEvents();
 }
 function toggleLiveUpdates(){
