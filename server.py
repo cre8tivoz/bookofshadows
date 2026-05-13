@@ -99,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
 
         def write_event(name: str, data: dict[str, Any]):
             payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-            self.wfile.write(f"event: {name}\ndata: {payload}\n\n".encode("utf-8"))
+            self.wfile.write(f"event: {name}\ndata: {payload}\n\n".encode())
             self.wfile.flush()
 
         try:

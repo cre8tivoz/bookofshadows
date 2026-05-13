@@ -1,3 +1,4 @@
+import importlib.metadata as md
 import sqlite3
 import sys
 import tomllib
@@ -426,7 +427,7 @@ def test_realtime_status_detects_mnemosyne_streaming_and_deltasync(tmp_path):
     status = DashboardStore(db).realtime_status()
 
     assert status['read_only'] is True
-    assert status['mnemosyne_version'] == '2.6.0'
+    assert status['mnemosyne_version'] == md.version('mnemosyne-memory')
     assert status['streaming_supported'] is True
     assert status['deltasync_supported'] is True
     assert status['live_enabled'] is True
