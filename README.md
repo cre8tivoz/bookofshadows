@@ -109,6 +109,7 @@ Manual clone is also supported if you are developing the plugin locally:
 ```bash
 git clone https://github.com/wysie/mnemosyne-dashboard.git ~/.hermes/plugins/mnemosyne-dashboard
 hermes plugins enable mnemosyne-dashboard
+hermes gateway restart
 ```
 
 If the directory already exists and you intentionally want to replace it, use:
