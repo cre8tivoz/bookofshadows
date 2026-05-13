@@ -4,6 +4,62 @@ A local-first web dashboard for browsing, visualising, and safely maintaining a 
 
 It is intentionally small: Python standard library server, static HTML/CSS/JS frontend, no external JS runtime, no cloud calls, and read-only browsing by default. Optional password-gated maintenance mode supports safe Mnemosyne-style memory supersession/expiry without hard deletes or raw overwrite edits.
 
+## Installation as a Hermes plugin
+
+Install directly from GitHub with the Hermes plugin command:
+
+```bash
+hermes plugins install wysie/mnemosyne-dashboard --enable
+```
+
+Then restart the running Hermes process so plugin tools are discovered. For the gateway:
+
+```bash
+hermes gateway restart
+```
+
+Manual clone is also supported if you are developing the plugin locally:
+
+```bash
+git clone https://github.com/wysie/mnemosyne-dashboard.git ~/.hermes/plugins/mnemosyne-dashboard
+hermes plugins enable mnemosyne-dashboard
+hermes gateway restart
+```
+
+If the directory already exists and you intentionally want to replace it, use:
+
+```bash
+hermes plugins install wysie/mnemosyne-dashboard --enable --force
+```
+
+`--force` deletes the existing plugin directory before reinstalling, so back up any plugin-local changes first.
+
+## Updating
+
+If you installed with the Hermes plugin command, update with:
+
+```bash
+hermes plugins update mnemosyne-dashboard
+hermes gateway restart
+```
+
+If you want to force a clean reinstall from GitHub instead of pulling into the existing directory:
+
+```bash
+hermes plugins install wysie/mnemosyne-dashboard --enable --force
+hermes gateway restart
+```
+
+If you installed or develop the plugin as a manual git clone, update with git directly:
+
+```bash
+cd ~/.hermes/plugins/mnemosyne-dashboard
+git pull --ff-only
+hermes gateway restart
+```
+
+Use the `git pull` path when you want to keep a normal local checkout. Use the `hermes plugins install --force` path when you want Hermes to replace the plugin directory from the remote repo.
+
 ## Screenshots
 
 The screenshots below are generated from a synthetic mock Mnemosyne database. They do not contain private memory data.
@@ -89,62 +145,6 @@ The generator creates a temporary mock SQLite database, starts the dashboard on 
 - Browser responses include CSP, no-sniff, frame-deny, and no-referrer headers
 
 By default, the dashboard is reachable from your LAN. Treat that as exposing local memory metadata to your network. Memory admin/editing remains disabled by default; if you expose admin mode on LAN/non-local hosts, password auth is required before mutation endpoints work. Put the dashboard behind a firewall/VPN/reverse proxy auth if needed.
-
-## Installation as a Hermes plugin
-
-Install directly from GitHub with the Hermes plugin command:
-
-```bash
-hermes plugins install wysie/mnemosyne-dashboard --enable
-```
-
-Then restart the running Hermes process so plugin tools are discovered. For the gateway:
-
-```bash
-hermes gateway restart
-```
-
-Manual clone is also supported if you are developing the plugin locally:
-
-```bash
-git clone https://github.com/wysie/mnemosyne-dashboard.git ~/.hermes/plugins/mnemosyne-dashboard
-hermes plugins enable mnemosyne-dashboard
-hermes gateway restart
-```
-
-If the directory already exists and you intentionally want to replace it, use:
-
-```bash
-hermes plugins install wysie/mnemosyne-dashboard --enable --force
-```
-
-`--force` deletes the existing plugin directory before reinstalling, so back up any plugin-local changes first.
-
-## Updating
-
-If you installed with the Hermes plugin command, update with:
-
-```bash
-hermes plugins update mnemosyne-dashboard
-hermes gateway restart
-```
-
-If you want to force a clean reinstall from GitHub instead of pulling into the existing directory:
-
-```bash
-hermes plugins install wysie/mnemosyne-dashboard --enable --force
-hermes gateway restart
-```
-
-If you installed or develop the plugin as a manual git clone, update with git directly:
-
-```bash
-cd ~/.hermes/plugins/mnemosyne-dashboard
-git pull --ff-only
-hermes gateway restart
-```
-
-Use the `git pull` path when you want to keep a normal local checkout. Use the `hermes plugins install --force` path when you want Hermes to replace the plugin directory from the remote repo.
 
 ## Hermes tools
 
