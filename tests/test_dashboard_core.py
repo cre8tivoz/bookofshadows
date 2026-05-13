@@ -427,7 +427,11 @@ def test_realtime_status_detects_mnemosyne_streaming_and_deltasync(tmp_path):
     status = DashboardStore(db).realtime_status()
 
     assert status['read_only'] is True
-    assert status['mnemosyne_version'] == md.version('mnemosyne-memory')
+    try:
+        expected_version = md.version('mnemosyne-memory')
+    except md.PackageNotFoundError:
+        expected_version = 'unknown'
+    assert status['mnemosyne_version'] == expected_version
     assert status['streaming_supported'] is True
     assert status['deltasync_supported'] is True
     assert status['live_enabled'] is True
