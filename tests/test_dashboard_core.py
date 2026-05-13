@@ -432,12 +432,19 @@ def test_realtime_status_detects_mnemosyne_streaming_and_deltasync(tmp_path):
     except md.PackageNotFoundError:
         expected_version = 'unknown'
     assert status['mnemosyne_version'] == expected_version
-    assert status['streaming_supported'] is True
-    assert status['deltasync_supported'] is True
-    assert status['live_enabled'] is True
-    assert 'MEMORY_ADDED' in status['event_types']
-    assert 'MEMORY_UPDATED' in status['event_types']
-    assert status['deltasync_tables'] == ['working_memory', 'episodic_memory']
+    if expected_version == 'unknown':
+        assert status['streaming_supported'] is False
+        assert status['deltasync_supported'] is False
+        assert status['live_enabled'] is False
+        assert status['event_types'] == []
+        assert status['deltasync_tables'] == []
+    else:
+        assert status['streaming_supported'] is True
+        assert status['deltasync_supported'] is True
+        assert status['live_enabled'] is True
+        assert 'MEMORY_ADDED' in status['event_types']
+        assert 'MEMORY_UPDATED' in status['event_types']
+        assert status['deltasync_tables'] == ['working_memory', 'episodic_memory']
     assert status['db_modified_at']
     assert 'posting_credential' not in str(status)
 
