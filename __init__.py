@@ -10,6 +10,13 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+# Hermes loads filesystem plugins from outside the plugin directory, so sibling
+# modules are not always on sys.path during gateway startup. Keep the import
+# compatible with both plugin loading and direct script/dev usage.
+_PLUGIN_DIR = Path(__file__).resolve().parent
+if str(_PLUGIN_DIR) not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_DIR))
+
 from config import DashboardConfig, config_path, data_dir, effective_config, load_config, public_config, save_config
 
 PLUGIN_NAME = "mnemosyne-dashboard"
