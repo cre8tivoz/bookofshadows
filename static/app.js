@@ -386,7 +386,7 @@ async function loadStats(){
   $('#dbPath').textContent = s.db_path;
   $('#dbPath').title = s.db_path;
   const cards = [
-    ['Working', s.counts.working_memory], ['Episodic', s.counts.episodic_memory], ['Contaminated', s.contamination?.total || 0], ['Degraded', s.degradation?.degraded || 0], ['Triples', s.counts.triples], ['Consolidations', s.counts.consolidation_log]
+    ['Working', s.counts.working_memory], ['Episodic', s.counts.episodic_memory], ['Needs review', s.contamination?.total || 0], ['Degraded', s.degradation?.degraded || 0], ['Triples', s.counts.triples], ['Consolidations', s.counts.consolidation_log]
   ];
   $('#cards').innerHTML = cards.map(([label,num]) => `<div class="card"><div class="num">${Number(num).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
   $('#sourceBreakdown').innerHTML = breakdown(s.by_source, 'source');
@@ -650,7 +650,7 @@ function whyMemoryHtml(item){
   if(session && item.session_id === session) reasons.push(`session filter matched ${session}`);
   if(veracity && item.veracity === veracity) reasons.push(`trust filter matched ${veracity}`);
   if(degradation && String(item.degradation_tier || '') === String(degradation)) reasons.push(`lifecycle filter matched tier ${degradation}`);
-  if(trustPreset === 'contaminated' && item.contaminated) reasons.push('contaminated filter matched');
+  if(trustPreset === 'contaminated' && item.contaminated) reasons.push('needs-review filter matched');
   if(trustPreset === 'degraded' && item.degraded_at) reasons.push('degraded-only filter matched');
   if(!reasons.length) reasons.push('shown from the current list/search context');
   return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || 'active')}</span></h3><div class="diag-grid compact">
@@ -675,7 +675,7 @@ function memoryDetailHtml(item){
         <span class="trust-chip trust-${esc(trust)}">${esc(trust)} trust · ×${Number(item.trust_weight ?? 0).toFixed(2)}</span>
         <span class="trust-chip lifecycle-${esc(item.degradation_label || 'none')}">${esc(lifecycle)}${item.degradation_weight != null ? ` · ×${Number(item.degradation_weight).toFixed(2)}` : ''}</span>
         <span class="trust-chip">effective ×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</span>
-        ${item.contaminated ? '<span class="trust-chip review">contaminated</span>' : ''}
+        ${item.contaminated ? '<span class="trust-chip review">needs review</span>' : ''}
       </div>
       ${whyMemoryHtml(item)}
       <div class="diag-grid compact">
@@ -858,7 +858,7 @@ async function loadTodayDigest(day=''){
   const suffix = day ? `&day=${encodeURIComponent(day)}` : '';
   const data = await api(`/api/digest/today?limit=80${suffix}`);
   const c = data.counts || {};
-  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Retrieved', c.memories_recalled], ['Contaminated', c.contaminated_added], ['Lifecycle changes', c.degraded_added], ['Facts', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
+  $('#todayCards').innerHTML = [['Added', c.memories_added], ['Retrieved', c.memories_recalled], ['Needs review', c.contaminated_added], ['Lifecycle changes', c.degraded_added], ['Facts', c.triples_added], ['Consolidations', c.consolidations]].map(([label,num]) => `<div class="card"><div class="num">${Number(num || 0).toLocaleString()}</div><div class="label">${label}</div></div>`).join('');
   $('#todayEntities').innerHTML = tinyRows(data.breakdowns?.entities || []);
   $('#todayVeracity').innerHTML = tinyRows(data.breakdowns?.veracity || []);
   $('#todayDegradation').innerHTML = tinyRows(data.breakdowns?.degradation || []);
@@ -967,7 +967,7 @@ function applyReviewFilter(filter={}){
 }
 function reviewReasonBadges(key, item={}){
   const reasons = [];
-  if(key === 'contaminated' || item.veracity && item.veracity !== 'stated') reasons.push('Contaminated');
+  if(key === 'contaminated' || item.veracity && item.veracity !== 'stated') reasons.push('Needs review');
   if(key === 'important_contaminated' || Number(item.importance || 0) >= 0.75) reasons.push('High importance');
   if(key === 'degraded' || Number(item.degradation_tier || 1) > 1) reasons.push('Degraded');
   if(key === 'due_degradation') reasons.push('Due for degradation');
@@ -2572,7 +2572,7 @@ function palaceRoomsForCategories(categories){
     { label:'Working Memory Stream', x:360, y:0, z:80, color:0x52d6b5 },
     { label:'Entity Gardens', x:-520, y:0, z:-520, color:0xb9a6ff },
     { label:'Cold Storage', x:520, y:0, z:-560, color:0x8aa0c9 },
-    { label:'Corrupted Wing', x:0, y:0, z:-980, color:0xff5f87 }
+    { label:'Review Wing', x:0, y:0, z:-980, color:0xff5f87 }
   ];
   categories.slice(0, Math.max(0, base.length - 1)).forEach((cat,i) => { base[i + 1].category = cat; });
   return base;
@@ -2583,7 +2583,7 @@ function palacePositions(data){
   const rooms = palaceRoomsForCategories(categories);
   nodes.forEach((n,i)=>{
     const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
-    const room = contaminated ? rooms.find(r => r.label === 'Corrupted Wing') : (n.kind === 'memory' ? rooms[1 + (i % Math.max(1, rooms.length - 2))] : rooms[1 + ((i + 2) % Math.max(1, rooms.length - 2))]);
+    const room = contaminated ? rooms.find(r => r.label === 'Review Wing') : (n.kind === 'memory' ? rooms[1 + (i % Math.max(1, rooms.length - 2))] : rooms[1 + ((i + 2) % Math.max(1, rooms.length - 2))]);
     const weight = Math.max(1, Number(n.weight || n.count || 1));
     const slot = i % 28;
     const ring = Math.floor(slot / 7) + 1;
@@ -2600,7 +2600,7 @@ function palacePositions(data){
 }
 function palaceCreateArtifactMaterial(THREE, node, colors){
   if(node.contaminated){
-    node.scanLabel = 'Contaminated memory';
+    node.scanLabel = 'Needs-review memory';
     return new THREE.MeshStandardMaterial({ color:0xff4f87, emissive:0x8d0035, emissiveIntensity:.72, roughness:.28, metalness:.12 });
   }
   const color = node.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star);
@@ -2916,7 +2916,7 @@ function palaceIsoRoomLayout(data){
     { label:'Working Stream', x:520, z:20, w:300, d:240, color:0x52d6b5 },
     { label:'Entity Gardens', x:-560, z:-420, w:300, d:240, color:0xb9a6ff },
     { label:'Cold Storage', x:520, z:-450, w:300, d:240, color:0x8aa0c9 },
-    { label:'Corrupted Wing', x:0, z:-760, w:340, d:260, color:0xff5f87 }
+    { label:'Review Wing', x:0, z:-760, w:340, d:260, color:0xff5f87 }
   ];
   categories.slice(0,4).forEach((cat,i)=>{ rooms[i+1].category = cat; rooms[i+1].label = String(cat).slice(0,18); });
   nodes.forEach((n,i)=>{
@@ -2999,7 +2999,7 @@ function palaceAddIsoRelic(THREE, scene, node, colors){
   const geo = node.contaminated ? new THREE.IcosahedronGeometry(node.size,1) : (node.kind === 'memory' ? new THREE.OctahedronGeometry(node.size,1) : new THREE.BoxGeometry(node.size*1.1,node.size*2.0,node.size*1.1));
   const relic = new THREE.Mesh(geo, palaceIsoMaterial(THREE, color, { emissive:color, emissiveIntensity: node.contaminated ? .55 : .34, roughness:.34, metalness:.08 }));
   relic.position.set(node.x, 40 + node.size*.25, node.z); relic.castShadow = true; relic.userData.node = node; node.mesh = relic; scene.add(relic);
-  if(node.contaminated) node.scanLabel = 'Contaminated memory';
+  if(node.contaminated) node.scanLabel = 'Needs-review memory';
   const glow = new THREE.PointLight(color, node.contaminated ? .55 : .22, 110); glow.position.copy(relic.position); scene.add(glow);
 }
 async function renderMemoryPalace(data){
@@ -3106,7 +3106,7 @@ function palaceFpsRooms(data){
     { label:String(cats[1] || 'Working Stream').slice(0,20), x:520, z:-520, w:380, d:340, color:0x52d6b5 },
     { label:String(cats[2] || 'Entity Gardens').slice(0,20), x:-520, z:-1120, w:380, d:340, color:0xb9a6ff },
     { label:String(cats[3] || 'Cold Storage').slice(0,20), x:520, z:-1120, w:380, d:340, color:0x8aa0c9 },
-    { label:'Corrupted Wing', x:0, z:-1680, w:430, d:360, color:0xff5f87 }
+    { label:'Review Wing', x:0, z:-1680, w:430, d:360, color:0xff5f87 }
   ];
   const sectionColors = [0xffd166,0x65d6ff,0x52d6b5,0xb9a6ff,0xff9f6e,0x8aa0c9];
   const pathSections = cats.slice(0,6).map((cat,i)=>({
@@ -3287,7 +3287,7 @@ function palaceFpsAddRelic(THREE, scene, node, colors){
   const relic = new THREE.Mesh(geo, palaceFpsMat(THREE, color, { emissive:color, emissiveIntensity:node.contaminated ? .48 : .24, roughness:.32, metalness:.08 }));
   relic.position.set(node.x,40 + node.size*.2,node.z); relic.castShadow = false; relic.userData.node = node; node.mesh = relic; scene.add(relic);
   if(node.contaminated){
-    const halo = new THREE.PointLight(color, .45, 150); halo.position.copy(relic.position); scene.add(halo); node.scanLabel = 'Contaminated memory';
+    const halo = new THREE.PointLight(color, .45, 150); halo.position.copy(relic.position); scene.add(halo); node.scanLabel = 'Needs-review memory';
   }
 }
 function palaceStreamRelicChunks(force=false){

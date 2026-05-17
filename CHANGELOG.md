@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.1
+
+- Rename user-facing memory trust review wording from “Contaminated” to “Needs review”.
+- Keep backend/API compatibility with existing contamination fields and filters.
+
 ## 0.13.0
 
 - Make Pattern insights use Mnemosyne's real `mnemosyne.core.PatternDetector.summarize_patterns()` output.

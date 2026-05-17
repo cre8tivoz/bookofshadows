@@ -625,14 +625,14 @@ class DashboardStore:
         queue = (queue or "").strip() or "contaminated"
         queue_defs = {
             "contaminated": {
-                "title": "Contaminated",
-                "description": "Mnemosyne veracity is inferred, tool, imported, or unknown.",
+                "title": "Needs review",
+                "description": "Memories not directly stated by you: inferred, tool-generated, imported, or unknown.",
                 "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance"},
                 "filter": {"contaminated_only": "1", "sort": "importance"},
             },
             "high_importance_contaminated": {
-                "title": "High-importance contaminated",
-                "description": "Contaminated memories with importance above the review threshold.",
+                "title": "Important memories needing review",
+                "description": "Important memories that were inferred, tool-generated, imported, or unknown.",
                 "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance", "min_importance": 0.500001},
                 "filter": {"contaminated_only": "1", "sort": "importance"},
             },

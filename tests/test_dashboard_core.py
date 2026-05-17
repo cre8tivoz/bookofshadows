@@ -78,7 +78,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.13.0'
+    assert project_version == '0.13.1'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
@@ -167,8 +167,8 @@ def test_review_queues_surface_trust_lifecycle_work(tmp_path):
     assert [item['id'] for item in review['queues']['high_importance_contaminated']['items']] == ['w4', 'e1']
     assert all(item['status'] == 'active' for item in review['queues']['high_importance_contaminated']['items'])
     assert review['queues']['degraded']['items'] == []
-    assert review['queues']['contaminated']['title'] == 'Contaminated'
-    assert review['queues']['high_importance_contaminated']['title'] == 'High-importance contaminated'
+    assert review['queues']['contaminated']['title'] == 'Needs review'
+    assert review['queues']['high_importance_contaminated']['title'] == 'Important memories needing review'
     assert review['queues']['degraded']['title'] == 'Degraded'
     assert review['queues']['contaminated']['filter']['contaminated_only'] == '1'
     assert review['queues']['degraded']['filter']['degraded_only'] == '1'
@@ -697,9 +697,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'scene.add(avatar, drone)' not in js
     assert 'scene.add(drone)' in js
     assert 'The Archive Gate' in js
-    assert 'Corrupted Wing' in js
+    assert 'Review Wing' in js
     assert 'Episodic Vault' in js
-    assert 'Contaminated memory' in js
+    assert 'Needs-review memory' in js
     assert "e.target.closest('#palaceJoystick')" in js
     assert 'stopPalaceJoystickEvent' in js
     assert 'e.stopPropagation();' in js
@@ -863,7 +863,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'offset=${reviewOffset}' in js
     assert '/api/review?limit=10000' not in js
     assert "Object.entries(queues).map(([key, queue]) => reviewQueueHtml" not in js
-    assert 'Contaminated' in js
+    assert 'Needs review' in js
     assert 'Needs confirmation' not in js
     assert 'review non-stated' not in html
     assert 'review non-stated' not in js
