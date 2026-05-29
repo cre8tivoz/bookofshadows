@@ -740,8 +740,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'by_veracity' in js
     assert 'by_degradation' in js
     assert '/api/realtime/status' in js
+    assert '/api/runtime/status' in js
+    assert 'Installed package' in js
     assert 'Realtime API' in js
     assert 'DeltaSync methods' in js
+    assert 'Runtime diagnostics' in html
     assert '/api/realtime/events' in js
     assert 'EventSource' in js
     assert 'data-tab="realtime"' not in html
@@ -796,15 +799,18 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "liveMemoryItems = [item, ...liveMemoryItems.filter(existingItem => existingItem.id !== item.id)];" in js
     assert "].slice(0, Math.max(liveMemoryOffset, LIVE_MEMORY_PAGE_SIZE))" not in js
     assert 'id="settingsDeltaSync"' in html
-    assert 'Sync diagnostics' in html
-    settings_order = ['Password auth', 'Server + database', 'Memory maintenance', 'Database diagnostics', 'Sync diagnostics']
+    assert 'sync diagnostics' in html
+    settings_order = ['Password auth', 'Server + database', 'Memory maintenance', 'Database diagnostics', 'Runtime diagnostics', 'Mnemosyne 3.x sync diagnostics']
     settings_section = html[html.index('<section id="settings"'):html.index('</section>', html.index('<section id="settings"'))]
     assert [settings_section.index(label) for label in settings_order] == sorted(settings_section.index(label) for label in settings_order)
     assert '.settings-grid{display:flex;flex-direction:column;gap:22px' in css
     assert '.settings-card{padding:24px' in css
     assert '.settings-card>*+*{margin-top:14px}' in css
     assert '.settings-card .item-actions{margin-top:18px}' in css
-    assert 'loadRealtimePanel' in js
+    assert '.login-card{width:min(420px,calc(100vw - 32px));max-width:calc(100vw - 32px)}' in css
+    assert 'html,body{width:100%;max-width:100%;overflow-x:hidden}' in css
+    assert '.runtime-diag-grid{grid-template-columns:repeat(2,minmax(0,1fr))}' in css
+    assert 'loadRuntimeDiagnostics' in js
     assert "section==='settings'" in js
     assert '/api/patterns' in js
     assert 'loadPatternInsights' in js

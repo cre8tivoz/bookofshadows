@@ -358,6 +358,17 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none!important}
 .settings-card>*+*{margin-top:14px}
 .settings-card .item-actions{margin-top:18px}
 .settings-card .diag-grid,.settings-card .realtime-deltasync{margin-top:16px}
+.runtime-diag-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.login-card{width:min(420px,calc(100vw - 32px));max-width:calc(100vw - 32px)}
+@media(max-width:760px),(max-width:940px) and (max-height:520px){
+  html,body{width:100%;max-width:100%;overflow-x:hidden}
+  .shell,.workspace{width:100%;max-width:100%;overflow-x:hidden}
+  .section-head{align-items:flex-start}.section-head h2{min-width:0;white-space:normal}.section-head span{display:none}
+  .settings-grid{display:flex;flex-direction:column;gap:18px;width:100%;max-width:100%;overflow:hidden}.settings-card{padding:18px;border-radius:20px;width:100%;max-width:100%;overflow:hidden}
+  .settings-card input{width:100%;max-width:100%;min-width:0}.settings-card p,.settings-card strong,.settings-card span{overflow-wrap:anywhere}.helper-text{line-height:1.45}
+  .runtime-diag-grid{grid-template-columns:1fr}.realtime-deltasync{grid-template-columns:1fr}.realtime-kv span,.diag-row strong{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+  .login-overlay{padding:16px;place-items:center}.login-card{width:100%;max-width:calc(100vw - 32px);padding:24px 22px}.login-card h2{font-size:30px;white-space:normal;overflow-wrap:normal}
+}
 @media(max-width:760px),(max-width:940px) and (max-height:520px){
   .settings-grid{display:flex;flex-direction:column;gap:18px}
   .settings-card{padding:18px;border-radius:20px}

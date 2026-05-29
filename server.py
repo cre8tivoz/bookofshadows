@@ -4,6 +4,7 @@ import argparse
 import json
 import mimetypes
 import os
+import subprocess
 import time
 import tomllib
 import urllib.parse
@@ -57,6 +58,86 @@ def _write_runtime_metadata(cfg) -> None:
     }
     (root / "server.pid").write_text(str(os.getpid()))
     (root / "runtime.json").write_text(json.dumps(runtime, ensure_ascii=False, indent=2) + "\n")
+
+
+def _read_json_file(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text() or "{}") if path.exists() else {}
+    except Exception:
+        return {}
+
+
+def _read_pid_file(path: Path) -> int | None:
+    try:
+        return int(path.read_text().strip())
+    except Exception:
+        return None
+
+
+def _pid_alive(pid: int | None) -> bool:
+    if not pid or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        return False
+
+
+def _listener_pids(port: int) -> list[int]:
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-nP", f"-iTCP:{int(port)}", "-sTCP:LISTEN", "-Fp"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        )
+    except Exception:
+        return []
+    pids: list[int] = []
+    for line in out.splitlines():
+        if line.startswith("p"):
+            try:
+                pids.append(int(line[1:]))
+            except ValueError:
+                pass
+    return sorted(set(pids))
+
+
+def _runtime_status(cfg) -> dict[str, Any]:
+    root = data_dir()
+    runtime = _read_json_file(root / "runtime.json")
+    pid_file_pid = _read_pid_file(root / "server.pid")
+    runtime_pid = int(runtime.get("pid") or 0) or None
+    current_pid = os.getpid()
+    effective_pid = runtime_pid or pid_file_pid or current_pid
+    listener_pids = _listener_pids(cfg.port)
+    probe = {"ok": True, "status": 200, "url": cfg.local_url + "api/auth/status", "error": ""}
+    stale_pid = bool(pid_file_pid and pid_file_pid != current_pid and not _pid_alive(pid_file_pid))
+    runtime_stale = bool(runtime_pid and runtime_pid != current_pid and not _pid_alive(runtime_pid))
+    return {
+        "ok": True,
+        "running": True,
+        "reachable": True,
+        "pid": current_pid,
+        "runtime_pid": runtime_pid,
+        "pid_file_pid": pid_file_pid,
+        "effective_pid": effective_pid,
+        "listener_pids": listener_pids,
+        "stale_pid": stale_pid,
+        "runtime_stale": runtime_stale,
+        "probe": probe,
+        "runtime": runtime,
+        "runtime_source": runtime.get("source") or "server.py",
+        "config": public_config(cfg),
+        "started_at": runtime.get("started_at"),
+        "pid_file": str(root / "server.pid"),
+        "runtime_file": str(root / "runtime.json"),
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -246,6 +327,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": True, "config": public_config(self.cfg)})
             if path == "/api/diagnostics":
                 return self._send_json(self.store.diagnostics())
+            if path == "/api/runtime/status":
+                return self._send_json(_runtime_status(self.cfg))
             if path == "/api/realtime/status":
                 return self._send_json(self.store.realtime_status())
             if path == "/api/realtime/events":

@@ -49,7 +49,7 @@ def _read_runtime() -> dict[str, Any]:
         return {}
 
 
-def _write_runtime(pid: int, cfg: DashboardConfig, log: Path) -> None:
+def _write_runtime(pid: int, cfg: DashboardConfig, log: Path, source: str = "plugin-start") -> None:
     _runtime_file().write_text(json.dumps({
         "pid": pid,
         "host": cfg.host,
@@ -58,6 +58,8 @@ def _write_runtime(pid: int, cfg: DashboardConfig, log: Path) -> None:
         "bind_url": cfg.bind_url,
         "local_url": cfg.local_url,
         "log": str(log),
+        "source": source,
+        "started_at": time.time(),
     }, ensure_ascii=False, indent=2) + "\n")
 
 
@@ -179,7 +181,7 @@ def _start(args=None, **kw):
         discovered_pid = listener_pids[0] if listener_pids else None
         if discovered_pid:
             _pid_file().write_text(str(discovered_pid))
-            _write_runtime(discovered_pid, cfg, data_dir() / "server.log")
+            _write_runtime(discovered_pid, cfg, data_dir() / "server.log", source="plugin-start-repair")
         return _json({
             "ok": True,
             "already_running": True,

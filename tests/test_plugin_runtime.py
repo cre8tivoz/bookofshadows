@@ -57,6 +57,9 @@ def test_start_repairs_stale_pid_instead_of_spawning_duplicate(tmp_path, monkeyp
     assert payload["stale_pid_repaired"] is True
     assert payload["pid"] == 4321
     assert mod._pid_file().read_text().strip() == "4321"
+    repaired_runtime = json.loads(mod._runtime_file().read_text())
+    assert repaired_runtime["pid"] == 4321
+    assert repaired_runtime["source"] == "plugin-start-repair"
 
 
 def test_server_writes_runtime_metadata_for_launchd_starts(tmp_path, monkeypatch):
@@ -74,3 +77,11 @@ def test_server_writes_runtime_metadata_for_launchd_starts(tmp_path, monkeypatch
     assert runtime["source"] == "server.py"
     assert runtime["local_url"] == "http://127.0.0.1:8765/"
     assert runtime["db_path"] == str(tmp_path / "mnemosyne.db")
+
+    status = dashboard_server._runtime_status(cfg)
+    assert status["ok"] is True
+    assert status["running"] is True
+    assert status["reachable"] is True
+    assert status["pid"] == runtime["pid"]
+    assert status["runtime_source"] == "server.py"
+    assert status["probe"]["url"] == "http://127.0.0.1:8765/api/auth/status"

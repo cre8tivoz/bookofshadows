@@ -443,8 +443,13 @@
               <p id="diagnosticsStatus" class="muted"></p>
             </div>
             <div class="glass settings-card">
-              <div class="breakdown-title">Sync diagnostics</div>
-              <p class="muted">Read-only Mnemosyne streaming and DeltaSync readiness. Useful for debugging future multi-machine sync, not daily memory browsing.</p>
+              <div class="breakdown-title">Runtime diagnostics</div>
+              <p class="muted">Current dashboard process, launch source, listener PID, and health probe. Useful when launchd restarts the dashboard or a stale PID file makes status look wrong.</p>
+              <div id="runtimeDiagnostics" class="diag-grid runtime-diag-grid"></div>
+            </div>
+            <div class="glass settings-card">
+              <div class="breakdown-title">Mnemosyne 3.x sync diagnostics</div>
+              <p class="muted">Read-only Mnemosyne streaming and DeltaSync readiness for the installed package. Useful for future multi-machine sync, not daily memory browsing.</p>
               <div id="settingsDeltaSync" class="realtime-deltasync"></div>
             </div>
           </div>

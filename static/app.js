@@ -378,7 +378,7 @@ function switchTab(name, opts={}){
   if(section==='constellation') loadConstellation();
   if(section==='visualiser3d') loadThreeVisualiser();
   if(section==='memoryPalace') loadMemoryPalace();
-  if(section==='settings') { loadAuthStatus(); loadDiagnostics(); loadRealtimePanel(); }
+  if(section==='settings') { loadAuthStatus(); loadDiagnostics(); loadRuntimeDiagnostics(); loadRealtimePanel(); }
   if(section==='memoria') loadMemoria();
 }
 
@@ -505,12 +505,45 @@ function renderRealtimePanel(){
   const cards = [
     ['Streaming', status.streaming_supported ? 'Ready' : 'Unavailable'],
     ['DeltaSync', status.deltasync_supported ? 'Ready' : 'Unavailable'],
-    ['Version', status.mnemosyne_version || 'unknown'],
+    ['Installed package', status.mnemosyne_version || 'unknown'],
     ['Realtime API', status.realtime_generation || 'unknown'],
     ['Events', status.snapshot_event_count || 0],
   ];
   const delta = $('#settingsDeltaSync');
-  if(delta) delta.innerHTML = cards.map(([label,num]) => `<div class="realtime-kv"><strong>${esc(label)}</strong><span>${esc(num)}</span></div>`).join('') + `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || 'sse')}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>DeltaSync methods</strong><span>${esc((status.deltasync_methods || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || 'metadata only')}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || '')}</span></div>`;
+  if(delta) delta.innerHTML = cards.map(([label,num]) => `<div class="realtime-kv"><strong>${esc(label)}</strong><span>${esc(num)}</span></div>`).join('') + `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || 'sse')}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>DeltaSync methods</strong><span>${esc((status.deltasync_methods || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || 'private dashboard payload')}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || '')}</span></div>`;
+}
+function runtimeRow(label, value, opts={}){
+  const safe = value === undefined || value === null || value === '' ? '—' : value;
+  return `<div class="diag-row ${opts.wide ? 'wide' : ''}"><span>${esc(label)}</span><strong title="${esc(safe)}">${esc(safe)}</strong></div>`;
+}
+function renderRuntimeDiagnostics(runtime){
+  const el = $('#runtimeDiagnostics');
+  if(!el) return;
+  const probe = runtime.probe || {};
+  const cfg = runtime.config || {};
+  const health = runtime.running && runtime.reachable && !runtime.stale_pid && !runtime.runtime_stale ? 'Healthy' : 'Needs attention';
+  const started = runtime.started_at ? prettyTime(Number(runtime.started_at) * 1000) : '';
+  el.innerHTML = [
+    runtimeRow('Status', health),
+    runtimeRow('PID', runtime.pid),
+    runtimeRow('PID file', runtime.pid_file_pid),
+    runtimeRow('Listener PID', (runtime.listener_pids || []).join(', ') || 'none'),
+    runtimeRow('Launch source', runtime.runtime_source || 'server.py'),
+    runtimeRow('Stale PID', runtime.stale_pid ? 'yes — repaired on restart/start' : 'no'),
+    runtimeRow('Runtime stale', runtime.runtime_stale ? 'yes' : 'no'),
+    runtimeRow('Probe', `${probe.status || 'n/a'} ${probe.url || ''}`, {wide:true}),
+    runtimeRow('Local URL', cfg.local_url || '', {wide:true}),
+    runtimeRow('LAN URL', cfg.lan_url || 'not exposed', {wide:true}),
+    runtimeRow('Started', started || runtime.started_at || '', {wide:true}),
+  ].join('');
+}
+async function loadRuntimeDiagnostics(){
+  try {
+    renderRuntimeDiagnostics(await api('/api/runtime/status'));
+  } catch(e) {
+    const el = $('#runtimeDiagnostics');
+    if(el) el.innerHTML = `<div class="state-card state-error"><strong>Runtime diagnostics unavailable</strong><p>${esc(e.message)}</p></div>`;
+  }
 }
 async function loadRealtimePanel(){
   try {
