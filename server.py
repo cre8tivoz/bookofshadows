@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import time
 import tomllib
 import urllib.parse
@@ -11,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from config import auth_cookie_value, effective_config, public_config, save_config, verify_password
+from config import auth_cookie_value, data_dir, effective_config, public_config, save_config, verify_password
 from dashboard_core import DashboardStore, default_db_path
 
 ROOT = Path(__file__).parent
@@ -40,6 +41,24 @@ def _json_bytes(obj: Any) -> bytes:
     return json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
 
 
+def _write_runtime_metadata(cfg) -> None:
+    root = data_dir()
+    log = root / "server.log"
+    runtime = {
+        "pid": os.getpid(),
+        "host": cfg.host,
+        "port": cfg.port,
+        "db_path": cfg.db_path,
+        "bind_url": cfg.bind_url,
+        "local_url": cfg.local_url,
+        "log": str(log),
+        "source": "server.py",
+        "started_at": time.time(),
+    }
+    (root / "server.pid").write_text(str(os.getpid()))
+    (root / "runtime.json").write_text(json.dumps(runtime, ensure_ascii=False, indent=2) + "\n")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"MnemosyneDashboard/{VERSION}"
 
@@ -62,22 +81,25 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def _send(self, status: int, body: bytes, ctype: str = "application/json; charset=utf-8", headers: dict[str, str] | None = None):
-        self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header(
-            "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-            "script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
-        )
-        for k, v in (headers or {}).items():
-            self.send_header(k, v)
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header(
+                "Content-Security-Policy",
+                "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+                "script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+            )
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _send_json(self, obj: Any, status: int = 200, headers: dict[str, str] | None = None):
         self._send(status, _json_bytes(obj), headers=headers)
@@ -294,6 +316,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/memoria/preferences":
                 return self._send_json({"items": self.store.memoria_preferences(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 200, maximum=1000), offset=_safe_int(q.get("offset"), 0, minimum=0, maximum=100000))})
             return self._send_json({"error": "not found"}, 404)
+        except (BrokenPipeError, ConnectionResetError):
+            return
         except Exception as e:
             return self._send_json({"error": str(e)}, 500)
 
@@ -347,6 +371,8 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 return self._send_json(self.store.supersede_memory(str(body.get("memory_id") or ""), str(body.get("content") or ""), body.get("importance"), backup=bool(body.get("backup", True))))
             return self._send_json({"error": "not found"}, 404)
+        except (BrokenPipeError, ConnectionResetError):
+            return
         except Exception as e:
             return self._send_json({"ok": False, "error": str(e)}, 500)
 
@@ -359,6 +385,7 @@ def main():
     args = ap.parse_args()
     cfg = effective_config({"host": args.host, "port": args.port, "db_path": args.db})
     httpd = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
+    _write_runtime_metadata(cfg)
     httpd.db_path = Path(cfg.db_path)
     httpd.bind_host = cfg.host
     httpd.bind_port = cfg.port

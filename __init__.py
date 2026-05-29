@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -71,15 +72,48 @@ def _alive(pid: int | None) -> bool:
 
 
 def _probe_url(cfg: DashboardConfig) -> str:
+    # Public endpoint: works even when password auth protects the API.
     return cfg.local_url + "api/auth/status"
 
 
-def _reachable(cfg: DashboardConfig, timeout: float = 2) -> bool:
+def _reachable_detail(cfg: DashboardConfig, timeout: float = 2) -> dict[str, Any]:
+    url = _probe_url(cfg)
     try:
-        with urllib.request.urlopen(_probe_url(cfg), timeout=timeout) as r:
-            return r.status == 200
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return {"ok": r.status == 200, "status": r.status, "url": url, "error": ""}
+    except urllib.error.HTTPError as e:
+        # 401/403 still prove a dashboard process is reachable; auth may protect
+        # a mistakenly probed endpoint or future auth-status behaviour.
+        return {"ok": e.code in {200, 401, 403}, "status": e.code, "url": url, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "status": None, "url": url, "error": str(e)}
+
+
+def _reachable(cfg: DashboardConfig, timeout: float = 2) -> bool:
+    return bool(_reachable_detail(cfg, timeout=timeout)["ok"])
+
+
+def _listener_pids(port: int) -> list[int]:
+    # Best-effort process discovery for stale pid files / launchd-managed copies.
+    # lsof is available on macOS and most developer Linux machines; failures are
+    # non-fatal because reachability is the source of truth.
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-nP", f"-iTCP:{int(port)}", "-sTCP:LISTEN", "-Fp"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        )
     except Exception:
-        return False
+        return []
+    pids: list[int] = []
+    for line in out.splitlines():
+        if line.startswith("p"):
+            try:
+                pids.append(int(line[1:]))
+            except ValueError:
+                pass
+    return sorted(set(pids))
 
 
 def _coerce_cfg(args: dict[str, Any] | None = None) -> DashboardConfig:
@@ -95,15 +129,26 @@ def _coerce_cfg(args: dict[str, Any] | None = None) -> DashboardConfig:
 def _status(args=None, **kw):
     cfg = _coerce_cfg(args)
     runtime = _read_runtime()
-    pid = int(runtime.get("pid") or _read_pid() or 0) or None
+    pid_file_pid = _read_pid()
+    pid = int(runtime.get("pid") or pid_file_pid or 0) or None
     alive = _alive(pid)
     runtime_cfg = effective_config(runtime) if runtime else cfg
-    reachable = _reachable(runtime_cfg) if alive else False
+    probe = _reachable_detail(runtime_cfg)
+    listener_pids = _listener_pids(runtime_cfg.port)
+    discovered_pid = next((p for p in listener_pids if p != pid), None)
+    reachable = bool(probe["ok"])
+    running = alive or reachable
+    stale_pid = bool(pid and not alive and reachable)
+    effective_pid = pid if alive else discovered_pid
     return _json({
         "ok": True,
-        "running": alive,
+        "running": running,
         "reachable": reachable,
-        "pid": pid,
+        "pid": effective_pid or pid,
+        "pid_file_pid": pid_file_pid,
+        "stale_pid": stale_pid,
+        "listener_pids": listener_pids,
+        "probe": probe,
         "bind_url": runtime.get("bind_url") or runtime_cfg.bind_url,
         "local_url": runtime.get("local_url") or runtime_cfg.local_url,
         "config": public_config(cfg),
@@ -128,6 +173,27 @@ def _start(args=None, **kw):
             "runtime": runtime,
         })
 
+    probe = _reachable_detail(cfg, timeout=1)
+    if probe["ok"]:
+        listener_pids = _listener_pids(cfg.port)
+        discovered_pid = listener_pids[0] if listener_pids else None
+        if discovered_pid:
+            _pid_file().write_text(str(discovered_pid))
+            _write_runtime(discovered_pid, cfg, data_dir() / "server.log")
+        return _json({
+            "ok": True,
+            "already_running": True,
+            "pid": discovered_pid,
+            "stale_pid_repaired": bool(discovered_pid),
+            "listener_pids": listener_pids,
+            "bind_url": cfg.bind_url,
+            "local_url": cfg.local_url,
+            "message": "Dashboard is already reachable; repaired stale pid/runtime metadata instead of starting a duplicate.",
+            "probe": probe,
+        })
+
+    _pid_file().unlink(missing_ok=True)
+    _runtime_file().unlink(missing_ok=True)
     server = Path(__file__).parent / "server.py"
     log = data_dir() / "server.log"
     cmd = [sys.executable, str(server), "--host", cfg.host, "--port", str(cfg.port), "--db", cfg.db_path]

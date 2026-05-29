@@ -506,10 +506,11 @@ function renderRealtimePanel(){
     ['Streaming', status.streaming_supported ? 'Ready' : 'Unavailable'],
     ['DeltaSync', status.deltasync_supported ? 'Ready' : 'Unavailable'],
     ['Version', status.mnemosyne_version || 'unknown'],
+    ['Realtime API', status.realtime_generation || 'unknown'],
     ['Events', status.snapshot_event_count || 0],
   ];
   const delta = $('#settingsDeltaSync');
-  if(delta) delta.innerHTML = cards.map(([label,num]) => `<div class="realtime-kv"><strong>${esc(label)}</strong><span>${esc(num)}</span></div>`).join('') + `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || 'sse')}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || 'metadata only')}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || '')}</span></div>`;
+  if(delta) delta.innerHTML = cards.map(([label,num]) => `<div class="realtime-kv"><strong>${esc(label)}</strong><span>${esc(num)}</span></div>`).join('') + `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || 'sse')}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>DeltaSync methods</strong><span>${esc((status.deltasync_methods || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(', ') || 'none')}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || 'metadata only')}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || '')}</span></div>`;
 }
 async function loadRealtimePanel(){
   try {

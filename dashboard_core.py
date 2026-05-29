@@ -185,6 +185,7 @@ class DashboardStore:
         streaming_supported = False
         deltasync_supported = False
         mnemosyne_version = "unknown"
+        delta_sync_cls: Any = None
         try:
             mnemosyne_version = importlib.metadata.version("mnemosyne-memory")
         except Exception:
@@ -194,12 +195,27 @@ class DashboardStore:
 
             streaming_supported = bool(MemoryStream and EventType)
             deltasync_supported = bool(DeltaSync)
+            delta_sync_cls = DeltaSync
             event_types = [evt.name for evt in EventType]
         except Exception:
             event_types = []
 
         path = self.db_path.expanduser()
         stat = path.stat() if path.exists() else None
+        deltasync_methods: list[str] = []
+        if deltasync_supported and delta_sync_cls is not None:
+            deltasync_methods = [
+                name for name in ("sync_to", "sync_from", "compute_delta", "apply_delta", "get_checkpoint", "set_checkpoint")
+                if hasattr(delta_sync_cls, name)
+            ]
+        stream_api = {
+            "memory_stream": streaming_supported,
+            "memory_event": "MemoryEvent" in globals() or bool(event_types),
+            "event_type": bool(event_types),
+            "deltasync": deltasync_supported,
+            "sync_checkpoint": deltasync_supported,
+        }
+        realtime_generation = "mnemosyne-3.x" if mnemosyne_version.startswith("3.") else "mnemosyne-2.6" if streaming_supported else "unavailable"
         return {
             "ok": True,
             "read_only": True,
@@ -207,8 +223,11 @@ class DashboardStore:
             "streaming_supported": streaming_supported,
             "deltasync_supported": deltasync_supported,
             "mnemosyne_version": mnemosyne_version,
+            "realtime_generation": realtime_generation,
+            "stream_api": stream_api,
             "event_types": event_types,
             "deltasync_tables": ["working_memory", "episodic_memory"] if deltasync_supported else [],
+            "deltasync_methods": deltasync_methods,
             "db_path": str(path),
             "db_modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(timespec="seconds") if stat else "",
             "snapshot_event_count": len(self.realtime_event_snapshot(limit=25)) if path.exists() else 0,

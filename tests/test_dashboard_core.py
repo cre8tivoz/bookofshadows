@@ -445,6 +445,9 @@ def test_realtime_status_detects_mnemosyne_streaming_and_deltasync(tmp_path):
         assert 'MEMORY_ADDED' in status['event_types']
         assert 'MEMORY_UPDATED' in status['event_types']
         assert status['deltasync_tables'] == ['working_memory', 'episodic_memory']
+        assert {'sync_to', 'sync_from', 'compute_delta', 'apply_delta'} <= set(status['deltasync_methods'])
+        assert status['realtime_generation'] in {'mnemosyne-2.6', 'mnemosyne-3.x'}
+        assert status['stream_api']['deltasync'] is True
     assert status['db_modified_at']
     assert 'posting_credential' not in str(status)
 
@@ -737,6 +740,8 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'by_veracity' in js
     assert 'by_degradation' in js
     assert '/api/realtime/status' in js
+    assert 'Realtime API' in js
+    assert 'DeltaSync methods' in js
     assert '/api/realtime/events' in js
     assert 'EventSource' in js
     assert 'data-tab="realtime"' not in html
