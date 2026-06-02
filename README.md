@@ -1,5 +1,7 @@
 # Mnemosyne Dashboard
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H1ZAPL)
+
 A local-first web dashboard for browsing, visualising, and safely maintaining a Mnemosyne memory store from Hermes Agent.
 
 It is intentionally small: Python standard library server, static HTML/CSS/JS frontend, no external JS runtime, no cloud calls, and read-only browsing by default. Optional password-gated maintenance mode supports safe Mnemosyne-style memory supersession/expiry without hard deletes or raw overwrite edits.
