@@ -78,7 +78,7 @@ def test_release_version_is_consistent():
     project_version = pyproject['project']['version']
     plugin_text = (ROOT / 'plugin.yaml').read_text()
 
-    assert project_version == '0.13.1'
+    assert project_version == '0.14.0'
     assert f'version: "{project_version}"' in plugin_text
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0
+
+- Restore `?tab=history` compatibility by aliasing old history deep links to the current Activity view.
+- Show auth-aware frontend boot diagnostics instead of treating every startup error as a login/password problem.
+- Polish the dashboard visual design with calmer dark/light themes, cleaner navigation labels, and less noisy memory-card metadata.
+
 ## 0.13.1
 
 - Rename user-facing memory trust review wording from “Contaminated” to “Needs review”.
