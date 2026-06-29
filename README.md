@@ -4,11 +4,9 @@
 
 Browse, visualise, and safely maintain your Mnemosyne memory store — no cloud, no nonsense, no accidental deletes.
 
-![Book of Shadows dark theme](docs/screenshot-dark-overview.png)
+![Book of Shadows dark theme](docs/screenshots/desktop-dark-overview.png)
 
 ## What is this?
-
-Book of Shadows is a read-only web dashboard for [Mnemosyne](https://github.com/AxDSan/mnemosyne), the memory layer inside [Hermes Agent](https://github.com/NousResearch/hermes-agent). It gives you a clean local UI to inspect working memories, episodic summaries, knowledge triples, trust states, lifecycle tiers, and consolidation history.
 
 It's intentionally small: Python stdlib server, static HTML/CSS/JS, zero external JS runtime. Browsing opens your SQLite DB in read-only mode. Optional password-gated admin mode lets you supersede, expire, or adjust importance — never hard-delete or raw-overwrite.
 
@@ -16,7 +14,7 @@ It's intentionally small: Python stdlib server, static HTML/CSS/JS, zero externa
 
 Dark mode uses iron-charcoal surfaces with teal accents. Light mode is warm bone with dark teal. Both are easy on the eyes during long sessions.
 
-![Book of Shadows light theme](docs/screenshot-light-overview.png)
+![Book of Shadows light theme](docs/screenshots/desktop-light-overview.png)
 
 ## Features
 
@@ -69,9 +67,17 @@ Open `http://127.0.0.1:8765/`.
 
 All screenshots are generated from a temporary mock database — no real memory data, no real file paths, no private information.
 
-![Dark visualiser](docs/screenshot-dark-visualiser.png)
-![Dark search](docs/screenshot-dark-search.png)
-![Dark graph](docs/screenshot-dark-graph.png)
+| ![Dark overview](docs/screenshots/desktop-dark-overview.png) | ![Light overview](docs/screenshots/desktop-light-overview.png) |
+|---|---|
+| Dark theme overview | Light theme overview |
+
+| ![Dark visualiser](docs/screenshots/desktop-dark-constellation.png) | ![Dark search](docs/screenshots/desktop-dark-search.png) |
+|---|---|
+| Constellation visualiser | Search results |
+
+| ![Dark knowledge graph](docs/screenshots/desktop-light-graph.png) | ![Mobile dark overview](docs/screenshots/mobile-dark-overview.png) |
+|---|---|
+| Knowledge graph (light theme) | Mobile dark overview |
 
 Regenerate the full gallery locally:
 
