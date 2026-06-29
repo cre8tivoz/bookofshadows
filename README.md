@@ -4,7 +4,7 @@
 
 Browse, visualise, and safely maintain your Mnemosyne memory store — no cloud, no nonsense, no accidental deletes.
 
-![Book of Shadows dark theme](docs/screenshot-dark.png)
+![Book of Shadows dark theme](docs/screenshot-dark-overview.png)
 
 ## What is this?
 
@@ -16,7 +16,7 @@ It's intentionally small: Python stdlib server, static HTML/CSS/JS, zero externa
 
 Dark mode uses iron-charcoal surfaces with teal accents. Light mode is warm bone with dark teal. Both are easy on the eyes during long sessions.
 
-![Book of Shadows light theme](docs/screenshot-light.png)
+![Book of Shadows light theme](docs/screenshot-light-overview.png)
 
 ## Features
 
@@ -65,22 +65,26 @@ Open `http://127.0.0.1:8765/`.
 - CSP, no-sniff, frame-deny, no-referrer headers
 - Static assets resolved under `static/`; path escapes rejected
 
+## Screenshots
+
+All screenshots are generated from a temporary mock database — no real memory data, no real file paths, no private information.
+
+![Dark visualiser](docs/screenshot-dark-visualiser.png)
+![Dark search](docs/screenshot-dark-search.png)
+![Dark graph](docs/screenshot-dark-graph.png)
+
+Regenerate the full gallery locally:
+
+```bash
+python3 scripts/generate_mock_screenshots.py
+```
+
 ## Development
 
 ```bash
 python -m pytest tests/ -q
 python -m compileall -q .
 node --check static/app.js
-```
-
-## Screenshots
-
-The screenshots above are captured from a synthetic mock database — no private memory data included.
-
-Regenerate locally:
-
-```bash
-python3 scripts/generate_mock_screenshots.py
 ```
 
 ## Credits
