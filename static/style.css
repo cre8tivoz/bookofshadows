@@ -225,7 +225,9 @@ nav button span{
 }
 nav button.active span{background:var(--accent-m);color:var(--accent)}
 
-/* === WORKSPACE CONTENT ======================================= */
+/* === TABS ==================================================== */
+.tab:not(.active){display:none!important}
+.tab.active{display:block}
 .workspace{min-width:0}
 
 /* Hero */

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """Generate mock-data screenshots for the README gallery.
 
 This script intentionally builds a temporary SQLite database with fictional
@@ -21,7 +22,7 @@ from typing import Any
 
 try:
     import websocket
-except ImportError as exc:  # pragma: no cover - optional local utility
+except ImportError as exc:
     raise SystemExit("websocket-client is required to generate screenshots") from exc
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,125 +74,25 @@ def make_mock_db(path: Path) -> None:
         """
     )
     working = [
-        (
-            "wm-001",
-            "User prefers local-first memory tools with clear provenance, fast search, and no cloud calls for private chat data.",
-            "preference",
-            "2026-05-04T08:15:00",
-            "product_strategy_20260504",
-            0.92,
-            "global",
-            7,
-        ),
-        (
-            "wm-002",
-            "The Mnemosyne dashboard should feel premium on mobile, with compact controls, readable cards, and zero horizontal overflow.",
-            "insight",
-            "2026-05-04T09:30:00",
-            "design_review_20260504",
-            0.86,
-            "session",
-            5,
-        ),
-        (
-            "wm-003",
-            "Use token-prefix search: 'Dian' should match Diana but not the middle of Obsidian.",
-            "debugging",
-            "2026-05-04T10:05:00",
-            "search_quality_20260504",
-            0.81,
-            "global",
-            4,
-        ),
-        (
-            "wm-004",
-            "Graph view should make relationships explorable without exposing write actions in the browser.",
-            "security",
-            "2026-05-04T10:45:00",
-            "graph_review_20260504",
-            0.74,
-            "global",
-            3,
-        ),
-        (
-            "wm-005",
-            "Short phone-landscape screens should keep the compact top bar and avoid desktop sidebar takeover.",
-            "ux",
-            "2026-05-04T11:20:00",
-            "mobile_layout_20260504",
-            0.79,
-            "session",
-            6,
-        ),
-        (
-            "wm-006",
-            "Settings should keep authentication optional and transparent: disabled by default, password stored as salt/hash only.",
-            "security",
-            "2026-05-04T12:00:00",
-            "auth_review_20260504",
-            0.69,
-            "global",
-            2,
-        ),
+        ("wm-001", "User prefers local-first memory tools with clear provenance, fast search, and no cloud calls for private chat data.", "preference", "2026-05-04T08:15:00", "product_strategy_20260504", 0.92, "global", 7),
+        ("wm-002", "The Mnemosyne dashboard should feel premium on mobile, with compact controls, readable cards, and zero horizontal overflow.", "insight", "2026-05-04T09:30:00", "design_review_20260504", 0.86, "session", 5),
+        ("wm-003", "Use token-prefix search: 'Dian' should match Diana but not the middle of Obsidian.", "debugging", "2026-05-04T10:05:00", "search_quality_20260504", 0.81, "global", 4),
+        ("wm-004", "Graph view should make relationships explorable without exposing write actions in the browser.", "security", "2026-05-04T10:45:00", "graph_review_20260504", 0.74, "global", 3),
+        ("wm-005", "Short phone-landscape screens should keep the compact top bar and avoid desktop sidebar takeover.", "ux", "2026-05-04T11:20:00", "mobile_layout_20260504", 0.79, "session", 6),
+        ("wm-006", "Settings should keep authentication optional and transparent: disabled by default, password stored as salt/hash only.", "security", "2026-05-04T12:00:00", "auth_review_20260504", 0.69, "global", 2),
     ]
     con.executemany(
-        """
-        INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,recall_count)
-        VALUES (?,?,?,?,?,?,?,?)
-        """,
+        "INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,recall_count) VALUES (?,?,?,?,?,?,?,?)",
         working,
     )
     episodic = [
-        (
-            "em-001",
-            "Published the dashboard as a GitHub-ready Hermes plugin with README, CI, license, security notes, and read-only SQLite access.",
-            "task",
-            "2026-05-03T17:25:34",
-            "release_hardening_20260503",
-            0.77,
-            "session",
-            "wm-001,wm-004",
-            3,
-        ),
-        (
-            "em-002",
-            "Refined the mobile overview so stat cards, memory pills, and long session identifiers fit within the viewport.",
-            "task",
-            "2026-05-04T09:45:00",
-            "mobile_layout_20260504",
-            0.72,
-            "session",
-            "wm-002,wm-005",
-            5,
-        ),
-        (
-            "em-003",
-            "Tightened search behavior across Memories, Global Search, Recall Debugger, Timeline, Graph, Triples, and Consolidations.",
-            "debugging",
-            "2026-05-04T10:50:00",
-            "search_quality_20260504",
-            0.83,
-            "global",
-            "wm-003",
-            4,
-        ),
-        (
-            "em-004",
-            "Added a visible mobile top-bar theme toggle while keeping the desktop sidebar theme switch in sync.",
-            "ux",
-            "2026-05-04T12:06:00",
-            "design_review_20260504",
-            0.68,
-            "session",
-            "wm-002,wm-005",
-            2,
-        ),
+        ("em-001", "Published the dashboard as a GitHub-ready Hermes plugin with README, CI, license, security notes, and read-only SQLite access.", "task", "2026-05-03T17:25:34", "release_hardening_20260503", 0.77, "session", "wm-001,wm-004", 3),
+        ("em-002", "Refined the mobile overview so stat cards, memory pills, and long session identifiers fit within the viewport.", "task", "2026-05-04T09:45:00", "mobile_layout_20260504", 0.72, "session", "wm-002,wm-005", 5),
+        ("em-003", "Tightened search behavior across Memories, Global Search, Recall Debugger, Timeline, Graph, Triples, and Consolidations.", "debugging", "2026-05-04T10:50:00", "search_quality_20260504", 0.83, "global", "wm-003", 4),
+        ("em-004", "Added a visible mobile top-bar theme toggle while keeping the desktop sidebar theme switch in sync.", "ux", "2026-05-04T12:06:00", "design_review_20260504", 0.68, "session", "wm-002,wm-005", 2),
     ]
     con.executemany(
-        """
-        INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,summary_of,recall_count)
-        VALUES (?,?,?,?,?,?,?,?,?)
-        """,
+        "INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,summary_of,recall_count) VALUES (?,?,?,?,?,?,?,?,?)",
         episodic,
     )
     triples = [
@@ -292,70 +193,9 @@ class ChromeSession:
             if msg.get("id") == self.counter:
                 return msg
 
-    def prepare(self, theme: str, tab: str) -> dict[str, Any]:
-        self.call("Page.navigate", {"url": self.url})
-        self.call("Page.loadEventFired")
-        expr = f"""
-        (async()=>{{
-          for (let i = 0; i < 80 && typeof switchTab !== 'function'; i++) {{
-            await new Promise(r=>setTimeout(r,100));
-          }}
-          localStorage.setItem('mnemosyne-dashboard-theme', {json.dumps(theme)});
-          if (typeof setTheme === 'function') setTheme({json.dumps(theme)});
-          if (typeof switchTab !== 'function') throw new Error('dashboard JS did not initialise');
-          switchTab({json.dumps(tab if tab != 'neural' else 'constellation')});
-          if ({json.dumps(tab)} === 'constellation' && typeof switchVisualiserMode === 'function') {{
-            switchVisualiserMode('constellation');
-          }}
-          if ({json.dumps(tab)} === 'neural' && typeof switchVisualiserMode === 'function') {{
-            switchVisualiserMode('neural');
-          }}
-          await new Promise(r=>setTimeout(r,900));
-          if ({json.dumps(tab)} === 'search') {{
-            document.querySelector('#globalSearchQuery').value = 'dashboard';
-            await loadGlobalSearch();
-          }}
-          if ({json.dumps(tab)} === 'recall') {{
-            document.querySelector('#recallQuery').value = 'mobile';
-            await loadRecallDebug();
-          }}
-          if ({json.dumps(tab)} === 'timelineView') {{
-            document.querySelector('#timelineGroup').value = 'session';
-            await loadTimeline();
-          }}
-          if ({json.dumps(tab)} === 'graph') {{
-            document.querySelector('#graphQuery').value = 'dashboard';
-            await loadGraph();
-          }}
-          if ({json.dumps(tab)} === 'triples') {{
-            document.querySelector('#tripleQuery').value = 'theme';
-            await loadTriples();
-          }}
-          if ({json.dumps(tab)} === 'memories') {{
-            document.querySelector('#memoryQuery').value = 'mobile';
-            await loadMemories();
-          }}
-          if ({json.dumps(tab)} === 'consolidations') {{
-            document.querySelector('#consolidationQuery').value = 'mobile';
-            await loadConsolidations();
-          }}
-          if ({json.dumps(tab)} === 'today') {{
-            await loadTodayDigest('2026-05-04');
-          }}
-          if ({json.dumps(tab)} === 'profile') {{
-            await loadProfile();
-          }}
-          if ({json.dumps(tab)} === 'constellation') {{
-            await loadConstellation();
-          }}
-          await new Promise(r=>setTimeout(r,1200));
-          window.scrollTo(0,0);
-          const doc = document.documentElement;
-          return {{scrollWidth: doc.scrollWidth, clientWidth: doc.clientWidth, title: document.title}};
-        }})()
-        """
-        res = self.call("Runtime.evaluate", {"expression": expr, "awaitPromise": True, "returnByValue": True})
-        return res["result"]["result"].get("value", {})
+    def navigate_and_wait(self, url: str, wait_ms: int = 4000) -> None:
+        self.call("Page.navigate", {"url": url})
+        time.sleep(wait_ms / 1000)
 
     def screenshot(self, path: Path) -> None:
         data = self.call("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": False})["result"]["data"]
@@ -414,10 +254,17 @@ def run() -> None:
         manifest: list[dict[str, Any]] = []
         for idx, (name, width, height, mobile, theme, tab) in enumerate(shots):
             with ChromeSession(9330 + idx, base_url, width, height, mobile) as chrome:
-                metrics = chrome.prepare(theme, tab)
+                # Navigate to the correct URL with tab parameter
+                url_tab = 'visualiserlegacy' if tab == 'constellation' else ('visualiser3d' if tab == 'neural' else tab)
+                chrome.navigate_and_wait(f"{base_url}?tab={url_tab}&theme={theme}", 5000)
+                
+                # For visualiser tabs, wait extra time for the graph to render
+                if tab in ('constellation', 'neural'):
+                    time.sleep(3)
+                
                 out = OUT_DIR / name
                 chrome.screenshot(out)
-                manifest.append({"file": name, "theme": theme, "tab": tab, "viewport": f"{width}x{height}", **metrics})
+                manifest.append({"file": name, "theme": theme, "tab": tab, "viewport": f"{width}x{height}"})
                 print(f"wrote {out.relative_to(ROOT)}")
         (OUT_DIR / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     finally:
