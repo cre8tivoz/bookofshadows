@@ -223,8 +223,41 @@
     const displayContent = cleanContent(item.content);
     return `<div class="item memory-card ${role ? "has-role" : ""} ${opts.selectable ? "selectable" : ""} ${liveClass ? `live-${esc(liveClass)}` : ""}" data-id="${esc(item.id)}">${selectable}<div class="item-topline">${roleBadge}${liveBadge}</div>${meta(item, opts)}<div class="content">${esc(displayContent)}</div></div>`;
   }
-  function isMutableMemory(item) {
+  function isMutableMemory2(item) {
     return String(item?.status || "active").toLowerCase() === "active";
+  }
+  function memoryFilterParams(filters = {}, limit = 150) {
+    const trustPreset = filters.trustPreset || "";
+    return new URLSearchParams({
+      kind: filters.kind || "",
+      q: String(filters.q || "").trim(),
+      source: filters.source || "",
+      scope: filters.scope || "",
+      session_id: filters.sessionId || "",
+      veracity: filters.veracity || "",
+      degradation_tier: filters.degradationTier || "",
+      contaminated_only: trustPreset === "contaminated" ? "1" : "",
+      degraded_only: trustPreset === "degraded" ? "1" : "",
+      due_for_degradation: trustPreset === "due" ? "1" : "",
+      status: filters.status || "",
+      sort: filters.sort || "",
+      limit: String(limit)
+    });
+  }
+  function selectedMutableIds(items, selectedSet) {
+    return items.filter((item) => selectedSet.has(item.id) && isMutableMemory2(item)).map((item) => item.id);
+  }
+  function bulkSelectionState(items, selectedSet, canMutate) {
+    const actionableCount = selectedMutableIds(items, selectedSet).length;
+    return {
+      hasItems: items.length > 0,
+      selectedCount: selectedSet.size,
+      actionableCount,
+      statusLabel: `${selectedSet.size} selected · ${actionableCount} active`,
+      actionsDisabled: !canMutate || !actionableCount,
+      selectAllChecked: items.length > 0 && items.every((item) => selectedSet.has(item.id)),
+      selectAllDisabled: !items.length
+    };
   }
 
   // static/src/app.js
@@ -840,21 +873,17 @@
     $$("#sessionBreakdown .break-row").forEach((row) => row.onclick = () => openSessionDetail(row.dataset.filter || ""));
   }
   async function loadMemories() {
-    const trustPreset = $("#memoryTrustPreset").value;
-    const params = new URLSearchParams({
+    const params = memoryFilterParams({
       kind: $("#memoryKind").value,
-      q: $("#memoryQuery").value.trim(),
+      q: $("#memoryQuery").value,
       source: $("#memorySource").value,
       scope: $("#memoryScope").value,
-      session_id: $("#memorySession").value,
+      sessionId: $("#memorySession").value,
       veracity: $("#memoryVeracity").value,
-      degradation_tier: $("#memoryDegradation").value,
-      contaminated_only: trustPreset === "contaminated" ? "1" : "",
-      degraded_only: trustPreset === "degraded" ? "1" : "",
-      due_for_degradation: trustPreset === "due" ? "1" : "",
+      degradationTier: $("#memoryDegradation").value,
+      trustPreset: $("#memoryTrustPreset").value,
       status: $("#memoryStatus").value,
-      sort: $("#memorySort").value,
-      limit: "150"
+      sort: $("#memorySort").value
     });
     const data = await api(`/api/memories?${params.toString()}`);
     latestMemoryItems = data.items || [];
@@ -866,16 +895,15 @@
   function updateBulkBar() {
     const bar = $("#bulkMemoryBar");
     if (!bar) return;
-    const admin = canAdmin();
-    bar.classList.toggle("hidden", !latestMemoryItems.length);
-    const actionable = latestMemoryItems.filter((x) => bulkSelection.has(x.id) && isMutableMemory(x)).length;
-    $("#bulkSelectionStatus").textContent = `${bulkSelection.size} selected · ${actionable} active`;
-    $("#bulkExpire").disabled = !admin || !actionable;
-    $("#bulkVeracity").disabled = !admin || !actionable;
-    $("#bulkExpiry").disabled = !admin || !actionable;
-    $("#bulkImportance").disabled = !admin || !actionable;
-    $("#bulkSelectAll").checked = latestMemoryItems.length > 0 && latestMemoryItems.every((x) => bulkSelection.has(x.id));
-    $("#bulkSelectAll").disabled = !latestMemoryItems.length;
+    const state = bulkSelectionState(latestMemoryItems, bulkSelection, canAdmin());
+    bar.classList.toggle("hidden", !state.hasItems);
+    $("#bulkSelectionStatus").textContent = state.statusLabel;
+    $("#bulkExpire").disabled = state.actionsDisabled;
+    $("#bulkVeracity").disabled = state.actionsDisabled;
+    $("#bulkExpiry").disabled = state.actionsDisabled;
+    $("#bulkImportance").disabled = state.actionsDisabled;
+    $("#bulkSelectAll").checked = state.selectAllChecked;
+    $("#bulkSelectAll").disabled = state.selectAllDisabled;
   }
   function bindBulkMemoryControls() {
     $$("#memoryList .memory-check").forEach((chk) => chk.onchange = (e) => {
@@ -885,7 +913,7 @@
     });
   }
   async function expireSelectedMemories() {
-    const ids = latestMemoryItems.filter((x) => bulkSelection.has(x.id) && isMutableMemory(x)).map((x) => x.id);
+    const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
     if (!ids.length) return;
     const ok = await confirmAction({ title: "Expire selected memories?", description: `Expire ${ids.length} selected active memories. Backups and audit entries will be created.`, confirmText: "Expire selected", tone: "warn" });
     if (!ok) return;
@@ -895,7 +923,7 @@
     await loadMemories();
   }
   async function setSelectedImportance() {
-    const ids = latestMemoryItems.filter((x) => bulkSelection.has(x.id) && isMutableMemory(x)).map((x) => x.id);
+    const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
     if (!ids.length) return;
     const v = await askImportance(0.5);
     if (v === null) return;
@@ -905,7 +933,7 @@
     await loadMemories();
   }
   async function setSelectedVeracity() {
-    const ids = latestMemoryItems.filter((x) => bulkSelection.has(x.id) && isMutableMemory(x)).map((x) => x.id);
+    const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
     if (!ids.length) return;
     const v = await askVeracity("stated");
     if (v === null) return;
@@ -915,7 +943,7 @@
     await loadMemories();
   }
   async function setSelectedExpiry() {
-    const ids = latestMemoryItems.filter((x) => bulkSelection.has(x.id) && isMutableMemory(x)).map((x) => x.id);
+    const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
     if (!ids.length) return;
     const v = await askExpiry("");
     if (v === null) return;

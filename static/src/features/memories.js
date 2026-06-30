@@ -49,3 +49,39 @@ export function memoryItem(item, opts = {}) {
 export function isMutableMemory(item) {
   return String(item?.status || "active").toLowerCase() === "active";
 }
+
+export function memoryFilterParams(filters = {}, limit = 150) {
+  const trustPreset = filters.trustPreset || "";
+  return new URLSearchParams({
+    kind: filters.kind || "",
+    q: String(filters.q || "").trim(),
+    source: filters.source || "",
+    scope: filters.scope || "",
+    session_id: filters.sessionId || "",
+    veracity: filters.veracity || "",
+    degradation_tier: filters.degradationTier || "",
+    contaminated_only: trustPreset === "contaminated" ? "1" : "",
+    degraded_only: trustPreset === "degraded" ? "1" : "",
+    due_for_degradation: trustPreset === "due" ? "1" : "",
+    status: filters.status || "",
+    sort: filters.sort || "",
+    limit: String(limit),
+  });
+}
+
+export function selectedMutableIds(items, selectedSet) {
+  return items.filter((item) => selectedSet.has(item.id) && isMutableMemory(item)).map((item) => item.id);
+}
+
+export function bulkSelectionState(items, selectedSet, canMutate) {
+  const actionableCount = selectedMutableIds(items, selectedSet).length;
+  return {
+    hasItems: items.length > 0,
+    selectedCount: selectedSet.size,
+    actionableCount,
+    statusLabel: `${selectedSet.size} selected · ${actionableCount} active`,
+    actionsDisabled: !canMutate || !actionableCount,
+    selectAllChecked: items.length > 0 && items.every((item) => selectedSet.has(item.id)),
+    selectAllDisabled: !items.length,
+  };
+}

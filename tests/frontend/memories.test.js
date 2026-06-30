@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
 
-import { isMutableMemory, liveEventMeta, memoryItem, meta } from "../../static/src/features/memories.js";
+import {
+  bulkSelectionState,
+  isMutableMemory,
+  liveEventMeta,
+  memoryFilterParams,
+  memoryItem,
+  meta,
+  selectedMutableIds,
+} from "../../static/src/features/memories.js";
 
 describe("memory rendering", () => {
   const item = {
@@ -59,5 +67,57 @@ describe("memory rendering", () => {
     expect(isMutableMemory({ status: "active" })).toBe(true);
     expect(isMutableMemory({ status: "expired" })).toBe(false);
     expect(isMutableMemory({ status: "superseded" })).toBe(false);
+  });
+});
+
+describe("memory browser state helpers", () => {
+  test("builds memory query parameters from filters and trust presets", () => {
+    const params = memoryFilterParams({
+      kind: "working",
+      q: "  oath ledger  ",
+      source: "dashboard",
+      scope: "global",
+      sessionId: "session-7",
+      veracity: "stated",
+      degradationTier: "2",
+      trustPreset: "due",
+      status: "active",
+      sort: "oldest",
+    });
+
+    expect(params.toString()).toBe(
+      "kind=working&q=oath+ledger&source=dashboard&scope=global&session_id=session-7&veracity=stated&degradation_tier=2&contaminated_only=&degraded_only=&due_for_degradation=1&status=active&sort=oldest&limit=150",
+    );
+  });
+
+  test("selects only active memories for bulk mutations", () => {
+    const items = [
+      { id: "m-1", status: "active" },
+      { id: "m-2", status: "expired" },
+      { id: "m-3" },
+    ];
+
+    expect(selectedMutableIds(items, new Set(["m-1", "m-2", "m-3", "missing"]))).toEqual(["m-1", "m-3"]);
+  });
+
+  test("derives bulk-selection UI state from current items and permissions", () => {
+    const items = [
+      { id: "m-1", status: "active" },
+      { id: "m-2", status: "expired" },
+    ];
+    const state = bulkSelectionState(items, new Set(["m-1", "m-2", "stale"]), true);
+
+    expect(state).toEqual({
+      hasItems: true,
+      selectedCount: 3,
+      actionableCount: 1,
+      statusLabel: "3 selected · 1 active",
+      actionsDisabled: false,
+      selectAllChecked: true,
+      selectAllDisabled: false,
+    });
+
+    expect(bulkSelectionState(items, new Set(["m-1"]), false).actionsDisabled).toBe(true);
+    expect(bulkSelectionState([], new Set(), true).selectAllDisabled).toBe(true);
   });
 });
