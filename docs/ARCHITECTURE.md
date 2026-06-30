@@ -7,10 +7,13 @@ Phase 1 introduces a source tree under `static/src/` and bundles it back to `sta
 ```text
 static/src/
   app.js
+  app-main.js
   api/
     client.js
   features/
+    graph.js
     memories.js
+    review.js
   state/
     routing.js
   ui/
@@ -29,6 +32,8 @@ npm run build:frontend
 
 ## Current Extraction Boundaries
 
+- `app.js`: tiny guarded entrypoint. CI fails if this grows past the Phase 1 line-count gate.
+- `app-main.js`: transitional dashboard orchestrator. This is intentionally not a feature module; it holds remaining cross-feature wiring while later phases continue extracting controllers.
 - `api/client.js`: fetch wrapper, JSON POST helper, and unauthorized callback seam.
 - `ui/dom.js`: selector helpers, select rendering, section panel switching, mobile menu helpers.
 - `ui/render.js`: shared state-card, breakdown, select-option, and count-label rendering helpers.
@@ -36,8 +41,10 @@ npm run build:frontend
 - `utils/format.js`: time and byte formatting.
 - `state/routing.js`: pure route parse/serialize helpers and legacy tab aliases.
 - `features/memories.js`: pure memory card/meta rendering and mutability helper.
+- `features/review.js`: review queue rendering, lifecycle queue wrapper, review query params, and selected-action helpers.
+- `features/graph.js`: graph layout, graph inspector HTML, SVG graph controller state, pan/zoom binding, and graph API query path.
 
-Large controller functions such as `switchTab()`, `applyRoute()`, feature loaders, drawer actions, and visualiser lifecycle remain in `static/src/app.js` for now. They should move only after dependencies are explicit and covered by tests.
+Large controller functions such as `switchTab()`, `applyRoute()`, feature loaders, drawer actions, and visualiser lifecycle remain in `static/src/app-main.js` for now. They should move only after dependencies are explicit and covered by tests. The visualiser code is the main remaining extraction target because it combines canvas, Three.js, and memory-palace state.
 
 ## Test Strategy
 
