@@ -5,6 +5,7 @@ import { breakdown, countLabel, optionsFrom, stateHtml } from './ui/render.js';
 import { createApiClient } from './api/client.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
 import { bulkSelectionState, liveEventMeta, memoryFilterParams, memoryItem, meta, selectedMutableIds } from './features/memories.js';
+import { lifecycleQueueHtml, reviewActionableIds, reviewFilterParams, reviewQueueHtml } from './features/review.js';
 
 const THEME_KEY = 'mnemosyne-dashboard-theme';
 const VISUALISER_MODE_KEY = 'mnemosyne-dashboard-visualiser-mode';
@@ -967,36 +968,12 @@ function applyReviewFilter(filter={}){
   $('#memorySort').value = filter.sort || 'importance';
   switchTab('memories');
 }
-function reviewReasonBadges(key, item={}){
-  const reasons = [];
-  if(key === 'contaminated' || item.veracity && item.veracity !== 'stated') reasons.push('Needs review');
-  if(key === 'important_contaminated' || Number(item.importance || 0) >= 0.75) reasons.push('High importance');
-  if(key === 'degraded' || Number(item.degradation_tier || 1) > 1) reasons.push('Degraded');
-  if(key === 'due_degradation') reasons.push('Due for degradation');
-  return [...new Set(reasons)].map(reason => `<span>${esc(reason)}</span>`).join('');
-}
-function reviewMemoryItem(key, item, opts={}){
-  const reasons = reviewReasonBadges(key, item);
-  return `<div class="review-memory-wrap">${memoryItem(item, opts)}${reasons ? `<div class="review-reasons" aria-label="Review reasons">${reasons}</div>` : ''}</div>`;
-}
-function reviewQueueHtml(key, queue, opts={}){
-  const items = queue.items || [];
-  const selectAction = opts.triage ? `<button class="tiny review-select-visible" data-review-key="${esc(key)}">Select visible</button>` : '';
-  const renderedItems = opts.triage ? items.map(item => reviewMemoryItem(key, item, {selectable:true, selectedSet:reviewSelection, checkClass:'review-check'})).join('') : items.map(item => reviewMemoryItem(key, item)).join('');
-  return `<section class="review-queue glass" data-review-key="${esc(key)}">
-    <div class="section-head mini"><h2>${esc(queue.title || key)}</h2><span>${items.length} listed</span></div>
-    <p class="muted">${esc(queue.description || '')}</p>
-    <div class="review-actions"><button class="tiny primary review-filter" data-review-key="${esc(key)}">Open filtered browser</button>${selectAction}</div>
-    <div class="list memory-grid">${renderedItems || stateHtml('empty', 'No items in this queue.', 'This queue is clear for now.')}</div>
-  </section>`;
-}
-function reviewActionableIds(){ return [...new Set(latestReviewItems.filter(x => reviewSelection.has(x.id) && isMutableMemory(x)).map(x => x.id))]; }
 function updateReviewBulkBar(){
   const bar = $('#reviewBulkBar');
   if(!bar) return;
   const admin = canAdmin();
   const visible = latestReviewItems.length;
-  const actionable = reviewActionableIds().length;
+  const actionable = reviewActionableIds(latestReviewItems, reviewSelection).length;
   bar.classList.toggle('hidden', !visible);
   $('#reviewSelectionStatus').textContent = `${reviewSelection.size} selected`;
   $('#reviewConfirm').disabled = !admin || !actionable;
@@ -1014,14 +991,6 @@ function bindReviewControls(queues){
     $$('#review .review-check').forEach(chk => { chk.checked = true; });
     updateReviewBulkBar();
   });
-}
-function reviewFilterParams(){
-  const params = new URLSearchParams(`queue=${encodeURIComponent(selectedReviewQueue)}&limit=${REVIEW_PAGE_SIZE}&offset=${reviewOffset}`);
-  const q = ($('#reviewSearchQuery')?.value || '').trim();
-  const minImportance = ($('#reviewMinImportance')?.value || '').trim();
-  if(q) params.set('q', q);
-  if(minImportance && Number(minImportance) > 0) params.set('min_importance', minImportance);
-  return params;
 }
 function updateReviewImportanceLabel(){
   const slider = $('#reviewMinImportance');
@@ -1053,7 +1022,7 @@ function renderSelectedReviewQueue(data, append=false){
   latestReviewItems = append ? [...new Map([...latestReviewItems, ...newItems].map(item => [item.id, item])).values()] : [...new Map(newItems.map(item => [item.id, item])).values()];
   $('#reviewQueueCount').textContent = `${Number(data.total ?? selectedCard.count ?? 0).toLocaleString()} total · ${latestReviewItems.length.toLocaleString()} listed`;
   const renderedQueue = {...queues[selectedReviewQueue], items:latestReviewItems};
-  $('#reviewQueues').innerHTML = reviewQueueHtml(selectedReviewQueue, renderedQueue, {triage:true});
+  $('#reviewQueues').innerHTML = reviewQueueHtml(selectedReviewQueue, renderedQueue, {triage:true, selectedSet:reviewSelection});
   bindMemoryClicks($('#review'));
   bindReviewControls(queues);
   updateReviewBulkBar();
@@ -1069,11 +1038,17 @@ function renderSelectedReviewQueue(data, append=false){
   });
 }
 async function loadReviewPage(append=false){
-  const data = await api(`/api/review?${reviewFilterParams().toString()}`);
+  const data = await api(`/api/review?${reviewFilterParams({
+    queue:selectedReviewQueue,
+    limit:REVIEW_PAGE_SIZE,
+    offset:reviewOffset,
+    q:$('#reviewSearchQuery')?.value || '',
+    minImportance:$('#reviewMinImportance')?.value || ''
+  }).toString()}`);
   renderSelectedReviewQueue(data, append);
 }
 async function confirmSelectedReviewMemories(){
-  const ids = reviewActionableIds();
+  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const ok = await confirmAction({title:'Confirm selected memories?', description:`Mark ${ids.length} selected active memories as stated.`, confirmText:'Confirm selected'});
   if(!ok) return;
@@ -1082,7 +1057,7 @@ async function confirmSelectedReviewMemories(){
   reviewSelection.clear(); await loadStats(); await loadReview();
 }
 async function setSelectedReviewVeracity(){
-  const ids = reviewActionableIds();
+  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const v = await askVeracity('stated');
   if(v === null) return;
@@ -1091,7 +1066,7 @@ async function setSelectedReviewVeracity(){
   reviewSelection.clear(); await loadStats(); await loadReview();
 }
 async function setSelectedReviewExpiry(){
-  const ids = reviewActionableIds();
+  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const v = await askExpiry('');
   if(v === null) return;
@@ -1100,7 +1075,7 @@ async function setSelectedReviewExpiry(){
   reviewSelection.clear(); await loadStats(); await loadReview();
 }
 async function expireSelectedReviewMemories(){
-  const ids = reviewActionableIds();
+  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const ok = await confirmAction({title:'Expire selected memories?', description:`Expire ${ids.length} selected active memories. Backups and audit entries will be created.`, confirmText:'Expire selected', tone:'warn'});
   if(!ok) return;
@@ -1112,9 +1087,6 @@ async function loadReview(){
   reviewOffset = 0;
   reviewSelection.clear();
   await loadReviewPage(false);
-}
-function lifecycleQueueHtml(key, queue){
-  return reviewQueueHtml(key, queue).replace('review-queue glass', 'review-queue lifecycle-queue glass').replace('Open filtered browser', 'Open lifecycle filter');
 }
 async function loadLifecycle(){
   const data = await api('/api/lifecycle?limit=80');

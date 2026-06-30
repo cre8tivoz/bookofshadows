@@ -894,8 +894,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'latestReviewItems.forEach' in select_visible_segment
     assert '$$(\'#review .review-check\')' in select_visible_segment
     assert '/api/review?' in js
-    assert 'limit=${REVIEW_PAGE_SIZE}' in js
-    assert 'offset=${reviewOffset}' in js
+    assert 'reviewFilterParams({' in js
+    assert 'limit:REVIEW_PAGE_SIZE' in js
+    assert 'offset:reviewOffset' in js
     assert '/api/review?limit=10000' not in js
     assert "Object.entries(queues).map(([key, queue]) => reviewQueueHtml" not in js
     assert 'Needs review' in js
