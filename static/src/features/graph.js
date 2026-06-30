@@ -132,7 +132,7 @@ export function createGraphFeature({ $, $$, api, showDetail, switchTab }) {
   }
 
   async function loadGraph(){
-    drawGraph(await api(graphQueryPath($('#graphQuery')?.value || '')));
+    drawGraph(await api(graphQueryPath($('#graphQuery')?.value || ''), {requestKey:'graph'}));
   }
 
   return { drawGraph, loadGraph, resetGraphView, inspectNode, inspectEdge };

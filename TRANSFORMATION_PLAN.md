@@ -206,17 +206,17 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 ### Tasks
 
-- [ ] Create a typed endpoint map in `api/endpoints.js`.
-- [ ] Add request deduplication for identical in-flight GETs.
-- [ ] Add a short TTL cache for low-volatility endpoints:
+- [x] Create a typed endpoint map in `api/endpoints.js`.
+- [x] Add request deduplication for identical in-flight GETs.
+- [x] Add a short TTL cache for low-volatility endpoints:
   - stats
   - config
   - diagnostics
   - lifecycle counts
-- [ ] Add abort handling for stale searches.
-- [ ] Standardise error responses into one UI pathway.
-- [ ] Add request timing logs in development mode.
-- [ ] Add graceful offline/error states.
+- [x] Add abort handling for stale searches.
+- [x] Standardise error responses into one UI pathway.
+- [x] Add request timing logs in development mode.
+- [x] Add graceful offline/error states.
 
 ### UX outcomes
 
@@ -230,6 +230,13 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - Duplicate rapid clicks do not create duplicate requests.
 - Stale searches are cancelled or ignored.
 - User sees loading, success, and error states consistently.
+
+### Phase 2 status update - 2026-07-01
+
+- `api/endpoints.js` centralises common endpoint builders and low-volatility cache policy.
+- `api/client.js` now normalises failures into `ApiError`, deduplicates in-flight GETs, caches low-volatility GETs for short TTLs, aborts keyed stale requests, clears cache after JSON mutations, and can emit development timing logs with `localStorage.mnemosyne-debug-api = "1"`.
+- Query-heavy panes now use request keys and local error states: memories, global search, recall debug, timeline, triples, review queues, graph, and MEMORIA tables/KG.
+- Frontend API coverage now includes dedupe, TTL cache, abort handling, mutation invalidation, offline errors, timing logs, and endpoint builders.
 
 ## Phase 3 - Routing and Navigation
 
