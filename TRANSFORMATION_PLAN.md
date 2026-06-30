@@ -244,12 +244,12 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 ### Tasks
 
-- [ ] Add URL routes for tabs, e.g. `#/overview`, `#/memories`, `#/graph`.
-- [ ] Add route params for key filters, e.g. `#/memories?q=whoop&status=active`.
-- [ ] Support deep links to memory detail drawers, e.g. `#/memory/<id>`.
-- [ ] Ensure browser back/forward works.
-- [ ] Preserve active tab on reload.
-- [ ] Add route-aware sidebar active states.
+- [x] Add URL routes for tabs, e.g. `#/overview`, `#/memories`, `#/graph`.
+- [x] Add route params for key filters, e.g. `#/memories?q=whoop&status=active`.
+- [x] Support deep links to memory detail drawers, e.g. `#/memory/<id>`.
+- [x] Ensure browser back/forward works.
+- [x] Preserve active tab on reload.
+- [x] Add route-aware sidebar active states.
 
 ### Acceptance criteria
 
@@ -257,6 +257,14 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - Browser back returns to previous dashboard state.
 - A memory detail link can be opened directly.
 - No broken default route.
+
+### Phase 3 status update - 2026-07-01
+
+- `state/routing.js` now serialises dashboard state into hash URLs while preserving unrelated query params and reading older `?tab=...` links for compatibility.
+- Major tabs are bookmarkable as `#/overview`, `#/today`, `#/memories`, `#/graph`, and `#/settings`; memory filters round-trip through `#/memories?...`.
+- Memory and session drawers can be opened directly with `#/memory/<id>` and `#/session/<id>`.
+- `app-main.js` now applies initial route state on load, responds to `popstate` and `hashchange`, updates route-aware sidebar state, and keeps memory filters in the URL.
+- Frontend routing tests cover hash tabs, filter params, legacy query links, and deep-link serialisation. Browser smoke covers hash route loads, direct memory deep links, and back navigation.
 
 ## Phase 4 - Friction Reduction and Product UX
 

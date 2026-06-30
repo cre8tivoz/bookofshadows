@@ -71,3 +71,13 @@ Phase 2 keeps the existing `api(path)` and `postJson(path, body)` calling style,
 - failures are normalised as `ApiError` with `status`, `path`, `payload`, and `retryable`;
 - successful JSON mutations clear cached GETs;
 - development timing logs can be enabled with `localStorage.mnemosyne-debug-api = "1"`.
+
+## Routing
+
+Phase 3 uses hash routes so the dashboard can be served by the existing Python static server without backend route rewrites.
+
+- Major tabs use `#/overview`, `#/today`, `#/memories`, `#/graph`, and `#/settings`.
+- Memory browser filters round-trip through `#/memories?q=...&status=...&source=...&scope=...`.
+- Detail drawers use stable deep links: `#/memory/<id>` for memories and `#/session/<id>` for timeline sessions.
+- `popstate` and `hashchange` both re-apply route state, so browser back/forward and pasted hash links restore the correct tab, filters, and drawer.
+- Legacy query-string links such as `?tab=memories&memory=<id>` are still parsed, but new navigation serialises to hash routes.

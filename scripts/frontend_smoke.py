@@ -187,7 +187,7 @@ def run_chrome_route(base_url: str, tab: str) -> float:
     }
     route_id = route_ids.get(tab, tab)
     with ChromeSession(base_url) as chrome:
-        chrome.navigate_and_wait(f"{base_url}?tab={tab}")
+        chrome.navigate_and_wait(f"{base_url}#/{tab}")
         checks = chrome.eval(
             f"""(() => {{
               const section = document.getElementById({json.dumps(route_id)});
@@ -213,6 +213,56 @@ def run_chrome_route(base_url: str, tab: str) -> float:
     return elapsed_ms
 
 
+def run_chrome_memory_deep_link(base_url: str, memory_id: str) -> float:
+    started = time.perf_counter()
+    with ChromeSession(base_url) as chrome:
+        chrome.navigate_and_wait(f"{base_url}#/memory/{memory_id}")
+        checks = chrome.eval(
+            f"""(() => {{
+              const memories = document.getElementById('explore');
+              const detail = document.getElementById('detail');
+              const text = document.body ? document.body.innerText : '';
+              return {{
+                sectionActive: !!memories && memories.classList.contains('active'),
+                detailOpen: !!detail && !detail.classList.contains('hidden'),
+                hasMemoryId: text.includes({json.dumps(memory_id)}),
+                hasBootError: !!document.querySelector('#bootError:not(.hidden)')
+              }};
+            }})()"""
+        )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    if not checks.get("sectionActive"):
+        raise AssertionError(f"Chrome deep link did not activate memories section: {checks}")
+    if not checks.get("detailOpen") or not checks.get("hasMemoryId"):
+        raise AssertionError(f"Chrome deep link did not open memory detail: {checks}")
+    if checks.get("hasBootError"):
+        raise AssertionError(f"Chrome deep link rendered boot error: {checks}")
+    return elapsed_ms
+
+
+def run_chrome_back_forward(base_url: str) -> float:
+    started = time.perf_counter()
+    with ChromeSession(base_url) as chrome:
+        chrome.navigate_and_wait(f"{base_url}#/overview", wait_ms=1200)
+        chrome.navigate_and_wait(f"{base_url}#/graph", wait_ms=1200)
+        chrome.eval("history.back()")
+        time.sleep(2.0)
+        checks = chrome.eval(
+            """(() => ({
+              href: location.href,
+              overviewActive: document.getElementById('overview')?.classList.contains('active'),
+              graphActive: document.getElementById('graph')?.classList.contains('active'),
+              hasBootError: !!document.querySelector('#bootError:not(.hidden)')
+            }))()"""
+        )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    if not checks.get("overviewActive") or checks.get("graphActive"):
+        raise AssertionError(f"Chrome back navigation did not restore overview route: {checks}")
+    if checks.get("hasBootError"):
+        raise AssertionError(f"Chrome back navigation rendered boot error: {checks}")
+    return elapsed_ms
+
+
 def run() -> None:
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     db_path = TMP_DIR / "mock-mnemosyne.db"
@@ -234,11 +284,15 @@ def run() -> None:
             tab: run_chrome_route(base_url, tab)
             for tab in ("overview", "today", "memories", "graph", "settings")
         }
+        deep_link_ms = run_chrome_memory_deep_link(base_url, "wm-001")
+        back_forward_ms = run_chrome_back_forward(base_url)
         result: dict[str, Any] = {
             "ok": True,
             "base_url": base_url,
             "http_ms": {k: round(v, 1) for k, v in timings.items()},
             "chrome_route_ms": {k: round(v, 1) for k, v in route_timings.items()},
+            "chrome_deep_link_ms": {"memory": round(deep_link_ms, 1)},
+            "chrome_history_ms": {"back": round(back_forward_ms, 1)},
         }
         print(json.dumps(result, indent=2))
     finally:
