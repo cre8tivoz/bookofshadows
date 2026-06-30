@@ -35,6 +35,7 @@ npm run build:frontend
 - `app.js`: tiny guarded entrypoint. CI fails if this grows past the Phase 1 line-count gate.
 - `app-main.js`: transitional dashboard orchestrator. This is intentionally not a feature module; it holds remaining cross-feature wiring while later phases continue extracting controllers.
 - `api/client.js`: fetch wrapper, JSON POST helper, and unauthorized callback seam.
+- `api/endpoints.js`: endpoint builders and short TTL policy for low-volatility GETs.
 - `ui/dom.js`: selector helpers, select rendering, section panel switching, mobile menu helpers.
 - `ui/render.js`: shared state-card, breakdown, select-option, and count-label rendering helpers.
 - `utils/escape.js`: HTML escaping, ID shortening, chat-role prefix helpers.
@@ -59,3 +60,14 @@ The browser smoke test still exercises the generated `static/app.js` through the
 ```bash
 /Users/habibi/.local/bin/uv run --with websocket-client --python /Users/habibi/.local/bin/python3.11 python scripts/frontend_smoke.py
 ```
+
+## API Reliability
+
+Phase 2 keeps the existing `api(path)` and `postJson(path, body)` calling style, but the client now owns request reliability:
+
+- identical in-flight GETs are deduplicated;
+- low-volatility GETs use short URL-driven TTL caching;
+- keyed query requests can abort older stale requests;
+- failures are normalised as `ApiError` with `status`, `path`, `payload`, and `retryable`;
+- successful JSON mutations clear cached GETs;
+- development timing logs can be enabled with `localStorage.mnemosyne-debug-api = "1"`.

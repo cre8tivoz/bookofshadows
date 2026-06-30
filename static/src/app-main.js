@@ -3,6 +3,7 @@ import { fmtBytes, prettyTime } from './utils/format.js';
 import { $, $$, closeMobileMenu, closeMobileMenuForViewportChange, fillSelect, showPanel } from './ui/dom.js';
 import { breakdown, countLabel, optionsFrom, stateHtml } from './ui/render.js';
 import { createApiClient } from './api/client.js';
+import { endpoints } from './api/endpoints.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
 import { bulkSelectionState, liveEventMeta, memoryFilterParams, memoryItem, meta, selectedMutableIds } from './features/memories.js';
 import { lifecycleQueueHtml, reviewActionableIds, reviewFilterParams, reviewQueueHtml } from './features/review.js';
@@ -48,8 +49,13 @@ function initTheme(){
 }
 function showLogin(){ $('#loginOverlay')?.classList.remove('hidden'); }
 function hideLogin(){ $('#loginOverlay')?.classList.add('hidden'); }
-const { api, postJson } = createApiClient({ onUnauthorized: showLogin });
+const { api, postJson } = createApiClient({
+  onUnauthorized: showLogin,
+  devTiming: localStorage.getItem('mnemosyne-debug-api') === '1',
+  onTiming: info => console.debug('[api]', info),
+});
 const { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
+function isCancelledRequest(error){ return error?.name === 'ApiError' && error.status === 0 && !error.retryable; }
 function bootErrorPayload(){
   return lastBootError ? JSON.stringify(lastBootError, null, 2) : '';
 }
@@ -362,7 +368,7 @@ function switchTab(name, opts={}){
 }
 
 async function loadStats(){
-  const s = await api('/api/stats');
+  const s = await api(endpoints.stats());
   $('#dbPath').textContent = s.db_path;
   $('#dbPath').title = s.db_path;
   const cards = [
@@ -518,7 +524,7 @@ function renderRuntimeDiagnostics(runtime){
 }
 async function loadRuntimeDiagnostics(){
   try {
-    renderRuntimeDiagnostics(await api('/api/runtime/status'));
+    renderRuntimeDiagnostics(await api(endpoints.runtimeStatus()));
   } catch(e) {
     const el = $('#runtimeDiagnostics');
     if(el) el.innerHTML = `<div class="state-card state-error"><strong>Runtime diagnostics unavailable</strong><p>${esc(e.message)}</p></div>`;
@@ -526,7 +532,7 @@ async function loadRuntimeDiagnostics(){
 }
 async function loadRealtimePanel(){
   try {
-    realtimeState.status = await api('/api/realtime/status');
+    realtimeState.status = await api(endpoints.realtimeStatus());
     renderRealtimeStatus();
     renderRealtimePanel();
   } catch(e) {
@@ -548,7 +554,7 @@ function toggleLiveUpdates(){
 }
 async function initRealtime(){
   try {
-    realtimeState.status = await api('/api/realtime/status');
+    realtimeState.status = await api(endpoints.realtimeStatus());
     renderRealtimeStatus();
     renderRealtimeEvents();
   } catch(e) {
@@ -581,12 +587,17 @@ async function loadMemories(){
     status: $('#memoryStatus').value,
     sort: $('#memorySort').value
   });
-  const data = await api(`/api/memories?${params.toString()}`);
-  latestMemoryItems = data.items || [];
-  $('#memoryList').innerHTML = latestMemoryItems.map(item => memoryItem(item, {selectable:true, selectedSet:bulkSelection})).join('') || stateHtml('empty', 'No memories found.', 'Try clearing filters or broadening the memory content search.');
-  bindMemoryClicks($('#memoryList'));
-  bindBulkMemoryControls();
-  updateBulkBar();
+  try {
+    const data = await api(endpoints.memories(params), {requestKey:'memories'});
+    latestMemoryItems = data.items || [];
+    $('#memoryList').innerHTML = latestMemoryItems.map(item => memoryItem(item, {selectable:true, selectedSet:bulkSelection})).join('') || stateHtml('empty', 'No memories found.', 'Try clearing filters or broadening the memory content search.');
+    bindMemoryClicks($('#memoryList'));
+    bindBulkMemoryControls();
+    updateBulkBar();
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    $('#memoryList').innerHTML = stateHtml('error', 'Could not load memories.', e.message || 'Try again.');
+  }
 }
 function updateBulkBar(){
   const bar = $('#bulkMemoryBar');
@@ -770,10 +781,15 @@ async function openSessionDetail(sessionId, opts={}){
   $$('#detailBody .session-event').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Session event detail'));
 }
 async function loadTriples(){
-  const q = encodeURIComponent($('#tripleQuery').value.trim());
-  const data = await api(`/api/triples?q=${q}&limit=300`);
-  $('#tripleRows').innerHTML = data.items.map(t => `<tr class="triple-row" data-triple='${esc(JSON.stringify(t))}'><td>${esc(t.subject)}</td><td>${esc(t.predicate)}</td><td>${esc(t.object)}</td><td>${esc(t.confidence ?? '')}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-cell">No triples found.</td></tr>';
-  $$('#tripleRows .triple-row').forEach(row => row.onclick = () => showDetail(JSON.parse(row.dataset.triple), 'Triple detail'));
+  const q = $('#tripleQuery').value.trim();
+  try {
+    const data = await api(`/api/triples?q=${encodeURIComponent(q)}&limit=300`, {requestKey:'triples'});
+    $('#tripleRows').innerHTML = data.items.map(t => `<tr class="triple-row" data-triple='${esc(JSON.stringify(t))}'><td>${esc(t.subject)}</td><td>${esc(t.predicate)}</td><td>${esc(t.object)}</td><td>${esc(t.confidence ?? '')}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-cell">No triples found.</td></tr>';
+    $$('#tripleRows .triple-row').forEach(row => row.onclick = () => showDetail(JSON.parse(row.dataset.triple), 'Triple detail'));
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    $('#tripleRows').innerHTML = `<tr><td colspan="4" class="empty-cell">Could not load triples: ${esc(e.message || 'Try again.')}</td></tr>`;
+  }
 }
 
 function consolidationItem(c){
@@ -817,7 +833,7 @@ async function loadGlobalSearch(){
   if(!q){ $('#globalSearchResults').innerHTML = stateHtml('empty', 'Search from the sidebar or type a query above.', 'Search looks across memories, facts, and consolidations.'); return; }
   $('#globalSearchResults').innerHTML = stateHtml('loading', 'Searching memory…', q);
   try{
-    const data = await api(`/api/search?q=${encodeURIComponent(q)}&limit=30`);
+    const data = await api(endpoints.search(q, 30), {requestKey:'global-search'});
     const memories = data.memories || [];
     const triples = data.triples || [];
     const consolidations = data.consolidations || [];
@@ -831,6 +847,7 @@ async function loadGlobalSearch(){
     bindMemoryClicks($('#globalSearchResults'));
     bindJsonCards($('#globalSearchResults'), 'Search result detail');
   }catch(e){
+    if(isCancelledRequest(e)) return;
     $('#globalSearchResults').innerHTML = stateHtml('error', 'Search failed.', e.message || 'The dashboard could not load search results.');
   }
 }
@@ -841,20 +858,31 @@ function recallItem(x){
 async function loadRecallDebug(){
   const q = $('#recallQuery')?.value.trim() || '';
   if(!q){ $('#recallNote').textContent = 'Type a query to explain approximate recall ranking.'; $('#recallResults').innerHTML = ''; return; }
-  const data = await api(`/api/recall-debug?q=${encodeURIComponent(q)}&limit=30`);
-  $('#recallNote').textContent = data.note;
-  $('#recallResults').innerHTML = data.items.map(recallItem).join('') || '<p class="muted">No matching memories.</p>';
-  bindMemoryClicks($('#recallResults'));
+  try {
+    const data = await api(`/api/recall-debug?q=${encodeURIComponent(q)}&limit=30`, {requestKey:'recall-debug'});
+    $('#recallNote').textContent = data.note;
+    $('#recallResults').innerHTML = data.items.map(recallItem).join('') || '<p class="muted">No matching memories.</p>';
+    bindMemoryClicks($('#recallResults'));
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    $('#recallNote').textContent = 'Recall debug failed.';
+    $('#recallResults').innerHTML = stateHtml('error', 'Could not explain recall ranking.', e.message || 'Try again.');
+  }
 }
 function timelineEvent(e){ return `<div class="timeline-event item" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><button class="session-chip" data-session="${esc(e.session_id || '')}">${esc(e.session_id || 'no session')}</button><span>${esc(e.timestamp)}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview)}</div></div>`; }
 async function loadTimeline(){
   const q = $('#timelineQuery')?.value.trim() || '';
   const group = $('#timelineGroup')?.value || 'day';
-  const data = await api(`/api/timeline?q=${encodeURIComponent(q)}&group=${encodeURIComponent(group)}&limit=300`);
-  $('#timelineResults').innerHTML = data.groups.map(g => `<div class="timeline-group"><div class="section-head mini"><h2>${esc(g.key)}</h2><span>${g.count} events</span>${group === 'session' && g.key !== 'no session' ? `<button class="tiny open-session" data-session="${esc(g.key)}">Open session</button>` : ''}</div><div class="timeline">${g.events.map(timelineEvent).join('')}</div></div>`).join('') || '<p class="muted">No timeline events.</p>';
-  bindJsonCards($('#timelineResults'), 'Timeline event detail');
-  $$('#timelineResults .session-chip').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
-  $$('#timelineResults .open-session').forEach(btn => btn.onclick = () => openSessionDetail(btn.dataset.session || ''));
+  try {
+    const data = await api(`/api/timeline?q=${encodeURIComponent(q)}&group=${encodeURIComponent(group)}&limit=300`, {requestKey:'timeline'});
+    $('#timelineResults').innerHTML = data.groups.map(g => `<div class="timeline-group"><div class="section-head mini"><h2>${esc(g.key)}</h2><span>${g.count} events</span>${group === 'session' && g.key !== 'no session' ? `<button class="tiny open-session" data-session="${esc(g.key)}">Open session</button>` : ''}</div><div class="timeline">${g.events.map(timelineEvent).join('')}</div></div>`).join('') || '<p class="muted">No timeline events.</p>';
+    bindJsonCards($('#timelineResults'), 'Timeline event detail');
+    $$('#timelineResults .session-chip').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
+    $$('#timelineResults .open-session').forEach(btn => btn.onclick = () => openSessionDetail(btn.dataset.session || ''));
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    $('#timelineResults').innerHTML = stateHtml('error', 'Could not load timeline.', e.message || 'Try again.');
+  }
 }
 function tinyRows(rows, key='label'){ return (rows || []).map(r => `<div class="break-row"><span>${esc(r[key] || r.label || 'unknown')}</span><strong>${Number(r.count || 0).toLocaleString()}</strong></div>`).join('') || '<p class="muted">No data</p>'; }
 function tripleItem(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">fact</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
@@ -940,7 +968,7 @@ function applyPatternFilter(kind='', query=''){
   loadMemories();
 }
 async function loadPatternInsights(){
-  const data = await api('/api/patterns?limit=10');
+  const data = await api(endpoints.patterns(10));
   $('#patternSummary').innerHTML = patternSummary(data);
   $('#patternContent').innerHTML = renderPatternBars(data.content_patterns || [], 'content-pattern');
   $('#patternTemporal').innerHTML = renderPatternBars(data.temporal_patterns || [], 'temporal-pattern');
@@ -951,7 +979,7 @@ async function loadPatternInsights(){
   $$('#patternInsights .pattern-bar,#contextDomains .pattern-bar').forEach(el => el.onclick = () => applyPatternFilter(el.dataset.patternKind || '', el.dataset.patternQuery || ''));
 }
 async function loadProfile(){
-  const [data] = await Promise.all([api('/api/profile/inferred?limit=10'), loadPatternInsights()]);
+  const [data] = await Promise.all([api(endpoints.profile(10)), loadPatternInsights()]);
   $('#profileGrid').innerHTML = `${contextSummary(data)}${(data.sections || []).map(s => `<section class="profile-section glass"><div class="section-head mini"><h2>${esc(contextLabel(s.name))}</h2><span>${esc(s.count)} active item${Number(s.count) === 1 ? '' : 's'}</span></div>${(s.items || []).map(profileItem).join('')}</section>`).join('') || '<p class="muted">No inferred profile data found.</p>'}`;
   $$('#profileGrid .profile-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
   $$('#profileGrid .profile-item[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail'));
@@ -1039,14 +1067,19 @@ function renderSelectedReviewQueue(data, append=false){
   });
 }
 async function loadReviewPage(append=false){
-  const data = await api(`/api/review?${reviewFilterParams({
-    queue:selectedReviewQueue,
-    limit:REVIEW_PAGE_SIZE,
-    offset:reviewOffset,
-    q:$('#reviewSearchQuery')?.value || '',
-    minImportance:$('#reviewMinImportance')?.value || ''
-  }).toString()}`);
-  renderSelectedReviewQueue(data, append);
+  try {
+    const data = await api(endpoints.review(reviewFilterParams({
+      queue:selectedReviewQueue,
+      limit:REVIEW_PAGE_SIZE,
+      offset:reviewOffset,
+      q:$('#reviewSearchQuery')?.value || '',
+      minImportance:$('#reviewMinImportance')?.value || ''
+    })), {requestKey:'review'});
+    renderSelectedReviewQueue(data, append);
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    $('#reviewQueues').innerHTML = stateHtml('error', 'Could not load review queue.', e.message || 'Try again.');
+  }
 }
 async function confirmSelectedReviewMemories(){
   const ids = reviewActionableIds(latestReviewItems, reviewSelection);
@@ -1090,7 +1123,7 @@ async function loadReview(){
   await loadReviewPage(false);
 }
 async function loadLifecycle(){
-  const data = await api('/api/lifecycle?limit=80');
+  const data = await api(endpoints.lifecycle(80));
   const queues = data.queues || {};
   const t = data.thresholds || {};
   const weights = t.weights || {};
@@ -1743,7 +1776,7 @@ function drawConstellation(data){
 }
 async function loadConstellation(){ drawConstellation(await api('/api/constellation?limit=240')); }
 async function loadDiagnostics(){
-  const diag = await api('/api/diagnostics');
+  const diag = await api(endpoints.diagnostics());
   const counts = diag.table_counts || {};
   const core = ['working_memory','episodic_memory','triples','consolidation_log'].filter(t => t in counts);
   $('#diagnosticsSummary').innerHTML = `
@@ -3272,18 +3305,22 @@ async function loadMemoria(){
 
 async function loadMemoriaTable(inputId, apiPath, listId, countId){
   const q = $(`#${inputId}Query`)?.value?.trim() || '';
-  const r = await api(`${apiPath}?q=${encodeURIComponent(q)}&limit=200`);
-  const items = r.items || [];
-  if(countId) $(`#${countId}`).textContent = `${items.length} entries`;
   const list = $(`#${listId}`);
   if(!list) return;
-  if(!items.length){
-    list.innerHTML = '<div class="muted" style="padding:2rem;text-align:center">No entries found.</div>';
-    return;
+  try {
+    const r = await api(`${apiPath}?q=${encodeURIComponent(q)}&limit=200`, {requestKey:`memoria:${apiPath}`});
+    const items = r.items || [];
+    if(countId) $(`#${countId}`).textContent = `${items.length} entries`;
+    if(!items.length){
+      list.innerHTML = '<div class="muted" style="padding:2rem;text-align:center">No entries found.</div>';
+      return;
+    }
+    const renderer = memoriaRenderer(apiPath);
+    list.innerHTML = items.map(item => renderer(item)).join('');
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    list.innerHTML = stateHtml('error', 'Could not load MEMORIA entries.', e.message || 'Try again.');
   }
-  // Determine table type from apiPath
-  const renderer = memoriaRenderer(apiPath);
-  list.innerHTML = items.map(item => renderer(item)).join('');
 }
 
 function memoriaRenderer(apiPath){
@@ -3338,11 +3375,18 @@ function memoriaRenderer(apiPath){
 
 async function loadMemoriaKg(){
   const q = $('#memoriaKgQuery')?.value?.trim() || '';
-  const r = await api(`/api/memoria/kg?q=${encodeURIComponent(q)}&limit=200`);
-  const items = r.items || [];
-  $('#memoriaKgCount').textContent = `${items.length} entries`;
   const tbody = $('#memoriaKgRows');
   if(!tbody) return;
+  let items = [];
+  try {
+    const r = await api(`/api/memoria/kg?q=${encodeURIComponent(q)}&limit=200`, {requestKey:'memoria:kg'});
+    items = r.items || [];
+    $('#memoriaKgCount').textContent = `${items.length} entries`;
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-cell">Could not load MEMORIA KG: ${esc(e.message || 'Try again.')}</td></tr>`;
+    return;
+  }
   if(!items.length){
     tbody.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center">No triples found.</td></tr>';
     return;
