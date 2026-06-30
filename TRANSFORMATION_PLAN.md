@@ -173,15 +173,16 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 ### Tasks
 
-- [ ] Introduce a minimal build step using Vite or esbuild.
-- [ ] Move DOM helpers into `ui/dom.js`.
-- [ ] Move `api()` and `postJson()` into `api/client.js`.
-- [ ] Move formatting/escaping helpers into `utils/`.
-- [ ] Move memory rendering into `features/memories.js`.
-- [ ] Move review queue rendering/actions into `features/review.js`.
-- [ ] Move graph rendering into `features/graph.js`.
+- [x] Introduce a minimal build step using Vite or esbuild.
+- [x] Move DOM helpers into `ui/dom.js`.
+- [x] Move `api()` and `postJson()` into `api/client.js`.
+- [x] Move formatting/escaping helpers into `utils/`.
+- [x] Move memory rendering into `features/memories.js`.
+- [x] Move review queue rendering/actions into `features/review.js`.
+- [x] Move graph rendering into `features/graph.js`.
 - [ ] Move visualisers into lazy-loaded modules.
-- [ ] Keep existing HTML and CSS stable during extraction.
+  - Current status: visualiser lifecycle code is isolated behind the guarded `app.js` entrypoint in transitional `app-main.js`; the true lazy canvas/Three/palace split remains the main unfinished Phase 1 extraction target.
+- [x] Keep existing HTML and CSS stable during extraction.
 
 ### Acceptance criteria
 
@@ -190,6 +191,14 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - No feature module exceeds 600 lines without a reason.
 - Existing Python tests still pass.
 - New build command is documented.
+
+### Phase 1 status update - 2026-07-01
+
+- `static/src/app.js` is now a 1-line entrypoint and the frontend check enforces the under-500-line gate.
+- The remaining large orchestration body lives in `static/src/app-main.js` as a documented transitional module, not a feature module.
+- Frontend unit coverage exists for API, DOM, rendering, routing, utils, memory helpers, review helpers, and graph helpers.
+- The SVG graph controller has moved to `features/graph.js`.
+- The outstanding Phase 1 item is true lazy-loaded visualiser extraction for canvas constellation/neural map, Three.js, and memory palace.
 
 ## Phase 2 - API Client, Request State, and Reliability
 

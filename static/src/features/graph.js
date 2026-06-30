@@ -135,5 +135,5 @@ export function createGraphFeature({ $, $$, api, showDetail, switchTab }) {
     drawGraph(await api(graphQueryPath($('#graphQuery')?.value || '')));
   }
 
-  return { drawGraph, loadGraph, inspectNode, inspectEdge };
+  return { drawGraph, loadGraph, resetGraphView, inspectNode, inspectEdge };
 }

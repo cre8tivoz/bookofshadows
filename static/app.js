@@ -492,10 +492,10 @@
     async function loadGraph2() {
       drawGraph(await api2(graphQueryPath($2("#graphQuery")?.value || "")));
     }
-    return { drawGraph, loadGraph: loadGraph2, inspectNode, inspectEdge };
+    return { drawGraph, loadGraph: loadGraph2, resetGraphView: resetGraphView2, inspectNode, inspectEdge };
   }
 
-  // static/src/app.js
+  // static/src/app-main.js
   var THEME_KEY = "mnemosyne-dashboard-theme";
   var VISUALISER_MODE_KEY = "mnemosyne-dashboard-visualiser-mode";
   var consolidationState = [];
@@ -544,7 +544,7 @@
     $("#loginOverlay")?.classList.add("hidden");
   }
   var { api, postJson } = createApiClient({ onUnauthorized: showLogin });
-  var { loadGraph } = createGraphFeature({ $, $$, api, showDetail, switchTab });
+  var { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
   function bootErrorPayload() {
     return lastBootError ? JSON.stringify(lastBootError, null, 2) : "";
   }
@@ -611,6 +611,7 @@
   async function bootstrapDashboard() {
     clearBootError();
     const route = urlToRoute();
+    if (route.tab !== "overview" || route.drawer) switchTab(route.tab || "overview", { push: false });
     const s = await refreshAuthState();
     if (s.auth_enabled && !s.authenticated) {
       renderBootErrorStatus();
