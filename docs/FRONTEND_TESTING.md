@@ -1,6 +1,23 @@
 # Frontend Testing
 
-Book of Shadows currently ships as static HTML/CSS/JavaScript served by the Python stdlib server. Phase 0 keeps that architecture intact and adds a repeatable smoke check before the larger frontend extraction begins.
+Book of Shadows ships static HTML/CSS/JavaScript from the Python stdlib server. Frontend source now lives under `static/src/` and bundles back to the served `static/app.js` file.
+
+## Build
+
+```bash
+npm install
+npm run build:frontend
+```
+
+`static/app.js` is generated from `static/src/app.js`. Edit files under `static/src/`, not the generated bundle.
+
+## Unit Tests
+
+```bash
+npm run test:frontend
+```
+
+The unit tests use Vitest and happy-dom for extracted modules.
 
 ## Smoke Test
 
@@ -39,8 +56,7 @@ Screenshots are generated from the same fictional data model and written under `
 Useful frontend-adjacent checks:
 
 ```bash
+npm run build:frontend
 node --check static/app.js
 /Users/habibi/.local/bin/python3.11 -m compileall -q .
 ```
-
-The planned Phase 1 work can add Vitest/Playwright or a bundler-backed harness after the baseline remains stable.

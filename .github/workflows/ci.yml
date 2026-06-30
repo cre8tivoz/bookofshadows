@@ -20,11 +20,13 @@ jobs:
           node-version: "24"
       - name: Install test tooling
         run: python -m pip install --upgrade pip pytest ruff
+      - name: Install frontend tooling
+        run: npm ci
       - name: Ruff lint
         run: python -m ruff check .
       - name: Python tests
         run: python -m pytest -q
       - name: Compile Python
         run: python -m compileall -q .
-      - name: Check JavaScript syntax
-        run: node --check static/app.js
+      - name: Frontend checks
+        run: npm run check:frontend
