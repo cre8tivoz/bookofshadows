@@ -547,7 +547,8 @@ def test_realtime_event_snapshot_orders_newest_first(tmp_path):
 
 def test_static_ui_boot_error_diagnostics_and_history_alias_are_present():
     html = (ROOT / 'static' / 'index.html').read_text()
-    js = (ROOT / 'static' / 'app.js').read_text()
+    js = "\n".join(path.read_text() for path in sorted((ROOT / 'static' / 'src').rglob('*.js')))
+    routing_js = (ROOT / 'static' / 'src' / 'state' / 'routing.js').read_text()
     css = (ROOT / 'static' / 'style.css').read_text()
 
     assert 'id="bootError"' in html
@@ -555,7 +556,7 @@ def test_static_ui_boot_error_diagnostics_and_history_alias_are_present():
     assert 'id="bootErrorStack"' in html
     assert 'id="retryBootstrap"' in html
     assert 'id="copyBootError"' in html
-    assert "if(tab === 'history') return 'activity';" in js
+    assert 'if (tab === "history") return "activity";' in routing_js
     assert "history:'activityTimeline'" in js
     assert 'function handleInitError(error)' in js
     assert "fetch('/api/auth/status'" in js
@@ -569,7 +570,7 @@ def test_static_ui_boot_error_diagnostics_and_history_alias_are_present():
 
 def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     html = (ROOT / 'static' / 'index.html').read_text()
-    js = (ROOT / 'static' / 'app.js').read_text()
+    js = "\n".join(path.read_text() for path in sorted((ROOT / 'static' / 'src').rglob('*.js')))
     css = (ROOT / 'static' / 'style.css').read_text()
 
     assert 'id="veracityBreakdown"' in html
@@ -893,8 +894,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'latestReviewItems.forEach' in select_visible_segment
     assert '$$(\'#review .review-check\')' in select_visible_segment
     assert '/api/review?' in js
-    assert 'limit=${REVIEW_PAGE_SIZE}' in js
-    assert 'offset=${reviewOffset}' in js
+    assert 'reviewFilterParams({' in js
+    assert 'limit:REVIEW_PAGE_SIZE' in js
+    assert 'offset:reviewOffset' in js
     assert '/api/review?limit=10000' not in js
     assert "Object.entries(queues).map(([key, queue]) => reviewQueueHtml" not in js
     assert 'Needs review' in js
@@ -923,7 +925,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "search:'explore'" not in js
     assert "exploreSearch:'search'" not in js
     assert "exploreMemories:'memories'" in js
-    assert "activeElement.closest('.menu-search')" in js
+    assert 'activeElement.closest(".menu-search")' in js
     assert '/api/lifecycle' in js
     assert 'loadLifecycle' in js
     assert 'lifecycleQueueHtml' in js

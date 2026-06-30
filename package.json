@@ -1,0 +1,16 @@
+{
+  "name": "book-of-shadows-dashboard",
+  "version": "0.14.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:frontend": "esbuild static/src/app.js --bundle --format=iife --outfile=static/app.js --charset=utf8 --target=es2020 --legal-comments=none --external:/static/vendor/three.module.min.js",
+    "test:frontend": "vitest run",
+    "check:frontend": "node scripts/check_frontend_bundle.mjs && node --check static/app.js && npm run test:frontend"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5",
+    "happy-dom": "^20.10.6",
+    "vitest": "^3.2.4"
+  }
+}

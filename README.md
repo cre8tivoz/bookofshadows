@@ -90,6 +90,9 @@ python3 scripts/generate_mock_screenshots.py
 ```bash
 python -m pytest tests/ -q
 python -m compileall -q .
+npm install
+npm run build:frontend
+npm run test:frontend
 node --check static/app.js
 ```
 
