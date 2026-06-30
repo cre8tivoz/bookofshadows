@@ -295,27 +295,81 @@
   }
 
   // static/src/state/routing.js
+  var MEMORY_FILTER_KEYS = [
+    "q",
+    "status",
+    "source",
+    "scope",
+    "session_id",
+    "veracity",
+    "degradation_tier",
+    "trust",
+    "sort",
+    "kind"
+  ];
   function canonicalTab(tab) {
     if (tab === "constellation") return "visualiserlegacy";
     if (tab === "visualiser3d") return "visualiser";
     if (tab === "history") return "activity";
     return tab || "overview";
   }
-  function routeTabState(tab = "overview") {
-    return { tab: canonicalTab(tab || "overview") };
+  function routeTabState(tab = "overview", extra = {}) {
+    return { tab: canonicalTab(tab || "overview"), ...extra };
   }
-  function routeToUrl(state, currentUrl = `${location.pathname}${location.search}`) {
+  function baseUrl(currentUrl) {
     const url = new URL(currentUrl, "http://dashboard.local");
-    const params = url.searchParams;
-    ["tab", "memory", "session"].forEach((k) => params.delete(k));
-    params.set("tab", state.tab || "overview");
-    if (state.drawer?.type === "memory") params.set("memory", state.drawer.id);
-    if (state.drawer?.type === "session") params.set("session", state.drawer.id);
-    const qs = params.toString();
+    ["tab", "memory", "session"].forEach((k) => url.searchParams.delete(k));
+    url.hash = "";
+    const qs = url.searchParams.toString();
     return url.pathname + (qs ? `?${qs}` : "");
   }
-  function urlToRoute(currentUrl = `${location.pathname}${location.search}`) {
-    const url = new URL(currentUrl, "http://dashboard.local");
+  function filtersToParams(filters = {}) {
+    const params = new URLSearchParams();
+    for (const key of MEMORY_FILTER_KEYS) {
+      if (filters[key]) params.set(key, filters[key]);
+    }
+    return params;
+  }
+  function hashPath(route = {}) {
+    if (route.drawer?.type === "memory") return `/memory/${encodeURIComponent(route.drawer.id)}`;
+    if (route.drawer?.type === "session") return `/session/${encodeURIComponent(route.drawer.id)}`;
+    const tab = canonicalTab(route.tab || "overview");
+    const path = `/${tab}`;
+    if (tab !== "memories") return path;
+    const params = filtersToParams(route.filters);
+    const qs = params.toString();
+    return path + (qs ? `?${qs}` : "");
+  }
+  function routeToUrl(state, currentUrl = `${location.pathname}${location.search}${location.hash}`) {
+    return `${baseUrl(currentUrl)}#${hashPath(state)}`;
+  }
+  function filtersFromParams(params) {
+    const filters = {};
+    for (const key of MEMORY_FILTER_KEYS) {
+      const value = params.get(key);
+      if (value) filters[key] = value;
+    }
+    return filters;
+  }
+  function routeFromHash(hash) {
+    const rawHash = hash.replace(/^#/, "");
+    if (!rawHash) return null;
+    const [rawPath, rawQuery = ""] = rawHash.split("?");
+    const segments = rawPath.split("/").filter(Boolean).map(decodeURIComponent);
+    const params = new URLSearchParams(rawQuery);
+    if (segments[0] === "memory" && segments[1]) {
+      return { tab: "memories", drawer: { type: "memory", id: segments[1] } };
+    }
+    if (segments[0] === "session" && segments[1]) {
+      return { tab: "timelineView", drawer: { type: "session", id: segments[1] } };
+    }
+    const tab = canonicalTab(segments[0] || "overview");
+    const route = { tab };
+    const filters = tab === "memories" ? filtersFromParams(params) : {};
+    if (Object.keys(filters).length) route.filters = filters;
+    return route;
+  }
+  function routeFromLegacyQuery(url) {
     const params = url.searchParams;
     const route = { tab: canonicalTab(params.get("tab") || "overview") };
     if (params.get("memory")) route.drawer = { type: "memory", id: params.get("memory") };
@@ -324,6 +378,10 @@
       route.tab = route.drawer.type === "memory" ? "memories" : "timelineView";
     }
     return route;
+  }
+  function urlToRoute(currentUrl = `${location.pathname}${location.search}${location.hash}`) {
+    const url = new URL(currentUrl, "http://dashboard.local");
+    return routeFromHash(url.hash) || routeFromLegacyQuery(url);
   }
 
   // static/src/features/memories.js
@@ -369,7 +427,7 @@
     const displayContent = cleanContent(item.content);
     return `<div class="item memory-card ${role ? "has-role" : ""} ${opts.selectable ? "selectable" : ""} ${liveClass ? `live-${esc(liveClass)}` : ""}" data-id="${esc(item.id)}">${selectable}<div class="item-topline">${roleBadge}${liveBadge}</div>${meta(item, opts)}<div class="content">${esc(displayContent)}</div></div>`;
   }
-  function isMutableMemory2(item) {
+  function isMutableMemory(item) {
     return String(item?.status || "active").toLowerCase() === "active";
   }
   function memoryFilterParams(filters = {}, limit = 150) {
@@ -391,7 +449,7 @@
     });
   }
   function selectedMutableIds(items, selectedSet) {
-    return items.filter((item) => selectedSet.has(item.id) && isMutableMemory2(item)).map((item) => item.id);
+    return items.filter((item) => selectedSet.has(item.id) && isMutableMemory(item)).map((item) => item.id);
   }
   function bulkSelectionState(items, selectedSet, canMutate) {
     const actionableCount = selectedMutableIds(items, selectedSet).length;
@@ -783,21 +841,52 @@
     const fn = replace ? "replaceState" : "pushState";
     history[fn](currentRoute, "", routeToUrl(currentRoute));
   }
+  function currentMemoryFilters() {
+    return {
+      kind: $("#memoryKind")?.value || "",
+      q: $("#memoryQuery")?.value.trim() || "",
+      source: $("#memorySource")?.value || "",
+      scope: $("#memoryScope")?.value || "",
+      session_id: $("#memorySession")?.value || "",
+      veracity: $("#memoryVeracity")?.value || "",
+      degradation_tier: $("#memoryDegradation")?.value || "",
+      trust: $("#memoryTrustPreset")?.value || "",
+      status: $("#memoryStatus")?.value || "",
+      sort: $("#memorySort")?.value || ""
+    };
+  }
+  function memoryRouteState() {
+    const filters = Object.fromEntries(Object.entries(currentMemoryFilters()).filter(([, value]) => value));
+    return routeTabState("memories", Object.keys(filters).length ? { filters } : {});
+  }
+  function applyMemoryRouteFilters(filters = {}) {
+    if ("kind" in filters) $("#memoryKind").value = filters.kind || "all";
+    if ("q" in filters) $("#memoryQuery").value = filters.q || "";
+    if ("source" in filters) $("#memorySource").value = filters.source || "";
+    if ("scope" in filters) $("#memoryScope").value = filters.scope || "";
+    if ("session_id" in filters) $("#memorySession").value = filters.session_id || "";
+    if ("veracity" in filters) $("#memoryVeracity").value = filters.veracity || "";
+    if ("degradation_tier" in filters) $("#memoryDegradation").value = filters.degradation_tier || "";
+    if ("trust" in filters) $("#memoryTrustPreset").value = filters.trust || "";
+    if ("status" in filters) $("#memoryStatus").value = filters.status || "active";
+    if ("sort" in filters) $("#memorySort").value = filters.sort || "recent";
+  }
   function closeDetail(opts = {}) {
     $("#detail").classList.add("hidden");
-    if (opts.push !== false) pushRoute(routeTabState());
+    if (opts.push !== false) pushRoute(currentRoute?.tab === "memories" ? memoryRouteState() : routeTabState(currentRoute?.tab || "overview"));
   }
   async function applyRoute(state) {
     applyingHistory = true;
     try {
       const route = state || urlToRoute();
+      if (route.tab === "memories" && route.filters) applyMemoryRouteFilters(route.filters);
       switchTab(route.tab || "overview", { push: false });
       if (route.drawer?.type === "memory") await openMemoryDetail(route.drawer.id, { push: false });
       else if (route.drawer?.type === "session") await openSessionDetail(route.drawer.id, { push: false });
       else closeDetail({ push: false });
       currentRoute = route;
       const canonicalUrl = routeToUrl(route);
-      if (location.pathname + location.search !== canonicalUrl) history.replaceState(route, "", canonicalUrl);
+      if (location.pathname + location.search + location.hash !== canonicalUrl) history.replaceState(route, "", canonicalUrl);
     } finally {
       applyingHistory = false;
     }
@@ -823,7 +912,7 @@
     $("#detailBody").classList.remove("html-detail");
     $("#detailBody").textContent = JSON.stringify(obj, null, 2);
     $("#detail").classList.remove("hidden");
-    if (opts.push !== false) pushRoute({ ...routeTabState(), drawer: { type: "json", title, value: obj } });
+    if (opts.push !== false) pushRoute(currentRoute || routeTabState());
   }
   function showHtmlDetail(html, title = "Detail") {
     const titleEl = document.querySelector(".drawer-title");
@@ -1008,7 +1097,7 @@
     showPanel(section, panelFor(name));
     closeDetail({ push: false });
     closeMobileMenu();
-    currentRoute = routeTabState(name);
+    currentRoute = section === "explore" && panelFor(name) === "exploreMemories" ? memoryRouteState() : routeTabState(name);
     if (opts.push !== false) pushRoute(currentRoute);
     if (name === "graph" || section === "graph") loadGraph();
     if (name === "triples") loadTriples();
@@ -1285,6 +1374,10 @@
       $("#memoryList").innerHTML = stateHtml("error", "Could not load memories.", e.message || "Try again.");
     }
   }
+  function refreshMemoriesRouteAndLoad() {
+    pushRoute(memoryRouteState(), true);
+    loadMemories();
+  }
   function updateBulkBar() {
     const bar = $("#bulkMemoryBar");
     if (!bar) return;
@@ -1426,7 +1519,7 @@
     await refreshAuthState();
     const item = (await api("/api/memory?id=" + encodeURIComponent(memoryId))).item;
     showHtmlDetail(memoryDetailHtml(item), "Memory detail");
-    if (opts.push !== false) pushRoute({ ...routeTabState(), drawer: { type: "memory", id: memoryId } });
+    if (opts.push !== false) pushRoute({ tab: "memories", drawer: { type: "memory", id: memoryId } });
     const sessionLink = $("#memorySessionLink");
     if (sessionLink) sessionLink.onclick = () => openSessionDetail(item.session_id || "");
     $("#copyMemoryId").onclick = () => showSelectableCopy("Memory ID", item.id);
@@ -1519,7 +1612,7 @@
     <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
     <div class="result-section"><h3>Timeline <span>${esc(c.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join("") || '<p class="muted">No events for this session.</p>'}</div></div>
   `, `Session ${sessionId}`);
-    if (opts.push !== false) pushRoute({ ...routeTabState(), drawer: { type: "session", id: sessionId } });
+    if (opts.push !== false) pushRoute({ tab: "timelineView", drawer: { type: "session", id: sessionId } });
     $("#sessionBrowseMemories").onclick = () => {
       $("#memorySession").value = sessionId;
       $("#memoryKind").value = "all";
@@ -4412,7 +4505,7 @@
   window.addEventListener("resize", closeMobileMenuForViewportChange, { passive: true });
   window.addEventListener("orientationchange", closeMobileMenuForViewportChange, { passive: true });
   document.addEventListener("fullscreenchange", updateVisualiserFullscreenButtons);
-  $("#memorySearch").onclick = loadMemories;
+  $("#memorySearch").onclick = refreshMemoriesRouteAndLoad;
   $("#bulkSelectAll").onchange = () => {
     latestMemoryItems.forEach((x) => $("#bulkSelectAll").checked ? bulkSelection.add(x.id) : bulkSelection.delete(x.id));
     loadMemories();
@@ -4426,7 +4519,7 @@
   $("#bulkExpiry").onclick = setSelectedExpiry;
   $("#bulkImportance").onclick = setSelectedImportance;
   $("#memoryQuery").onkeydown = (e) => {
-    if (e.key === "Enter") loadMemories();
+    if (e.key === "Enter") refreshMemoriesRouteAndLoad();
   };
   $("#reviewSelectAll").onchange = () => {
     const checked = $("#reviewSelectAll").checked;
@@ -4466,9 +4559,9 @@
     $("#memoryKind").value = "all";
     $("#memoryStatus").value = "active";
     $("#memorySort").value = "recent";
-    loadMemories();
+    refreshMemoriesRouteAndLoad();
   };
-  ["memoryKind", "memorySource", "memoryScope", "memorySession", "memoryVeracity", "memoryDegradation", "memoryTrustPreset", "memoryStatus", "memorySort"].forEach((id) => $("#" + id).onchange = loadMemories);
+  ["memoryKind", "memorySource", "memoryScope", "memorySession", "memoryVeracity", "memoryDegradation", "memoryTrustPreset", "memoryStatus", "memorySort"].forEach((id) => $("#" + id).onchange = refreshMemoriesRouteAndLoad);
   $("#tripleSearch").onclick = loadTriples;
   $("#tripleQuery").onkeydown = (e) => {
     if (e.key === "Enter") loadTriples();
@@ -4635,6 +4728,7 @@
   $("#mobileThemeToggle").onclick = toggleTheme;
   initLiveMemoryInfiniteScroll();
   window.addEventListener("popstate", (e) => applyRoute(e.state || urlToRoute()));
+  window.addEventListener("hashchange", () => applyRoute(urlToRoute()));
   initTheme();
   var initialRoute = urlToRoute();
   pushRoute(initialRoute, true);

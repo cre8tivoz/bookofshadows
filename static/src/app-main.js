@@ -5,7 +5,7 @@ import { breakdown, countLabel, optionsFrom, stateHtml } from './ui/render.js';
 import { createApiClient } from './api/client.js';
 import { endpoints } from './api/endpoints.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
-import { bulkSelectionState, liveEventMeta, memoryFilterParams, memoryItem, meta, selectedMutableIds } from './features/memories.js';
+import { bulkSelectionState, isMutableMemory, liveEventMeta, memoryFilterParams, memoryItem, meta, selectedMutableIds } from './features/memories.js';
 import { lifecycleQueueHtml, reviewActionableIds, reviewFilterParams, reviewQueueHtml } from './features/review.js';
 import { createGraphFeature } from './features/graph.js';
 
@@ -140,21 +140,52 @@ function pushRoute(state, replace=false){
   const fn = replace ? 'replaceState' : 'pushState';
   history[fn](currentRoute, '', routeToUrl(currentRoute));
 }
+function currentMemoryFilters(){
+  return {
+    kind: $('#memoryKind')?.value || '',
+    q: $('#memoryQuery')?.value.trim() || '',
+    source: $('#memorySource')?.value || '',
+    scope: $('#memoryScope')?.value || '',
+    session_id: $('#memorySession')?.value || '',
+    veracity: $('#memoryVeracity')?.value || '',
+    degradation_tier: $('#memoryDegradation')?.value || '',
+    trust: $('#memoryTrustPreset')?.value || '',
+    status: $('#memoryStatus')?.value || '',
+    sort: $('#memorySort')?.value || '',
+  };
+}
+function memoryRouteState(){
+  const filters = Object.fromEntries(Object.entries(currentMemoryFilters()).filter(([,value]) => value));
+  return routeTabState('memories', Object.keys(filters).length ? {filters} : {});
+}
+function applyMemoryRouteFilters(filters={}){
+  if('kind' in filters) $('#memoryKind').value = filters.kind || 'all';
+  if('q' in filters) $('#memoryQuery').value = filters.q || '';
+  if('source' in filters) $('#memorySource').value = filters.source || '';
+  if('scope' in filters) $('#memoryScope').value = filters.scope || '';
+  if('session_id' in filters) $('#memorySession').value = filters.session_id || '';
+  if('veracity' in filters) $('#memoryVeracity').value = filters.veracity || '';
+  if('degradation_tier' in filters) $('#memoryDegradation').value = filters.degradation_tier || '';
+  if('trust' in filters) $('#memoryTrustPreset').value = filters.trust || '';
+  if('status' in filters) $('#memoryStatus').value = filters.status || 'active';
+  if('sort' in filters) $('#memorySort').value = filters.sort || 'recent';
+}
 function closeDetail(opts={}){
   $('#detail').classList.add('hidden');
-  if(opts.push !== false) pushRoute(routeTabState());
+  if(opts.push !== false) pushRoute(currentRoute?.tab === 'memories' ? memoryRouteState() : routeTabState(currentRoute?.tab || 'overview'));
 }
 async function applyRoute(state){
   applyingHistory = true;
   try {
     const route = state || urlToRoute();
+    if(route.tab === 'memories' && route.filters) applyMemoryRouteFilters(route.filters);
     switchTab(route.tab || 'overview', { push:false });
     if(route.drawer?.type === 'memory') await openMemoryDetail(route.drawer.id, { push:false });
     else if(route.drawer?.type === 'session') await openSessionDetail(route.drawer.id, { push:false });
     else closeDetail({ push:false });
     currentRoute = route;
     const canonicalUrl = routeToUrl(route);
-    if(location.pathname + location.search !== canonicalUrl) history.replaceState(route, '', canonicalUrl);
+    if(location.pathname + location.search + location.hash !== canonicalUrl) history.replaceState(route, '', canonicalUrl);
   } finally {
     applyingHistory = false;
   }
@@ -176,7 +207,7 @@ function showDetail(obj, title='Detail', opts={}){
   $('#detailBody').classList.remove('html-detail');
   $('#detailBody').textContent = JSON.stringify(obj, null, 2);
   $('#detail').classList.remove('hidden');
-  if(opts.push !== false) pushRoute({ ...routeTabState(), drawer:{ type:'json', title, value:obj } });
+  if(opts.push !== false) pushRoute(currentRoute || routeTabState());
 }
 function showHtmlDetail(html, title='Detail'){
   const titleEl = document.querySelector('.drawer-title');
@@ -347,7 +378,7 @@ function switchTab(name, opts={}){
   showPanel(section, panelFor(name));
   closeDetail({ push:false });
   closeMobileMenu();
-  currentRoute = routeTabState(name);
+  currentRoute = section === 'explore' && panelFor(name) === 'exploreMemories' ? memoryRouteState() : routeTabState(name);
   if(opts.push !== false) pushRoute(currentRoute);
   if(name==='graph' || section==='graph') loadGraph();
   if(name==='triples') loadTriples();
@@ -599,6 +630,10 @@ async function loadMemories(){
     $('#memoryList').innerHTML = stateHtml('error', 'Could not load memories.', e.message || 'Try again.');
   }
 }
+function refreshMemoriesRouteAndLoad(){
+  pushRoute(memoryRouteState(), true);
+  loadMemories();
+}
 function updateBulkBar(){
   const bar = $('#bulkMemoryBar');
   if(!bar) return;
@@ -718,7 +753,7 @@ async function openMemoryDetail(memoryId, opts={}){
   await refreshAuthState();
   const item = (await api('/api/memory?id=' + encodeURIComponent(memoryId))).item;
   showHtmlDetail(memoryDetailHtml(item), 'Memory detail');
-  if(opts.push !== false) pushRoute({ ...routeTabState(), drawer:{ type:'memory', id:memoryId } });
+  if(opts.push !== false) pushRoute({ tab:'memories', drawer:{ type:'memory', id:memoryId } });
   const sessionLink = $('#memorySessionLink');
   if(sessionLink) sessionLink.onclick = () => openSessionDetail(item.session_id || '');
   $('#copyMemoryId').onclick = () => showSelectableCopy('Memory ID', item.id);
@@ -774,7 +809,7 @@ async function openSessionDetail(sessionId, opts={}){
     <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
     <div class="result-section"><h3>Timeline <span>${esc(c.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join('') || '<p class="muted">No events for this session.</p>'}</div></div>
   `, `Session ${sessionId}`);
-  if(opts.push !== false) pushRoute({ ...routeTabState(), drawer:{ type:'session', id:sessionId } });
+  if(opts.push !== false) pushRoute({ tab:'timelineView', drawer:{ type:'session', id:sessionId } });
   $('#sessionBrowseMemories').onclick = () => { $('#memorySession').value = sessionId; $('#memoryKind').value = 'all'; $('#memoryQuery').value = ''; switchTab('memories'); closeDetail({ push:false }); };
   $('#sessionTimeline').onclick = () => { $('#timelineGroup').value = 'session'; $('#timelineQuery').value = sessionId; switchTab('timelineView'); closeDetail({ push:false }); };
   $('#sessionCopy').onclick = () => showSelectableCopy('Session ID', sessionId);
@@ -3414,13 +3449,13 @@ $('#mobileMenuToggle').onclick = () => {
 window.addEventListener('resize', closeMobileMenuForViewportChange, { passive: true });
 window.addEventListener('orientationchange', closeMobileMenuForViewportChange, { passive: true });
 document.addEventListener('fullscreenchange', updateVisualiserFullscreenButtons);
-$('#memorySearch').onclick = loadMemories;
+$('#memorySearch').onclick = refreshMemoriesRouteAndLoad;
 $('#bulkSelectAll').onchange = () => { latestMemoryItems.forEach(x => $('#bulkSelectAll').checked ? bulkSelection.add(x.id) : bulkSelection.delete(x.id)); loadMemories(); };
 $('#bulkClear').onclick = () => { bulkSelection.clear(); loadMemories(); };
 $('#bulkExpire').onclick = expireSelectedMemories;
 $('#bulkVeracity').onclick = setSelectedVeracity;
 $('#bulkExpiry').onclick = setSelectedExpiry;
-$('#bulkImportance').onclick = setSelectedImportance; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') loadMemories(); };
+$('#bulkImportance').onclick = setSelectedImportance; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') refreshMemoriesRouteAndLoad(); };
 $('#reviewSelectAll').onchange = () => {
   const checked = $('#reviewSelectAll').checked;
   latestReviewItems.forEach(x => checked ? reviewSelection.add(x.id) : reviewSelection.delete(x.id));
@@ -3436,8 +3471,8 @@ $('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onk
 $('#menuSearchButton').onclick = menuSearch; $('#menuSearchQuery').onkeydown = e => { if(e.key==='Enter') menuSearch(); };
 $('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
 $('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
-$('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; loadMemories(); };
-['memoryKind','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset','memoryStatus','memorySort'].forEach(id => $('#'+id).onchange = loadMemories);
+$('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; refreshMemoriesRouteAndLoad(); };
+['memoryKind','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset','memoryStatus','memorySort'].forEach(id => $('#'+id).onchange = refreshMemoriesRouteAndLoad);
 $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { if(e.key==='Enter') loadTriples(); };
 $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e.key==='Enter') loadGraph(); };
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };
@@ -3535,6 +3570,7 @@ $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
 initLiveMemoryInfiniteScroll();
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
+window.addEventListener('hashchange', () => applyRoute(urlToRoute()));
 initTheme();
 const initialRoute = urlToRoute();
 pushRoute(initialRoute, true);
