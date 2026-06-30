@@ -42,15 +42,45 @@
     "viewport": "1440x1000"
   },
   {
+    "file": "desktop-dark-review.png",
+    "theme": "dark",
+    "tab": "review",
+    "viewport": "1440x1000"
+  },
+  {
+    "file": "desktop-dark-memories.png",
+    "theme": "dark",
+    "tab": "memories",
+    "viewport": "1440x1000"
+  },
+  {
+    "file": "desktop-dark-lifecycle.png",
+    "theme": "dark",
+    "tab": "lifecycle",
+    "viewport": "1440x1000"
+  },
+  {
     "file": "desktop-light-graph.png",
     "theme": "light",
     "tab": "graph",
     "viewport": "1440x1000"
   },
   {
+    "file": "desktop-dark-memoria.png",
+    "theme": "dark",
+    "tab": "memoria",
+    "viewport": "1440x1000"
+  },
+  {
     "file": "desktop-dark-timeline.png",
     "theme": "dark",
     "tab": "timelineView",
+    "viewport": "1440x1000"
+  },
+  {
+    "file": "desktop-dark-settings.png",
+    "theme": "dark",
+    "tab": "settings",
     "viewport": "1440x1000"
   },
   {
