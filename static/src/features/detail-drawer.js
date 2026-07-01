@@ -91,7 +91,7 @@ export function createDetailDrawerController({
     const degradation = $('#memoryDegradation')?.value;
     const trustPreset = $('#memoryTrustPreset')?.value;
     const sort = $('#memorySort')?.value;
-    if (q) reasons.push(`matches browser query "${q}" across content, id, session, source, or scope`);
+    if (q) reasons.push(`matches browser query “${q}” across content, id, session, source, or scope`);
     if (source && item.source === source) reasons.push(`source filter matched ${source}`);
     if (scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
     if (session && item.session_id === session) reasons.push(`session filter matched ${session}`);

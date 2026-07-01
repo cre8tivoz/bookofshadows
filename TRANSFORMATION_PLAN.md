@@ -627,7 +627,7 @@ Good one-session candidate. It is narrow and mostly mechanical, but it should st
 
 **Outcome:** `static/src/app-main.js` stops being the primary place where unrelated feature behavior accumulates.
 
-**Status:** In progress. Review and detail/session drawer controllers extracted 2026-07-02.
+**Status:** In progress. Review, detail/session drawer, and auth/settings controllers extracted 2026-07-02.
 
 **Scope:**
 
@@ -682,6 +682,13 @@ Do not do the entire extraction in one session unless the goal is explicitly a l
 - Kept existing app-wide function names in `app-main.js` as thin orchestration wrappers so graph, search, profile, timeline, visualiser, and settings callers continue to use the same surface.
 - Verified frontend bundle/tests, backend tests, ruff, compileall, and browser smoke after extraction.
 - Remaining 11C controller families: auth/settings and visualisers.
+
+**Release 11C status update - 2026-07-02, auth/settings slice**
+
+- Extracted password auth overlay handling, auth status/config hydration, memory-admin mode controls, backup/audit actions, database diagnostics, and runtime diagnostics into `static/src/features/settings-controller.js`.
+- Moved auth/admin state ownership out of `app-main.js`; the main file now exposes thin `canAdmin()`, `refreshAuthState()`, and settings loader wrappers for other controllers and route orchestration.
+- Verified frontend bundle/tests, backend tests, ruff, compileall, and browser smoke after extraction.
+- Remaining 11C controller family: visualisers.
 
 ### Release 11D - Visualiser Accessibility
 

@@ -1006,7 +1006,7 @@
       const degradation = $2("#memoryDegradation")?.value;
       const trustPreset = $2("#memoryTrustPreset")?.value;
       const sort = $2("#memorySort")?.value;
-      if (q) reasons.push(`matches browser query "${q}" across content, id, session, source, or scope`);
+      if (q) reasons.push(`matches browser query “${q}” across content, id, session, source, or scope`);
       if (source && item.source === source) reasons.push(`source filter matched ${source}`);
       if (scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
       if (session && item.session_id === session) reasons.push(`session filter matched ${session}`);
@@ -1195,6 +1195,223 @@
       showDetail: showDetail2,
       showHtmlDetail,
       showSelectableCopy: showSelectableCopy2
+    };
+  }
+
+  // static/src/features/settings-controller.js
+  function createSettingsController({
+    $: $2,
+    api: api2,
+    postJson: postJson2,
+    setCsrfToken: setCsrfToken2,
+    confirmAction: confirmAction2,
+    runButtonAction: runButtonAction2,
+    showDetail: showDetail2,
+    showSelectableCopy: showSelectableCopy2,
+    loadStats: loadStats2
+  }) {
+    let authState = { config: {}, auth_enabled: false, authenticated: true };
+    let loginFocusRelease = null;
+    let lastDiagnostics = null;
+    function setAuthState(state) {
+      if (state) authState = state;
+      if (authState.csrf_token) setCsrfToken2(authState.csrf_token || "");
+      return authState;
+    }
+    function showLogin2() {
+      const overlay = $2("#loginOverlay");
+      if (!overlay) return;
+      const wasHidden = overlay.classList.contains("hidden");
+      overlay.classList.remove("hidden");
+      if (wasHidden) {
+        loginFocusRelease = trapFocus(overlay);
+        $2("#loginPassword")?.focus();
+      }
+    }
+    function hideLogin2() {
+      const overlay = $2("#loginOverlay");
+      if (!overlay) return;
+      overlay.classList.add("hidden");
+      loginFocusRelease?.();
+      loginFocusRelease = null;
+    }
+    function canAdmin2() {
+      const cfg = authState.config || {};
+      const localOnly = ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0");
+      return !!(cfg.memory_admin_enabled && (localOnly || authState.auth_enabled && authState.authenticated));
+    }
+    function runtimeRow(label, value, opts = {}) {
+      const safe = value === void 0 || value === null || value === "" ? "—" : value;
+      return `<div class="diag-row ${opts.wide ? "wide" : ""}"><span>${esc(label)}</span><strong title="${esc(safe)}">${esc(safe)}</strong></div>`;
+    }
+    function renderRuntimeDiagnostics(runtime) {
+      const el = $2("#runtimeDiagnostics");
+      if (!el) return;
+      const probe = runtime.probe || {};
+      const cfg = runtime.config || {};
+      const health = runtime.running && runtime.reachable && !runtime.stale_pid && !runtime.runtime_stale ? "Healthy" : "Needs attention";
+      const started = runtime.started_at ? prettyTime(Number(runtime.started_at) * 1e3) : "";
+      el.innerHTML = [
+        runtimeRow("Status", health),
+        runtimeRow("PID", runtime.pid),
+        runtimeRow("PID file", runtime.pid_file_pid),
+        runtimeRow("Listener PID", (runtime.listener_pids || []).join(", ") || "none"),
+        runtimeRow("Launch source", runtime.runtime_source || "server.py"),
+        runtimeRow("Stale PID", runtime.stale_pid ? "yes — repaired on restart/start" : "no"),
+        runtimeRow("Runtime stale", runtime.runtime_stale ? "yes" : "no"),
+        runtimeRow("Probe", `${probe.status || "n/a"} ${probe.url || ""}`, { wide: true }),
+        runtimeRow("Local URL", cfg.local_url || "", { wide: true }),
+        runtimeRow("LAN URL", cfg.lan_url || "not exposed", { wide: true }),
+        runtimeRow("Started", started || runtime.started_at || "", { wide: true })
+      ].join("");
+    }
+    async function loadRuntimeDiagnostics2() {
+      try {
+        renderRuntimeDiagnostics(await api2(endpoints.runtimeStatus()));
+      } catch (error) {
+        const el = $2("#runtimeDiagnostics");
+        if (el) el.innerHTML = `<div class="state-card state-error"><strong>Runtime diagnostics unavailable</strong><p>${esc(error.message)}</p></div>`;
+      }
+    }
+    async function loadDiagnostics2() {
+      const diag = await api2(endpoints.diagnostics());
+      const counts = diag.table_counts || {};
+      const core = ["working_memory", "episodic_memory", "triples", "consolidation_log"].filter((table) => table in counts);
+      $2("#diagnosticsSummary").innerHTML = `
+    <div class="diag-row"><span>Status</span><strong>${diag.ok ? "OK" : "Needs attention"}</strong></div>
+    <div class="diag-row"><span>DB path</span><strong title="${esc(diag.db_path)}">${esc(diag.db_path)}</strong></div>
+    <div class="diag-row"><span>Readable</span><strong>${diag.readable ? "yes" : "no"}</strong></div>
+    <div class="diag-row"><span>Size</span><strong>${fmtBytes(diag.size_bytes)}</strong></div>
+    <div class="diag-row"><span>Last modified</span><strong>${esc(diag.modified_at || "n/a")}</strong></div>
+    <div class="diag-row"><span>Tables</span><strong>${esc((diag.tables || []).length)}</strong></div>
+    <div class="diag-row wide"><span>Core rows</span><strong>${core.map((table) => `${table}: ${Number(counts[table] || 0).toLocaleString()}`).join(" · ") || "none"}</strong></div>`;
+      $2("#diagnosticsStatus").textContent = diag.error || ((diag.missing_expected_tables || []).length ? `Missing expected tables: ${diag.missing_expected_tables.join(", ")}` : "Database looks healthy.");
+      lastDiagnostics = diag;
+      window.lastDiagnostics = diag;
+    }
+    async function copyDiagnostics() {
+      if (!lastDiagnostics) await loadDiagnostics2();
+      showSelectableCopy2("Diagnostics JSON", JSON.stringify(lastDiagnostics, null, 2));
+    }
+    async function refreshAuthState2() {
+      authState = await api2("/api/auth/status");
+      setCsrfToken2(authState.csrf_token || "");
+      return authState;
+    }
+    async function loadAuthStatus2() {
+      const data = await refreshAuthState2();
+      const cfg = data.config || {};
+      $2("#configHost").value = cfg.host || "";
+      $2("#configPort").value = cfg.port || "";
+      $2("#configDbPath").value = cfg.db_path || "";
+      const urls = [`This Mac: ${cfg.local_url || ""}`];
+      if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
+      $2("#configStatus").textContent = `Current access URLs — ${urls.join(" · ")}`;
+      authState = data;
+      $2("#authEnabled").checked = !!data.auth_enabled;
+      $2("#authStatus").textContent = data.has_password ? "Password is set." : "No password set.";
+      $2("#memoryAdminEnabled").checked = !!cfg.memory_admin_enabled;
+      $2("#memoryAdminStatus").textContent = cfg.memory_admin_enabled ? ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0") ? "Local-only admin mode is enabled. Mutations are audited; password is only required for LAN/non-local hosts." : "Admin maintenance mode is enabled. LAN/non-local mutations require password auth and are audited." : "Admin maintenance mode is disabled; dashboard is read-only.";
+    }
+    function bindControls() {
+      $2("#loginButton").onclick = async () => {
+        try {
+          await runButtonAction2($2("#loginButton"), "Signing in...", () => postJson2("/api/auth/login", { password: $2("#loginPassword").value }), { tone: "success", title: "Signed in" });
+          hideLogin2();
+          $2("#loginError").textContent = "";
+          await refreshAuthState2();
+          loadStats2();
+        } catch (error) {
+          $2("#loginError").textContent = error.message;
+        }
+      };
+      $2("#loginPassword").onkeydown = (event) => {
+        if (event.key === "Enter") $2("#loginButton").click();
+      };
+      $2("#refreshDiagnostics").onclick = loadDiagnostics2;
+      $2("#copyDiagnostics").onclick = copyDiagnostics;
+      $2("#saveRuntimeConfig").onclick = async () => {
+        try {
+          const body = { host: $2("#configHost").value.trim(), port: $2("#configPort").value.trim(), db_path: $2("#configDbPath").value.trim() };
+          const result = await runButtonAction2($2("#saveRuntimeConfig"), "Saving...", () => postJson2("/api/config", body), { tone: "success", title: "Server settings saved", body: "Restart the dashboard to apply host, port, or database changes." });
+          const cfg = result.config || {};
+          $2("#configHost").value = cfg.host || "";
+          $2("#configPort").value = cfg.port || "";
+          $2("#configDbPath").value = cfg.db_path || "";
+          const urls = [`This Mac: ${cfg.local_url || ""}`];
+          if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
+          $2("#configStatus").textContent = `${result.message || "Saved. Restart the dashboard to apply server/database changes."} ${urls.join(" · ")}`;
+        } catch (error) {
+          $2("#configStatus").textContent = error.message;
+        }
+      };
+      $2("#saveAuth").onclick = async () => {
+        try {
+          const body = { auth_enabled: $2("#authEnabled").checked };
+          if ($2("#authPassword").value) body.password = $2("#authPassword").value;
+          const result = await runButtonAction2($2("#saveAuth"), "Saving...", () => postJson2("/api/config", body), { tone: "success", title: "Auth settings saved" });
+          $2("#authPassword").value = "";
+          $2("#authStatus").textContent = result.message || "Saved";
+        } catch (error) {
+          $2("#authStatus").textContent = error.message;
+        }
+      };
+      $2("#clearAuth").onclick = async () => {
+        try {
+          const ok = await confirmAction2({ title: "Disable password auth?", description: "This clears the dashboard password and disables password auth.", confirmText: "Disable auth", tone: "warn" });
+          if (!ok) return;
+          const result = await runButtonAction2($2("#clearAuth"), "Disabling...", () => postJson2("/api/config", { clear_password: true }), { tone: "success", title: "Password auth disabled" });
+          $2("#authEnabled").checked = false;
+          $2("#authPassword").value = "";
+          $2("#memoryAdminEnabled").checked = !!(result.config && result.config.memory_admin_enabled);
+          $2("#authStatus").textContent = result.message || "Auth disabled";
+          await loadAuthStatus2();
+        } catch (error) {
+          $2("#authStatus").textContent = error.message;
+        }
+      };
+      $2("#saveMemoryAdmin").onclick = async () => {
+        try {
+          const result = await runButtonAction2($2("#saveMemoryAdmin"), "Saving...", () => postJson2("/api/config", { memory_admin_enabled: $2("#memoryAdminEnabled").checked }), { tone: "success", title: "Memory admin settings saved" });
+          authState.config = result.config || {};
+          $2("#memoryAdminStatus").textContent = result.message || "Saved";
+          await loadAuthStatus2();
+        } catch (error) {
+          $2("#memoryAdminStatus").textContent = error.message;
+        }
+      };
+      $2("#createBackup").onclick = async () => {
+        try {
+          const result = await runButtonAction2($2("#createBackup"), "Creating...", () => postJson2("/api/admin/backup", {}), (response) => ({ tone: "success", title: "Backup created", body: response.backup?.path || "" }));
+          $2("#memoryAdminStatus").textContent = `Backup created: ${result.backup.path}`;
+        } catch (error) {
+          $2("#memoryAdminStatus").textContent = error.message;
+        }
+      };
+      $2("#viewAuditLog").onclick = async () => {
+        try {
+          const result = await api2("/api/admin/audit?limit=50");
+          showDetail2(result.items, "Memory audit log");
+        } catch (error) {
+          $2("#memoryAdminStatus").textContent = error.message;
+        }
+      };
+      $2("#logoutAuth").onclick = async () => {
+        await runButtonAction2($2("#logoutAuth"), "Logging out...", () => postJson2("/api/auth/logout", {}), { tone: "success", title: "Logged out" });
+        setCsrfToken2("");
+        showLogin2();
+      };
+    }
+    return {
+      bindControls,
+      canAdmin: canAdmin2,
+      hideLogin: hideLogin2,
+      loadAuthStatus: loadAuthStatus2,
+      loadDiagnostics: loadDiagnostics2,
+      loadRuntimeDiagnostics: loadRuntimeDiagnostics2,
+      refreshAuthState: refreshAuthState2,
+      setAuthState,
+      showLogin: showLogin2
     };
   }
 
@@ -1883,7 +2100,6 @@
   var THEME_KEY = "mnemosyne-dashboard-theme";
   var VISUALISER_MODE_KEY = "mnemosyne-dashboard-visualiser-mode";
   var consolidationState = [];
-  var authState = { config: {}, auth_enabled: false, authenticated: true };
   var realtimeState = { paused: false, source: null, events: [], status: null };
   var LIVE_MEMORY_PAGE_SIZE = 25;
   var liveMemoryItems = [];
@@ -1921,29 +2137,41 @@
     const preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
     setTheme(saved || preferred);
   }
-  var loginFocusRelease = null;
-  function showLogin() {
-    const overlay = $("#loginOverlay");
-    if (!overlay) return;
-    const wasHidden = overlay.classList.contains("hidden");
-    overlay.classList.remove("hidden");
-    if (wasHidden) {
-      loginFocusRelease = trapFocus(overlay);
-      $("#loginPassword")?.focus();
-    }
-  }
-  function hideLogin() {
-    const overlay = $("#loginOverlay");
-    if (!overlay) return;
-    overlay.classList.add("hidden");
-    loginFocusRelease?.();
-    loginFocusRelease = null;
-  }
+  var settingsController;
   var { api, postJson, setCsrfToken } = createApiClient({
-    onUnauthorized: showLogin,
+    onUnauthorized: () => settingsController?.showLogin(),
     devTiming: localStorage.getItem("mnemosyne-debug-api") === "1",
     onTiming: (info) => console.debug("[api]", info)
   });
+  settingsController = createSettingsController({
+    $,
+    api,
+    postJson,
+    setCsrfToken,
+    confirmAction,
+    runButtonAction,
+    showDetail,
+    showSelectableCopy,
+    loadStats
+  });
+  function showLogin() {
+    settingsController.showLogin();
+  }
+  function hideLogin() {
+    settingsController.hideLogin();
+  }
+  function refreshAuthState() {
+    return settingsController.refreshAuthState();
+  }
+  function loadAuthStatus() {
+    return settingsController.loadAuthStatus();
+  }
+  function loadDiagnostics() {
+    return settingsController.loadDiagnostics();
+  }
+  function loadRuntimeDiagnostics() {
+    return settingsController.loadRuntimeDiagnostics();
+  }
   var detailDrawer = createDetailDrawerController({
     $,
     $$,
@@ -2037,7 +2265,7 @@
     try {
       const r = await fetch("/api/auth/status", { cache: "no-store" });
       status = await r.json();
-      if (r.ok) authState = status;
+      if (r.ok) settingsController.setAuthState(status);
     } catch {
     }
     const authRequired = !!(status && status.auth_enabled && !status.authenticated);
@@ -2581,39 +2809,6 @@
     const delta = $("#settingsDeltaSync");
     if (delta) delta.innerHTML = cards.map(([label, num]) => `<div class="realtime-kv"><strong>${esc(label)}</strong><span>${esc(num)}</span></div>`).join("") + `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || "sse")}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(", ") || "none")}</span></div><div class="realtime-kv"><strong>DeltaSync methods</strong><span>${esc((status.deltasync_methods || []).join(", ") || "none")}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(", ") || "none")}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || "private dashboard payload")}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || "")}</span></div>`;
   }
-  function runtimeRow(label, value, opts = {}) {
-    const safe = value === void 0 || value === null || value === "" ? "—" : value;
-    return `<div class="diag-row ${opts.wide ? "wide" : ""}"><span>${esc(label)}</span><strong title="${esc(safe)}">${esc(safe)}</strong></div>`;
-  }
-  function renderRuntimeDiagnostics(runtime) {
-    const el = $("#runtimeDiagnostics");
-    if (!el) return;
-    const probe = runtime.probe || {};
-    const cfg = runtime.config || {};
-    const health = runtime.running && runtime.reachable && !runtime.stale_pid && !runtime.runtime_stale ? "Healthy" : "Needs attention";
-    const started = runtime.started_at ? prettyTime(Number(runtime.started_at) * 1e3) : "";
-    el.innerHTML = [
-      runtimeRow("Status", health),
-      runtimeRow("PID", runtime.pid),
-      runtimeRow("PID file", runtime.pid_file_pid),
-      runtimeRow("Listener PID", (runtime.listener_pids || []).join(", ") || "none"),
-      runtimeRow("Launch source", runtime.runtime_source || "server.py"),
-      runtimeRow("Stale PID", runtime.stale_pid ? "yes — repaired on restart/start" : "no"),
-      runtimeRow("Runtime stale", runtime.runtime_stale ? "yes" : "no"),
-      runtimeRow("Probe", `${probe.status || "n/a"} ${probe.url || ""}`, { wide: true }),
-      runtimeRow("Local URL", cfg.local_url || "", { wide: true }),
-      runtimeRow("LAN URL", cfg.lan_url || "not exposed", { wide: true }),
-      runtimeRow("Started", started || runtime.started_at || "", { wide: true })
-    ].join("");
-  }
-  async function loadRuntimeDiagnostics() {
-    try {
-      renderRuntimeDiagnostics(await api(endpoints.runtimeStatus()));
-    } catch (e) {
-      const el = $("#runtimeDiagnostics");
-      if (el) el.innerHTML = `<div class="state-card state-error"><strong>Runtime diagnostics unavailable</strong><p>${esc(e.message)}</p></div>`;
-    }
-  }
   async function loadRealtimePanel() {
     try {
       realtimeState.status = await api(endpoints.realtimeStatus());
@@ -2844,9 +3039,7 @@
     detailDrawer.bindMemoryClicks(root);
   }
   function canAdmin() {
-    const cfg = authState.config || {};
-    const localOnly = ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0");
-    return !!(cfg.memory_admin_enabled && (localOnly || authState.auth_enabled && authState.authenticated));
+    return settingsController.canAdmin();
   }
   async function openMemoryDetail(memoryId, opts = {}) {
     await detailDrawer.openMemoryDetail(memoryId, opts);
@@ -3896,45 +4089,6 @@
   }
   async function loadConstellation() {
     drawConstellation(await api("/api/constellation?limit=240"));
-  }
-  async function loadDiagnostics() {
-    const diag = await api(endpoints.diagnostics());
-    const counts = diag.table_counts || {};
-    const core = ["working_memory", "episodic_memory", "triples", "consolidation_log"].filter((t) => t in counts);
-    $("#diagnosticsSummary").innerHTML = `
-    <div class="diag-row"><span>Status</span><strong>${diag.ok ? "OK" : "Needs attention"}</strong></div>
-    <div class="diag-row"><span>DB path</span><strong title="${esc(diag.db_path)}">${esc(diag.db_path)}</strong></div>
-    <div class="diag-row"><span>Readable</span><strong>${diag.readable ? "yes" : "no"}</strong></div>
-    <div class="diag-row"><span>Size</span><strong>${fmtBytes(diag.size_bytes)}</strong></div>
-    <div class="diag-row"><span>Last modified</span><strong>${esc(diag.modified_at || "n/a")}</strong></div>
-    <div class="diag-row"><span>Tables</span><strong>${esc((diag.tables || []).length)}</strong></div>
-    <div class="diag-row wide"><span>Core rows</span><strong>${core.map((t) => `${t}: ${Number(counts[t] || 0).toLocaleString()}`).join(" · ") || "none"}</strong></div>`;
-    $("#diagnosticsStatus").textContent = diag.error || ((diag.missing_expected_tables || []).length ? `Missing expected tables: ${diag.missing_expected_tables.join(", ")}` : "Database looks healthy.");
-    window.lastDiagnostics = diag;
-  }
-  async function copyDiagnostics() {
-    if (!window.lastDiagnostics) await loadDiagnostics();
-    showSelectableCopy("Diagnostics JSON", JSON.stringify(window.lastDiagnostics, null, 2));
-  }
-  async function refreshAuthState() {
-    authState = await api("/api/auth/status");
-    setCsrfToken(authState.csrf_token || "");
-    return authState;
-  }
-  async function loadAuthStatus() {
-    const data = await refreshAuthState();
-    const cfg = data.config || {};
-    $("#configHost").value = cfg.host || "";
-    $("#configPort").value = cfg.port || "";
-    $("#configDbPath").value = cfg.db_path || "";
-    const urls = [`This Mac: ${cfg.local_url || ""}`];
-    if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
-    $("#configStatus").textContent = `Current access URLs — ${urls.join(" · ")}`;
-    authState = data;
-    $("#authEnabled").checked = !!data.auth_enabled;
-    $("#authStatus").textContent = data.has_password ? "Password is set." : "No password set.";
-    $("#memoryAdminEnabled").checked = !!cfg.memory_admin_enabled;
-    $("#memoryAdminStatus").textContent = cfg.memory_admin_enabled ? ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0") ? "Local-only admin mode is enabled. Mutations are audited; password is only required for LAN/non-local hosts." : "Admin maintenance mode is enabled. LAN/non-local mutations require password auth and are audited." : "Admin maintenance mode is disabled; dashboard is read-only.";
   }
   var threeModulePromise = null;
   var threeVis = {
@@ -5719,95 +5873,9 @@
     if (e.key === "Enter") $("#memoriaPreferencesSearch").click();
   };
   $("#closeDetail").onclick = () => closeDetail();
-  $("#loginButton").onclick = async () => {
-    try {
-      await runButtonAction($("#loginButton"), "Signing in...", () => postJson("/api/auth/login", { password: $("#loginPassword").value }), { tone: "success", title: "Signed in" });
-      hideLogin();
-      $("#loginError").textContent = "";
-      await refreshAuthState();
-      loadStats();
-    } catch (e) {
-      $("#loginError").textContent = e.message;
-    }
-  };
-  $("#loginPassword").onkeydown = (e) => {
-    if (e.key === "Enter") $("#loginButton").click();
-  };
-  $("#refreshDiagnostics").onclick = loadDiagnostics;
-  $("#copyDiagnostics").onclick = copyDiagnostics;
-  $("#saveRuntimeConfig").onclick = async () => {
-    try {
-      const body = { host: $("#configHost").value.trim(), port: $("#configPort").value.trim(), db_path: $("#configDbPath").value.trim() };
-      const r = await runButtonAction($("#saveRuntimeConfig"), "Saving...", () => postJson("/api/config", body), { tone: "success", title: "Server settings saved", body: "Restart the dashboard to apply host, port, or database changes." });
-      const cfg = r.config || {};
-      $("#configHost").value = cfg.host || "";
-      $("#configPort").value = cfg.port || "";
-      $("#configDbPath").value = cfg.db_path || "";
-      const urls = [`This Mac: ${cfg.local_url || ""}`];
-      if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
-      $("#configStatus").textContent = `${r.message || "Saved. Restart the dashboard to apply server/database changes."} ${urls.join(" · ")}`;
-    } catch (e) {
-      $("#configStatus").textContent = e.message;
-    }
-  };
-  $("#saveAuth").onclick = async () => {
-    try {
-      const body = { auth_enabled: $("#authEnabled").checked };
-      if ($("#authPassword").value) body.password = $("#authPassword").value;
-      const r = await runButtonAction($("#saveAuth"), "Saving...", () => postJson("/api/config", body), { tone: "success", title: "Auth settings saved" });
-      $("#authPassword").value = "";
-      $("#authStatus").textContent = r.message || "Saved";
-    } catch (e) {
-      $("#authStatus").textContent = e.message;
-    }
-  };
-  $("#clearAuth").onclick = async () => {
-    try {
-      const ok = await confirmAction({ title: "Disable password auth?", description: "This clears the dashboard password and disables password auth.", confirmText: "Disable auth", tone: "warn" });
-      if (!ok) return;
-      const r = await runButtonAction($("#clearAuth"), "Disabling...", () => postJson("/api/config", { clear_password: true }), { tone: "success", title: "Password auth disabled" });
-      $("#authEnabled").checked = false;
-      $("#authPassword").value = "";
-      $("#memoryAdminEnabled").checked = !!(r.config && r.config.memory_admin_enabled);
-      $("#authStatus").textContent = r.message || "Auth disabled";
-      await loadAuthStatus();
-    } catch (e) {
-      $("#authStatus").textContent = e.message;
-    }
-  };
-  $("#saveMemoryAdmin").onclick = async () => {
-    try {
-      const r = await runButtonAction($("#saveMemoryAdmin"), "Saving...", () => postJson("/api/config", { memory_admin_enabled: $("#memoryAdminEnabled").checked }), { tone: "success", title: "Memory admin settings saved" });
-      authState.config = r.config || {};
-      $("#memoryAdminStatus").textContent = r.message || "Saved";
-      await loadAuthStatus();
-    } catch (e) {
-      $("#memoryAdminStatus").textContent = e.message;
-    }
-  };
-  $("#createBackup").onclick = async () => {
-    try {
-      const r = await runButtonAction($("#createBackup"), "Creating...", () => postJson("/api/admin/backup", {}), (result) => ({ tone: "success", title: "Backup created", body: result.backup?.path || "" }));
-      $("#memoryAdminStatus").textContent = `Backup created: ${r.backup.path}`;
-    } catch (e) {
-      $("#memoryAdminStatus").textContent = e.message;
-    }
-  };
-  $("#viewAuditLog").onclick = async () => {
-    try {
-      const r = await api("/api/admin/audit?limit=50");
-      showDetail(r.items, "Memory audit log");
-    } catch (e) {
-      $("#memoryAdminStatus").textContent = e.message;
-    }
-  };
+  settingsController.bindControls();
   $("#retryBootstrap").onclick = () => bootstrapDashboard().catch(handleInitError);
   $("#copyBootError").onclick = copyBootErrorDetails;
-  $("#logoutAuth").onclick = async () => {
-    await runButtonAction($("#logoutAuth"), "Logging out...", () => postJson("/api/auth/logout", {}), { tone: "success", title: "Logged out" });
-    setCsrfToken("");
-    showLogin();
-  };
   function toggleTheme() {
     setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
   }
