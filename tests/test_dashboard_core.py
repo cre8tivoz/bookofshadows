@@ -608,7 +608,7 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="headerSearchButton"' not in html
     assert 'id="menuSearchQuery"' in html
     assert 'id="menuSearchButton"' in html
-    assert html.index('id="menuSearchQuery"') < html.index('<nav>')
+    assert html.index('id="menuSearchQuery"') < html.index('<nav role="tablist"')
     assert '.sidebar{max-height:100vh;overflow-y:auto;overscroll-behavior:contain' in css
     assert '.sidebar-menu{padding-bottom:28px}' in css
     assert '.menu-search{margin:12px 0 16px' in css

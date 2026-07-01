@@ -18,7 +18,7 @@
   --text:        #eaedf2;
   --text-sec:    #b4bcc8;
   --text-muted:  #7a8494;
-  --text-subtle: #565f6e;
+  --text-subtle: #6d798c;
 
   /* Strokes */
   --stroke-subtle:rgba(255,255,255,.05);
@@ -84,8 +84,8 @@
 
   --text:        #1a1d24;
   --text-sec:    #4a5059;
-  --text-muted:  #6f7784;
-  --text-subtle: #8f97a2;
+  --text-muted:  #68707c;
+  --text-subtle: #727881;
 
   --stroke-subtle:rgba(20,22,28,.06);
   --stroke:       rgba(20,22,28,.10);
@@ -129,6 +129,50 @@ body{
   text-rendering:geometricPrecision;
 }
 html{background:var(--bg)}
+
+/* === FOCUS VISIBILITY ========================================
+   Hide the default focus ring for pointer interactions, then draw
+   a single consistent ring for keyboard/AT focus everywhere. */
+:focus{outline:none}
+:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+  border-radius:var(--r-sm);
+}
+
+/* === REDUCED MOTION ==========================================
+   Canvas/Three.js render loops already gate on this query in JS;
+   this covers CSS transitions, keyframe animations, and hover
+   transforms so layout motion can be turned off without breaking
+   layout. */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+    scroll-behavior:auto!important;
+  }
+  .item:hover,.pattern-bar:hover,button:active{transform:none!important}
+}
+
+/* === TABULAR NUMBERS =========================================
+   Keep counters, tables, and diagnostics from jittering in width
+   as digits change. */
+.card .num,
+.diag-pill strong,
+.diag-row strong,
+.break-row strong,
+.meta-time,
+.chip-importance,
+table td,
+table th,
+.pattern-summary strong,
+.pattern-bar strong,
+.context-summary strong,
+.bulk-selection-status,
+.live-status{
+  font-variant-numeric:tabular-nums;
+}
 
 /* === AURORA — disabled for data-tool clarity ================ */
 .aurora{display:none!important}
@@ -369,15 +413,18 @@ main{padding:20px clamp(20px,4vw,48px) 48px}
 .breakdown-card .breakdown-body{
   padding:8px 12px;
 }
-.breakdown-row{
+.break-row{
   display:flex;align-items:center;justify-content:space-between;
+  gap:8px;
   padding:5px 0;
   border-bottom:1px solid var(--stroke-subtle);
   font-size:var(--fs-sm);
 }
-.breakdown-row:last-child{border-bottom:none}
-.breakdown-row span{color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.breakdown-row strong{color:var(--text);font-weight:600;font-family:var(--font-mono);font-size:var(--fs-sm)}
+.break-row:last-child{border-bottom:none}
+.break-row span{color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.break-row strong{color:var(--text);font-weight:600;font-family:var(--font-mono);font-size:var(--fs-sm)}
+.break-row[role="button"]{cursor:pointer;border-radius:var(--r-sm);padding:5px 6px;margin:0 -6px;transition:background .12s}
+.break-row[role="button"]:hover{background:var(--card-bg-hov)}
 
 /* === 3. CHIPS / TAGS — 3 variants =========================== */
 .chip{
@@ -718,6 +765,16 @@ tr:hover td{background:var(--card-bg-hov)}
   margin:12px 0 8px;
 }
 .drawer-actions{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 2px;align-items:center}
+.session-event{
+  border:1px solid var(--stroke);
+  border-radius:var(--r-sm);
+  padding:8px 10px;
+  margin-top:6px;
+  background:var(--input-bg);
+  cursor:pointer;
+  transition:border-color .12s,background .12s;
+}
+.session-event:hover{border-color:var(--accent);background:var(--card-bg-hov)}
 
 /* === SETTINGS ================================================ */
 .settings-grid{display:flex;flex-direction:column;gap:22px}
@@ -874,6 +931,19 @@ tr:hover td{background:var(--card-bg-hov)}
   text-transform:none!important;letter-spacing:0!important;
 }
 .context-type-chip strong{display:inline;margin:0;font-size:var(--fs-sm)}
+.profile-section{padding:16px}
+.profile-section+.profile-section{margin-top:12px}
+.profile-item{
+  position:relative;
+  border:1px solid var(--stroke);
+  border-radius:var(--r-sm);
+  padding:10px 12px;
+  margin-top:8px;
+  background:var(--input-bg);
+  cursor:pointer;
+  transition:border-color .12s,background .12s;
+}
+.profile-item:hover{border-color:var(--accent);background:var(--card-bg-hov)}
 .context-card{position:relative}
 .context-card-head{display:flex;align-items:center;justify-content:space-between;gap:5px;flex-wrap:wrap}
 .context-card .badge{font-size:var(--fs-xs)}
@@ -903,7 +973,10 @@ tr:hover td{background:var(--card-bg-hov)}
   border-radius:var(--r-sm);
   padding:8px 10px;
   background:var(--stroke-subtle);
+  cursor:pointer;
+  transition:border-color .12s,background .12s;
 }
+.realtime-event:hover{border-color:var(--accent);background:var(--card-bg-hov)}
 .realtime-event strong{color:var(--accent);letter-spacing:.02em}
 .realtime-event .meta{margin:4px 0 0}
 

@@ -40,20 +40,20 @@
         <input id="menuSearchQuery" placeholder="Search memory…" />
         <button id="menuSearchButton" class="primary" aria-label="Search memory">⌕</button>
       </div>
-      <nav>
-        <button data-tab="overview" class="active"><span>OV</span>Overview</button>
-        <button data-tab="today"><span>TD</span>Today</button>
-        <button data-tab="visualiser"><span>3D</span>Visualiser</button>
-        <button data-tab="palace" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>♜</span>Mnemosyne Labyrinth</button>
-        <button data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
-        <button data-tab="review"><span>RV</span>Review</button>
-        <button data-tab="memories"><span>MM</span>Memories</button>
-        <button data-tab="profile"><span>CB</span>Context Bank</button>
-        <button data-tab="lifecycle"><span>LC</span>Lifecycle</button>
-        <button data-tab="graph"><span>KG</span>Knowledge Graph</button>
-        <button data-tab="memoria"><span>MR</span>MEMORIA</button>
-        <button data-tab="activity"><span>HS</span>History</button>
-        <button data-tab="settings"><span>ST</span>Settings</button>
+      <nav role="tablist" aria-label="Primary navigation">
+        <button role="tab" aria-selected="true" data-tab="overview" class="active"><span>OV</span>Overview</button>
+        <button role="tab" aria-selected="false" data-tab="today"><span>TD</span>Today</button>
+        <button role="tab" aria-selected="false" data-tab="visualiser"><span>3D</span>Visualiser</button>
+        <button role="tab" aria-selected="false" data-tab="palace" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>♜</span>Mnemosyne Labyrinth</button>
+        <button role="tab" aria-selected="false" data-tab="visualiserlegacy" class="nav-hidden" aria-hidden="true" tabindex="-1"><span>✺</span>Visualiser Legacy</button>
+        <button role="tab" aria-selected="false" data-tab="review"><span>RV</span>Review</button>
+        <button role="tab" aria-selected="false" data-tab="memories"><span>MM</span>Memories</button>
+        <button role="tab" aria-selected="false" data-tab="profile"><span>CB</span>Context Bank</button>
+        <button role="tab" aria-selected="false" data-tab="lifecycle"><span>LC</span>Lifecycle</button>
+        <button role="tab" aria-selected="false" data-tab="graph"><span>KG</span>Knowledge Graph</button>
+        <button role="tab" aria-selected="false" data-tab="memoria"><span>MR</span>MEMORIA</button>
+        <button role="tab" aria-selected="false" data-tab="activity"><span>HS</span>History</button>
+        <button role="tab" aria-selected="false" data-tab="settings"><span>ST</span>Settings</button>
       </nav>
       <div class="theme-switch glass-mini">
         <span>Theme</span>
@@ -108,11 +108,11 @@
             <div class="breakdown-card glass"><div class="breakdown-title">Sources</div><div id="todaySources"></div></div>
             <div class="breakdown-card glass"><div class="breakdown-title">Sessions</div><div id="todaySessions"></div></div>
           </div>
-          <div class="section-tabs glass" data-section="today">
-            <button data-panel="todayAdded" class="active">Added</button>
-            <button data-panel="todayRecalled">Recalled</button>
-            <button data-panel="todayTriples">Triples</button>
-            <button data-panel="todayConsolidations">Consolidations</button>
+          <div class="section-tabs glass" data-section="today" role="tablist">
+            <button role="tab" aria-selected="true" data-panel="todayAdded" class="active">Added</button>
+            <button role="tab" aria-selected="false" data-panel="todayRecalled">Recalled</button>
+            <button role="tab" aria-selected="false" data-panel="todayTriples">Triples</button>
+            <button role="tab" aria-selected="false" data-panel="todayConsolidations">Consolidations</button>
           </div>
           <div id="todayAdded" class="subpanel active"><div class="list memory-grid"></div></div>
           <div id="todayRecalled" class="subpanel"><div class="list memory-grid"></div></div>
@@ -179,9 +179,9 @@
 
         <section id="constellation" class="tab">
           <div class="section-head"><h2>Visualiser Legacy</h2><span>memory maps + neural activation views</span></div>
-          <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode">
-            <button id="visualiserConstellationTab" data-visualiser="constellation" class="active">Constellation</button>
-            <button id="visualiserNeuralTab" data-visualiser="neural">Neural Map</button>
+          <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode" role="tablist">
+            <button role="tab" aria-selected="true" id="visualiserConstellationTab" data-visualiser="constellation" class="active">Constellation</button>
+            <button role="tab" aria-selected="false" id="visualiserNeuralTab" data-visualiser="neural">Neural Map</button>
           </div>
           <div class="toolbar glass">
             <button id="constellationRefresh" class="primary">Refresh visualiser</button>
@@ -204,9 +204,9 @@
 
         <section id="visualiser3d" class="tab">
           <div class="section-head"><h2>Visualiser</h2><span>memory maps + neural activation views</span></div>
-          <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode">
-            <button id="threeConstellationTab" data-three-mode="constellation" class="active">Constellation</button>
-            <button id="threeNeuralTab" data-three-mode="neural">Neural Map</button>
+          <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode" role="tablist">
+            <button role="tab" aria-selected="true" id="threeConstellationTab" data-three-mode="constellation" class="active">Constellation</button>
+            <button role="tab" aria-selected="false" id="threeNeuralTab" data-three-mode="neural">Neural Map</button>
           </div>
           <div class="toolbar glass">
             <button id="threeRefresh" class="primary">Refresh visualiser</button>
@@ -259,13 +259,13 @@
 
         <section id="memoria" class="tab">
           <div class="section-head"><h2>MEMORIA</h2><span>structured fact extraction and retrieval</span></div>
-          <div class="section-tabs glass" data-section="memoria">
-            <button data-panel="memoriaOverview" class="active">Overview</button>
-            <button data-panel="memoriaFacts">Facts</button>
-            <button data-panel="memoriaTimelines">Timelines</button>
-            <button data-panel="memoriaInstructions">Instructions</button>
-            <button data-panel="memoriaKg">KG</button>
-            <button data-panel="memoriaPreferences">Preferences</button>
+          <div class="section-tabs glass" data-section="memoria" role="tablist">
+            <button role="tab" aria-selected="true" data-panel="memoriaOverview" class="active">Overview</button>
+            <button role="tab" aria-selected="false" data-panel="memoriaFacts">Facts</button>
+            <button role="tab" aria-selected="false" data-panel="memoriaTimelines">Timelines</button>
+            <button role="tab" aria-selected="false" data-panel="memoriaInstructions">Instructions</button>
+            <button role="tab" aria-selected="false" data-panel="memoriaKg">KG</button>
+            <button role="tab" aria-selected="false" data-panel="memoriaPreferences">Preferences</button>
           </div>
           <div id="memoriaCards" class="cards"></div>
           <div id="memoriaOverview" class="subpanel active">
@@ -310,9 +310,9 @@
 
         <section id="explore" class="tab">
           <div class="section-head"><h2>Memories</h2><span>memory browser + recall debug</span></div>
-          <div class="section-tabs glass" data-section="explore">
-            <button data-panel="exploreMemories" class="active">Memories</button>
-            <button data-panel="exploreRecall">Recall debug</button>
+          <div class="section-tabs glass" data-section="explore" role="tablist">
+            <button role="tab" aria-selected="true" data-panel="exploreMemories" class="active">Memories</button>
+            <button role="tab" aria-selected="false" data-panel="exploreRecall">Recall debug</button>
           </div>
           <div id="exploreMemories" class="subpanel active">
             <div class="section-head mini"><h2>Memory browser</h2><span>working + episodic</span></div>
@@ -351,9 +351,9 @@
 
         <section id="activity" class="tab">
           <div class="section-head"><h2>History</h2><span>chronological memory events + consolidation history</span></div>
-          <div class="section-tabs glass" data-section="activity">
-            <button data-panel="activityTimeline" class="active">Timeline</button>
-            <button data-panel="activityConsolidations">Consolidations</button>
+          <div class="section-tabs glass" data-section="activity" role="tablist">
+            <button role="tab" aria-selected="true" data-panel="activityTimeline" class="active">Timeline</button>
+            <button role="tab" aria-selected="false" data-panel="activityConsolidations">Consolidations</button>
           </div>
           <div id="activityTimeline" class="subpanel active">
             <div class="section-head mini"><h2>Timeline</h2><span>day / session stream</span></div>
@@ -377,9 +377,9 @@
 
         <section id="graph" class="tab">
           <div class="section-head"><h2>Knowledge Graph</h2><span>relationships + triple table</span></div>
-          <div class="section-tabs glass" data-section="graph">
-            <button data-panel="graphGraph" class="active">Relationship graph</button>
-            <button data-panel="graphTriples">Facts table</button>
+          <div class="section-tabs glass" data-section="graph" role="tablist">
+            <button role="tab" aria-selected="true" data-panel="graphGraph" class="active">Relationship graph</button>
+            <button role="tab" aria-selected="false" data-panel="graphTriples">Facts table</button>
           </div>
           <div id="graphGraph" class="subpanel active">
             <div class="section-head mini"><h2>Relationship graph</h2><span>click nodes / edges to inspect</span></div>
@@ -391,7 +391,7 @@
               <span class="muted" id="graphHint">Scroll to zoom, drag to pan. Click nodes / edges to inspect.</span>
             </div>
             <div class="graph-layout">
-              <div class="graph-wrap"><svg id="graphSvg" viewBox="0 0 1000 650"></svg></div>
+              <div class="graph-wrap"><svg id="graphSvg" viewBox="0 0 1000 650" role="img" aria-label="Knowledge graph. Drag to pan, scroll to zoom, click a node or edge to inspect it. The Facts table tab lists the same data as a keyboard-accessible table."></svg></div>
               <aside id="graphInspector" class="graph-inspector glass">
                 <div class="inspector-kicker">Graph inspector</div>
                 <h3>Nothing selected</h3>
@@ -468,10 +468,10 @@
     </div>
   </div>
 
-  <div id="loginOverlay" class="login-overlay hidden">
+  <div id="loginOverlay" class="login-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="loginHeading">
     <div class="login-card glass">
       <div class="brand compact-brand"><div class="brand-mark">W</div><div><div class="brand-name">Book of Shadows</div><div class="brand-sub">Mnemosyne · Witch Daddy Labs</div></div></div>
-      <h2>Password required</h2>
+      <h2 id="loginHeading">Password required</h2>
       <p class="muted">This dashboard has optional password auth enabled.</p>
       <input id="loginPassword" type="password" placeholder="Password" />
       <button id="loginButton" class="primary">Unlock</button>
@@ -479,7 +479,7 @@
     </div>
   </div>
 
-  <div id="detail" class="drawer hidden"><button id="closeDetail" aria-label="Close detail">×</button><div class="drawer-title">Detail</div><pre id="detailBody"></pre></div>
+  <div id="detail" class="drawer hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle" tabindex="-1"><button id="closeDetail" aria-label="Close detail">×</button><div class="drawer-title" id="detailTitle">Detail</div><pre id="detailBody"></pre></div>
   <script src="/static/app.js?v=stream-v2"></script>
 </body>
 </html>

@@ -27,6 +27,20 @@ export function closeMobileMenuForViewportChange() {
   closeMobileMenu();
 }
 
+export function bindActivatable(el, handler) {
+  if (!el) return;
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+  if (!el.hasAttribute("role")) el.setAttribute("role", "button");
+  el.onclick = handler;
+  el.onkeydown = (event) => {
+    if (event.target !== el) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handler(event);
+    }
+  };
+}
+
 export function showPanel(sectionId, panelId) {
   const section = $(`#${sectionId}`);
   if (!section || !panelId) return;
@@ -34,6 +48,8 @@ export function showPanel(sectionId, panelId) {
     panel.classList.toggle("active", panel.id === panelId);
   });
   section.querySelectorAll(".section-tabs button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.panel === panelId);
+    const active = button.dataset.panel === panelId;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
   });
 }

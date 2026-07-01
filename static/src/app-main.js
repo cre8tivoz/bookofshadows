@@ -1,6 +1,6 @@
 import { cleanContent, esc, roleOf, shortId } from './utils/escape.js';
 import { fmtBytes, prettyTime } from './utils/format.js';
-import { $, $$, closeMobileMenu, closeMobileMenuForViewportChange, fillSelect, showPanel } from './ui/dom.js';
+import { $, $$, bindActivatable, closeMobileMenu, closeMobileMenuForViewportChange, fillSelect, showPanel } from './ui/dom.js';
 import { breakdown, countLabel, optionsFrom, stateHtml } from './ui/render.js';
 import { actionSummary, keyboardActionForEvent, renderToast, setButtonPending, skeletonHtml } from './ui/feedback.js';
 import { createApiClient } from './api/client.js';
@@ -9,6 +9,7 @@ import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/rou
 import { bulkSelectionState, isMutableMemory, liveEventMeta, memoryFilterParams, memoryItem, meta, selectedMutableIds } from './features/memories.js';
 import { lifecycleQueueHtml, reviewActionableIds, reviewFilterParams, reviewQueueHtml } from './features/review.js';
 import { createGraphFeature } from './features/graph.js';
+import { trapFocus } from './utils/a11y.js';
 
 const THEME_KEY = 'mnemosyne-dashboard-theme';
 const VISUALISER_MODE_KEY = 'mnemosyne-dashboard-visualiser-mode';
@@ -24,6 +25,7 @@ let liveMemoryObserver = null;
 let currentRoute = { tab: 'overview' };
 let applyingHistory = false;
 let lastBootError = null;
+let drawerFocusRelease = null;
 let bulkSelection = new Set();
 let reviewSelection = new Set();
 let selectedReviewQueue = 'contaminated';
@@ -50,8 +52,24 @@ function initTheme(){
   const preferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   setTheme(saved || preferred);
 }
-function showLogin(){ $('#loginOverlay')?.classList.remove('hidden'); }
-function hideLogin(){ $('#loginOverlay')?.classList.add('hidden'); }
+let loginFocusRelease = null;
+function showLogin(){
+  const overlay = $('#loginOverlay');
+  if(!overlay) return;
+  const wasHidden = overlay.classList.contains('hidden');
+  overlay.classList.remove('hidden');
+  if(wasHidden){
+    loginFocusRelease = trapFocus(overlay);
+    $('#loginPassword')?.focus();
+  }
+}
+function hideLogin(){
+  const overlay = $('#loginOverlay');
+  if(!overlay) return;
+  overlay.classList.add('hidden');
+  loginFocusRelease?.();
+  loginFocusRelease = null;
+}
 const { api, postJson } = createApiClient({
   onUnauthorized: showLogin,
   devTiming: localStorage.getItem('mnemosyne-debug-api') === '1',
@@ -175,7 +193,18 @@ function applyMemoryRouteFilters(filters={}){
 }
 function closeDetail(opts={}){
   $('#detail').classList.add('hidden');
+  drawerFocusRelease?.();
+  drawerFocusRelease = null;
   if(opts.push !== false) pushRoute(currentRoute?.tab === 'memories' ? memoryRouteState() : routeTabState(currentRoute?.tab || 'overview'));
+}
+function activateDrawerFocusTrap(){
+  const drawer = $('#detail');
+  const wasHidden = drawer.classList.contains('hidden');
+  drawer.classList.remove('hidden');
+  if(wasHidden){
+    drawerFocusRelease = trapFocus(drawer);
+    ($('#closeDetail') || drawer).focus();
+  }
 }
 async function applyRoute(state){
   applyingHistory = true;
@@ -209,7 +238,7 @@ function showDetail(obj, title='Detail', opts={}){
   if(titleEl) titleEl.textContent = title;
   $('#detailBody').classList.remove('html-detail');
   $('#detailBody').textContent = JSON.stringify(obj, null, 2);
-  $('#detail').classList.remove('hidden');
+  activateDrawerFocusTrap();
   if(opts.push !== false) pushRoute(currentRoute || routeTabState());
 }
 function showHtmlDetail(html, title='Detail'){
@@ -217,14 +246,14 @@ function showHtmlDetail(html, title='Detail'){
   if(titleEl) titleEl.textContent = title;
   $('#detailBody').classList.add('html-detail');
   $('#detailBody').innerHTML = html;
-  $('#detail').classList.remove('hidden');
+  activateDrawerFocusTrap();
 }
 
 function modalTemplate(){
   let modal = $('#actionModal');
   if(modal) return modal;
   document.body.insertAdjacentHTML('beforeend', `
-    <div id="actionModal" class="action-modal hidden" role="dialog" aria-modal="true">
+    <div id="actionModal" class="action-modal hidden" role="dialog" aria-modal="true" aria-labelledby="actionModalTitle" aria-describedby="actionModalDescription">
       <div class="action-modal-card glass">
         <button id="actionModalClose" class="modal-close" aria-label="Close dialog">×</button>
         <div id="actionModalKicker" class="modal-kicker">Memory maintenance</div>
@@ -250,7 +279,8 @@ function openActionModal({title, description='', kicker='Memory maintenance', co
     $('#actionModalConfirm').textContent = confirmText;
     $('#actionModalConfirm').className = `primary ${tone}`.trim();
     $('#actionModalError').textContent = '';
-    const close = (value) => { modal.classList.add('hidden'); document.removeEventListener('keydown', onKey); resolve(value); };
+    let releaseFocusTrap = () => {};
+    const close = (value) => { modal.classList.add('hidden'); document.removeEventListener('keydown', onKey); releaseFocusTrap(); resolve(value); };
     const onKey = (e) => { if(e.key === 'Escape') close(null); if(e.key === 'Enter' && !e.target.matches('textarea')) $('#actionModalConfirm').click(); };
     $('#actionModalClose').onclick = () => close(null);
     $('#actionModalCancel').onclick = () => close(null);
@@ -263,6 +293,7 @@ function openActionModal({title, description='', kicker='Memory maintenance', co
     };
     modal.classList.remove('hidden');
     document.addEventListener('keydown', onKey);
+    releaseFocusTrap = trapFocus(modal);
     const first = modal.querySelector('textarea,input,button.primary');
     setTimeout(() => first?.focus(), 30);
   });
@@ -467,10 +498,11 @@ function switchTab(name, opts={}){
   if(section !== 'visualiser3d' && threeVis?.renderer) clearThreeScene();
   if(section !== 'memoryPalace' && memoryPalace?.renderer) clearPalaceScene();
   document.body.classList.toggle('compact-page', section !== 'overview');
-  $$('.tab, nav button').forEach(x=>x.classList.remove('active'));
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  $$('nav button').forEach(x=>{ x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
   $(`#${section}`).classList.add('active');
   const nav = document.querySelector(`nav button[data-tab="${canonicalTab(name)}"]`) || document.querySelector(`nav button[data-tab="${section}"]`);
-  if(nav) nav.classList.add('active');
+  if(nav){ nav.classList.add('active'); nav.setAttribute('aria-selected', 'true'); }
   showPanel(section, panelFor(name));
   closeDetail({ push:false });
   closeMobileMenu();
@@ -602,14 +634,11 @@ function renderRealtimeEvents(){
     const label = ev.event_type || 'MEMORY_EVENT';
     const when = ev.timestamp ? prettyTime(ev.timestamp) : 'just now';
     const source = ev.source ? `<span class="badge">${esc(ev.source)}</span>` : '';
-    return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || '')}" tabindex="0" role="button"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || 'unknown'))}</span><span class="badge trust-${esc(ev.veracity || 'unknown')}">${esc(ev.veracity || 'unknown')}</span>${source}<span class="meta-time">${esc(when)}</span></div><div class="content realtime-content">${esc(ev.content || '')}</div></div>`;
+    return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || '')}"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || 'unknown'))}</span><span class="badge trust-${esc(ev.veracity || 'unknown')}">${esc(ev.veracity || 'unknown')}</span>${source}<span class="meta-time">${esc(when)}</span></div><div class="content realtime-content">${esc(ev.content || '')}</div></div>`;
   }).join('') : '<div class="state-empty">Waiting for memory events…</div>';
   feeds.forEach(feed => {
     feed.innerHTML = html;
-    feed.querySelectorAll('.realtime-event').forEach(row => {
-      row.onclick = () => openMemoryDetail(row.dataset.memoryId || '');
-      row.onkeydown = e => { if(e.key === 'Enter' || e.key === ' ') openMemoryDetail(row.dataset.memoryId || ''); };
-    });
+    feed.querySelectorAll('.realtime-event').forEach(row => bindActivatable(row, () => openMemoryDetail(row.dataset.memoryId || '')));
   });
 }
 function renderRealtimePanel(){
@@ -695,11 +724,11 @@ async function initRealtime(){
   source.addEventListener('memory', e => addRealtimeEvent(JSON.parse(e.data)));
 }
 function bindBreakdownClicks(){
-  $$('#sourceBreakdown .break-row').forEach(row => row.onclick = () => { $('#memorySource').value = row.dataset.filter || ''; switchTab('memories'); });
-  $$('#scopeBreakdown .break-row').forEach(row => row.onclick = () => { $('#memoryScope').value = row.dataset.filter || ''; switchTab('memories'); });
-  $$('#veracityBreakdown .break-row').forEach(row => row.onclick = () => { $('#memoryVeracity').value = row.dataset.filter || ''; switchTab('memories'); });
-  $$('#degradationBreakdown .break-row').forEach(row => row.onclick = () => { const map={hot:'1',warm:'2',cold:'3'}; $('#memoryDegradation').value = map[row.dataset.filter] || ''; switchTab('memories'); });
-  $$('#sessionBreakdown .break-row').forEach(row => row.onclick = () => openSessionDetail(row.dataset.filter || ''));
+  $$('#sourceBreakdown .break-row').forEach(row => bindActivatable(row, () => { $('#memorySource').value = row.dataset.filter || ''; switchTab('memories'); }));
+  $$('#scopeBreakdown .break-row').forEach(row => bindActivatable(row, () => { $('#memoryScope').value = row.dataset.filter || ''; switchTab('memories'); }));
+  $$('#veracityBreakdown .break-row').forEach(row => bindActivatable(row, () => { $('#memoryVeracity').value = row.dataset.filter || ''; switchTab('memories'); }));
+  $$('#degradationBreakdown .break-row').forEach(row => bindActivatable(row, () => { const map={hot:'1',warm:'2',cold:'3'}; $('#memoryDegradation').value = map[row.dataset.filter] || ''; switchTab('memories'); }));
+  $$('#sessionBreakdown .break-row').forEach(row => bindActivatable(row, () => openSessionDetail(row.dataset.filter || '')));
 }
 async function loadMemories(){
   const params = memoryFilterParams({
@@ -793,7 +822,7 @@ async function setSelectedExpiry(button){
 }
 function bindMemoryClicks(root){
   root.querySelectorAll('.session-link').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
-  root.querySelectorAll('.item[data-id]').forEach(el => el.onclick = (e) => { if(e.target.closest('.session-link,button,a,label,input')) return; openMemoryDetail(el.dataset.id); });
+  root.querySelectorAll('.item[data-id]').forEach(el => bindActivatable(el, (e) => { if(e.target.closest('.session-link,button,a,label,input')) return; openMemoryDetail(el.dataset.id); }));
 }
 function canAdmin(){ const cfg = authState.config || {}; const localOnly = ['127.0.0.1','localhost','::1'].includes(cfg.host || '0.0.0.0'); return !!(cfg.memory_admin_enabled && (localOnly || (authState.auth_enabled && authState.authenticated))); }
 function whyMemoryHtml(item){
@@ -922,14 +951,14 @@ async function openSessionDetail(sessionId, opts={}){
   $('#sessionBrowseMemories').onclick = () => { $('#memorySession').value = sessionId; $('#memoryKind').value = 'all'; $('#memoryQuery').value = ''; switchTab('memories'); closeDetail({ push:false }); };
   $('#sessionTimeline').onclick = () => { $('#timelineGroup').value = 'session'; $('#timelineQuery').value = sessionId; switchTab('timelineView'); closeDetail({ push:false }); };
   $('#sessionCopy').onclick = () => showSelectableCopy('Session ID', sessionId);
-  $$('#detailBody .session-event').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Session event detail'));
+  $$('#detailBody .session-event').forEach(el => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), 'Session event detail')));
 }
 async function loadTriples(){
   const q = $('#tripleQuery').value.trim();
   try {
     const data = await api(`/api/triples?q=${encodeURIComponent(q)}&limit=300`, {requestKey:'triples'});
     $('#tripleRows').innerHTML = data.items.map(t => `<tr class="triple-row" data-triple='${esc(JSON.stringify(t))}'><td>${esc(t.subject)}</td><td>${esc(t.predicate)}</td><td>${esc(t.object)}</td><td>${esc(t.confidence ?? '')}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-cell">No triples found.</td></tr>';
-    $$('#tripleRows .triple-row').forEach(row => row.onclick = () => showDetail(JSON.parse(row.dataset.triple), 'Triple detail'));
+    $$('#tripleRows .triple-row').forEach(row => bindActivatable(row, () => showDetail(JSON.parse(row.dataset.triple), 'Triple detail')));
   } catch(e) {
     if(isCancelledRequest(e)) return;
     $('#tripleRows').innerHTML = `<tr><td colspan="4" class="empty-cell">Could not load triples: ${esc(e.message || 'Try again.')}</td></tr>`;
@@ -949,7 +978,7 @@ function renderConsolidations(){
   $('#consolidationList').innerHTML = rows.map(consolidationItem).join('') || '<p class="muted">No consolidations found.</p>';
   $$('#consolidationList .consolidation-item').forEach(el => {
     const data = JSON.parse(el.dataset.consolidation);
-    el.onclick = (e) => { if(e.target.closest('button')) return; showDetail(data, 'Consolidation detail'); };
+    bindActivatable(el, (e) => { if(e.target.closest('button')) return; showDetail(data, 'Consolidation detail'); });
     el.querySelector('.inspect-consolidation').onclick = () => showDetail(data, 'Consolidation detail');
     el.querySelector('.view-session').onclick = () => openSessionDetail(data.session_id || '');
   });
@@ -963,7 +992,7 @@ async function loadConsolidations(){
 function searchMemoryCard(m){ return memoryItem(m); }
 function tripleCard(t){ return `<div class="item" data-json='${esc(JSON.stringify(t))}'><div class="meta"><span class="badge">fact</span><span>${esc(t.created_at || t.valid_from || '')}</span></div><div class="content"><strong>${esc(t.subject)}</strong> — ${esc(t.predicate)} → <strong>${esc(t.object)}</strong></div></div>`; }
 function consolidationCard(c){ return `<div class="item" data-json='${esc(JSON.stringify(c))}'><div class="meta"><span class="badge">consolidation</span><span class="badge">${esc(c.items_consolidated)} items</span><span>${esc(c.created_at)}</span></div><div class="content">${esc(c.session_id || '')}: ${esc(c.summary_preview || '')}</div></div>`; }
-function bindJsonCards(root, title){ root.querySelectorAll('[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), title)); }
+function bindJsonCards(root, title){ root.querySelectorAll('[data-json]').forEach(el => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), title))); }
 async function runSearchFromInput(inputId){
   const q = $(inputId)?.value.trim() || '';
   if(!q) return;
@@ -1127,8 +1156,8 @@ async function loadPatternInsights(){
 async function loadProfile(){
   const [data] = await Promise.all([api(endpoints.profile(10)), loadPatternInsights()]);
   $('#profileGrid').innerHTML = `${contextSummary(data)}${(data.sections || []).map(s => `<section class="profile-section glass"><div class="section-head mini"><h2>${esc(contextLabel(s.name))}</h2><span>${esc(s.count)} active item${Number(s.count) === 1 ? '' : 's'}</span></div>${(s.items || []).map(profileItem).join('')}</section>`).join('') || '<p class="muted">No inferred profile data found.</p>'}`;
-  $$('#profileGrid .profile-item[data-id]').forEach(el => el.onclick = () => openMemoryDetail(el.dataset.id));
-  $$('#profileGrid .profile-item[data-json]').forEach(el => el.onclick = () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail'));
+  $$('#profileGrid .profile-item[data-id]').forEach(el => bindActivatable(el, () => openMemoryDetail(el.dataset.id)));
+  $$('#profileGrid .profile-item[data-json]').forEach(el => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), 'Profile source detail')));
 }
 function applyReviewFilter(filter={}){
   $('#memoryKind').value = filter.kind || 'all';
@@ -1637,7 +1666,7 @@ function neuralColors(){
 }
 function updateVisualiserModeUI(){
   const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
-  $$('.visualiser-tabs button').forEach(b => b.classList.toggle('active', b.dataset.visualiser === mode));
+  $$('.visualiser-tabs button[data-visualiser]').forEach(b => { const active = b.dataset.visualiser === mode; b.classList.toggle('active', active); b.setAttribute('aria-selected', String(active)); });
   const wrap = $('#constellationCanvas')?.parentElement;
   if(wrap) wrap.dataset.visualiser = mode;
   const legend = $('.constellation-legend');
@@ -1996,7 +2025,7 @@ function inspectThreeNode(node){
   $('#threeSearch').onclick = () => { $('#memoryQuery').value = String(node.label || '').replace(/^memory:/,''); switchTab('memories'); };
 }
 function updateThreeUI(){
-  $$('.visualiser-tabs button[data-three-mode]').forEach(b => b.classList.toggle('active', b.dataset.threeMode === threeVis.mode));
+  $$('.visualiser-tabs button[data-three-mode]').forEach(b => { const active = b.dataset.threeMode === threeVis.mode; b.classList.toggle('active', active); b.setAttribute('aria-selected', String(active)); });
   const viewport = $('#threeViewport'); if(viewport) viewport.dataset.threeMode = threeVis.mode;
   const legend = $('#threeLegend');
   if(legend) legend.innerHTML = threeVis.mode === 'neural'
