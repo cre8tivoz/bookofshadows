@@ -492,13 +492,18 @@ Use a lightweight charting layer only after modularisation. Avoid dumping a heav
 
 **Outcome:** public repo feels saleable/shareable.
 
-- [ ] README polish.
-- [ ] Screenshots/gallery update.
-- [ ] Setup docs.
-- [ ] Architecture docs.
-- [ ] Accessibility notes.
-- [ ] Demo fixture DB or sanitized sample mode.
-- [ ] Release checklist.
+- [x] README polish.
+- [ ] Screenshots/gallery update. — to be completed by Codex
+- [ ] Setup docs. — to be completed by Codex
+- [ ] Architecture docs. — to be completed by Codex
+- [ ] Accessibility notes. — to be completed by Codex
+- [ ] Demo fixture DB or sanitized sample mode. — to be completed by Codex
+- [ ] Release checklist. — to be completed by Codex
+
+### Phase 10 status update - 2026-07-01
+
+- README polish landed: rewrote `README.md` in a warmer, more conversational voice pitched at enthusiasts/tinkerers rather than assumed-technical readers, with a new "Plays nicely with Hermes Agent" section explaining what Hermes Agent is and why the plugin integration matters (previously only a one-line Credits mention). Also caught the feature list up to Phase 9 (it hadn't listed the new Insights tab).
+- The remaining Phase 10 checklist items (screenshot/gallery refresh, setup docs, architecture docs, accessibility notes, demo fixture DB, release checklist) are intentionally left unchecked here for Codex to pick up next, per Billy's direction.
 
 ## 7. Proposed Sprint Breakdown
 
