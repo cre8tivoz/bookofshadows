@@ -505,7 +505,7 @@ Do not treat this backlog as one giant "finish everything" task. It is technical
 Recommended order:
 
 1. Release 11A - Insights Completion. Completed 2026-07-01.
-2. Release 11B - Scalability Polish.
+2. Release 11B - Scalability Polish. Completed 2026-07-01.
 3. Release 11C - Controller Extraction.
 4. Release 11D - Visualiser Accessibility.
 
@@ -578,6 +578,8 @@ Can be done in one session if the scope is limited to the charts and insight car
 
 **Outcome:** the remaining high-friction list-scaling issues are cleaned up without changing the product concept.
 
+**Status:** Completed 2026-07-01.
+
 **Scope:**
 
 - Improve Review queue pagination so "Load more" appends only new cards instead of re-rendering the accumulated queue.
@@ -612,6 +614,14 @@ Can be done in one session if the scope is limited to the charts and insight car
 **One-session guidance:**
 
 Good one-session candidate. It is narrow and mostly mechanical, but it should still ship with tests.
+
+**Release 11B status update - 2026-07-01**
+
+- Added `DashboardStore.count_memories(query)` and shared memory filter construction so list queries and count queries use the same normalised constraints.
+- Expanded `GET /api/memories` to return `items`, `total`, `listed`, `limit`, `offset`, `next_offset`, and `has_more` while preserving existing `items` callers.
+- Updated the memory browser to show loaded vs total counts when backend totals are available, and to drive pagination from `has_more`/`next_offset` instead of guessing from page size alone.
+- Refactored Review queue append mode so "Load more" preserves existing queue card DOM, appends only new cards, keeps selection state, and updates visible counts.
+- Added backend, server-route, and frontend helper tests for filtered totals and review append/dedup behavior.
 
 ### Release 11C - Controller Extraction
 

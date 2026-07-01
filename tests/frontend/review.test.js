@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import {
   lifecycleQueueHtml,
+  mergeReviewItems,
+  newReviewItems,
   reviewActionableIds,
   reviewFilterParams,
   reviewQueueHtml,
@@ -58,6 +60,24 @@ describe("review queue helpers", () => {
     );
 
     expect(ids).toEqual(["m-1"]);
+  });
+
+  test("merges review pages while exposing only newly appended items", () => {
+    const existing = [
+      { id: "m-1", content: "First copy", status: "active" },
+      { id: "m-2", content: "Second", status: "active" },
+    ];
+    const incoming = [
+      { id: "m-2", content: "Second updated", status: "active" },
+      { id: "m-3", content: "Third", status: "active" },
+    ];
+
+    expect(newReviewItems(existing, incoming).map((item) => item.id)).toEqual(["m-3"]);
+    expect(mergeReviewItems(existing, incoming)).toEqual([
+      { id: "m-1", content: "First copy", status: "active" },
+      { id: "m-2", content: "Second updated", status: "active" },
+      { id: "m-3", content: "Third", status: "active" },
+    ]);
   });
 
   test("builds review query parameters from pagination and filters", () => {

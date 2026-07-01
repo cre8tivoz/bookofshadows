@@ -24,7 +24,7 @@ from config import (
     save_config,
     verify_password,
 )
-from dashboard_core import DashboardStore, default_db_path
+from dashboard_core import DashboardStore, MemoryQuery, default_db_path
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
@@ -430,14 +430,27 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/timeline":
                 return self._send_json(self.store.timeline(q=q.get("q", ""), group=q.get("group", "day"), limit=_safe_int(q.get("limit"), 300, maximum=1000)))
             if path == "/api/memories":
-                return self._send_json({"items": self.store.list_memories(
+                query = MemoryQuery.from_raw(
                     kind=q.get("kind", "all"), q=q.get("q", ""), source=q.get("source", ""),
                     scope=q.get("scope", ""), session_id=q.get("session_id", ""), sort=q.get("sort", "recent"),
                     status=q.get("status", "active"), veracity=q.get("veracity", ""),
                     degradation_tier=q.get("degradation_tier", ""), contaminated_only=q.get("contaminated_only", ""),
                     degraded_only=q.get("degraded_only", ""), due_for_degradation=q.get("due_for_degradation", ""),
-                    limit=_safe_int(q.get("limit"), 100, maximum=500), offset=_safe_int(q.get("offset"), 0, minimum=0, maximum=100000),
-                )})
+                    limit=_safe_int(q.get("limit"), 100, maximum=500),
+                    offset=_safe_int(q.get("offset"), 0, minimum=0, maximum=100000),
+                )
+                items = self.store.query_memories(query)
+                total = self.store.count_memories(query)
+                next_offset = query.offset + len(items)
+                return self._send_json({
+                    "items": items,
+                    "total": total,
+                    "listed": len(items),
+                    "limit": query.limit,
+                    "offset": query.offset,
+                    "next_offset": next_offset,
+                    "has_more": next_offset < total,
+                })
             if path == "/api/memory":
                 mid = q.get("id", "")
                 item = self.store.get_memory(mid) if mid else None

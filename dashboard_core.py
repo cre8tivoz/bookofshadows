@@ -637,55 +637,7 @@ class DashboardStore:
                 if table not in tables:
                     continue
                 columns = self._columns(con, table)
-                where = []
-                params: list[Any] = []
-                if query.q:
-                    where.append("(content REGEXP ? OR id REGEXP ? OR session_id REGEXP ? OR source REGEXP ? OR scope REGEXP ?)")
-                    pattern = self._prefix_pattern(query.q)
-                    params += [pattern, pattern, pattern, pattern, pattern]
-                if query.source:
-                    where.append("source = ?")
-                    params.append(query.source)
-                if query.scope:
-                    where.append("scope = ?")
-                    params.append(query.scope)
-                if query.session_id:
-                    where.append("session_id = ?")
-                    params.append(query.session_id)
-                if query.min_importance is not None:
-                    where.append("COALESCE(importance, 0) >= ?")
-                    params.append(query.min_importance)
-                veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
-                if query.veracity:
-                    where.append(f"{veracity_expr} = ?")
-                    params.append(query.veracity)
-                if query.contaminated_only:
-                    where.append(f"{veracity_expr} IN ('inferred','tool','imported','unknown')")
-                if memory_kind == "episodic":
-                    tier_expr = "COALESCE(tier, 1)" if "tier" in columns else "1"
-                    if query.degradation_tier:
-                        where.append(f"{tier_expr} = ?")
-                        params.append(query.degradation_tier)
-                    if query.degraded_only:
-                        if "degraded_at" in columns:
-                            where.append("COALESCE(degraded_at, '') != ''")
-                        else:
-                            where.append("0 = 1")
-                    if query.due_for_degradation:
-                        where.append(f"(({tier_expr} = 1 AND COALESCE(created_at, timestamp, '') < ?) OR ({tier_expr} = 2 AND COALESCE(created_at, timestamp, '') < ?))")
-                        params.extend([tier2_ts, tier3_ts])
-                elif query.degradation_tier or query.degraded_only or query.due_for_degradation:
-                    where.append("0 = 1")
-                if query.status == "active":
-                    where.append("COALESCE(superseded_by, '') = ''")
-                    where.append("(valid_until IS NULL OR valid_until = '' OR valid_until > ?)")
-                    params.append(now)
-                elif query.status == "expired":
-                    where.append("COALESCE(superseded_by, '') = ''")
-                    where.append("valid_until IS NOT NULL AND valid_until != '' AND valid_until <= ?")
-                    params.append(now)
-                elif query.status == "superseded":
-                    where.append("COALESCE(superseded_by, '') != ''")
+                where, params = self._memory_where(query, memory_kind, columns, now, tier2_ts, tier3_ts)
                 clause = "WHERE " + " AND ".join(where) if where else ""
                 select_cols = self._memory_select_columns(columns, memory_kind)
                 sql = f"""
@@ -702,6 +654,86 @@ class DashboardStore:
             float(r.get("importance") or 0) if query.sort == "importance" else int(r.get("recall_count") or 0) if query.sort == "recall" else (r.get("timestamp") or r.get("created_at") or "")
         ), reverse=query.sort != "oldest")
         return rows[query.offset:query.offset + query.limit]
+
+    def _memory_where(self, query: MemoryQuery, memory_kind: str, columns: set[str], now: str, tier2_ts: str, tier3_ts: str) -> tuple[list[str], list[Any]]:
+        where: list[str] = []
+        params: list[Any] = []
+        if query.q:
+            where.append("(content REGEXP ? OR id REGEXP ? OR session_id REGEXP ? OR source REGEXP ? OR scope REGEXP ?)")
+            pattern = self._prefix_pattern(query.q)
+            params += [pattern, pattern, pattern, pattern, pattern]
+        if query.source:
+            where.append("source = ?")
+            params.append(query.source)
+        if query.scope:
+            where.append("scope = ?")
+            params.append(query.scope)
+        if query.session_id:
+            where.append("session_id = ?")
+            params.append(query.session_id)
+        if query.min_importance is not None:
+            where.append("COALESCE(importance, 0) >= ?")
+            params.append(query.min_importance)
+        veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
+        if query.veracity:
+            where.append(f"{veracity_expr} = ?")
+            params.append(query.veracity)
+        if query.contaminated_only:
+            where.append(f"{veracity_expr} IN ('inferred','tool','imported','unknown')")
+        if memory_kind == "episodic":
+            tier_expr = "COALESCE(tier, 1)" if "tier" in columns else "1"
+            if query.degradation_tier:
+                where.append(f"{tier_expr} = ?")
+                params.append(query.degradation_tier)
+            if query.degraded_only:
+                if "degraded_at" in columns:
+                    where.append("COALESCE(degraded_at, '') != ''")
+                else:
+                    where.append("0 = 1")
+            if query.due_for_degradation:
+                where.append(f"(({tier_expr} = 1 AND COALESCE(created_at, timestamp, '') < ?) OR ({tier_expr} = 2 AND COALESCE(created_at, timestamp, '') < ?))")
+                params.extend([tier2_ts, tier3_ts])
+        elif query.degradation_tier or query.degraded_only or query.due_for_degradation:
+            where.append("0 = 1")
+        if query.status == "active":
+            where.append("COALESCE(superseded_by, '') = ''")
+            where.append("(valid_until IS NULL OR valid_until = '' OR valid_until > ?)")
+            params.append(now)
+        elif query.status == "expired":
+            where.append("COALESCE(superseded_by, '') = ''")
+            where.append("valid_until IS NOT NULL AND valid_until != '' AND valid_until <= ?")
+            params.append(now)
+        elif query.status == "superseded":
+            where.append("COALESCE(superseded_by, '') != ''")
+        return where, params
+
+    def count_memories(self, query: MemoryQuery) -> int:
+        """Count memories using the same normalised filters as `query_memories()`."""
+        now = _utc_now()
+        now_dt = datetime.now(UTC).replace(tzinfo=None)
+        try:
+            tier2_days = int(os.environ.get("MNEMOSYNE_TIER2_DAYS", "30"))
+            tier3_days = int(os.environ.get("MNEMOSYNE_TIER3_DAYS", "180"))
+        except ValueError:
+            tier2_days, tier3_days = 30, 180
+        tier2_ts = (now_dt - timedelta(days=tier2_days)).isoformat(timespec="seconds")
+        tier3_ts = (now_dt - timedelta(days=tier3_days)).isoformat(timespec="seconds")
+        wanted = []
+        if query.kind in ("all", "working"):
+            wanted.append(("working_memory", "working"))
+        if query.kind in ("all", "episodic"):
+            wanted.append(("episodic_memory", "episodic"))
+        total = 0
+        with self.connect() as con:
+            tables = self._tables(con)
+            for table, memory_kind in wanted:
+                if table not in tables:
+                    continue
+                columns = self._columns(con, table)
+                where, params = self._memory_where(query, memory_kind, columns, now, tier2_ts, tier3_ts)
+                clause = "WHERE " + " AND ".join(where) if where else ""
+                total += int(con.execute(f"SELECT COUNT(*) FROM {table} {clause}", params).fetchone()[0] or 0)
+        return total
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         with self.connect() as con:

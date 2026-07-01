@@ -612,6 +612,13 @@
   function reviewActionableIds(items, selectedSet) {
     return [...new Set(selectedMutableIds(items, selectedSet))];
   }
+  function mergeReviewItems(existingItems = [], newItems = []) {
+    return [...new Map([...existingItems, ...newItems].map((item) => [item.id, item])).values()];
+  }
+  function newReviewItems(existingItems = [], newItems = []) {
+    const seen = new Set(existingItems.map((item) => item.id));
+    return newItems.filter((item) => !seen.has(item.id));
+  }
   function reviewFilterParams(filters = {}) {
     const params = new URLSearchParams(`queue=${encodeURIComponent(filters.queue || "")}&limit=${Number(filters.limit || 0)}&offset=${Number(filters.offset || 0)}`);
     const q = String(filters.q || "").trim();
@@ -1374,6 +1381,7 @@
   var latestMemoryItems = [];
   var memoryOffset = 0;
   var memoryHasMore = true;
+  var memoryTotal = null;
   var memoryListIsPreset = false;
   var latestReviewItems = [];
   var goChordUntil = 0;
@@ -2158,21 +2166,26 @@
   }
   function updateMemoryListMeta() {
     const countEl = $("#memoryListCount");
-    if (countEl) countEl.textContent = `${latestMemoryItems.length.toLocaleString()} loaded`;
+    if (countEl) {
+      const loaded = latestMemoryItems.length.toLocaleString();
+      countEl.textContent = Number.isFinite(memoryTotal) ? `${loaded} loaded · ${memoryTotal.toLocaleString()} total` : `${loaded} loaded`;
+    }
     const loadBar = $("#memoryLoadBar");
     if (loadBar) loadBar.classList.toggle("hidden", memoryListIsPreset || !memoryHasMore);
   }
   async function loadMemories() {
     memoryListIsPreset = false;
     memoryOffset = 0;
+    memoryTotal = null;
     $("#memoryList").innerHTML = skeletonHtml("Loading memories", 4);
     try {
       const params = memoryFilterParams(currentMemoryFilterValues(), MEMORY_PAGE_SIZE, memoryOffset);
       const data = await api(endpoints.memories(params), { requestKey: "memories" });
       const items = data.items || [];
       latestMemoryItems = mergeMemoryPage([], items);
-      memoryOffset = items.length;
-      memoryHasMore = items.length === MEMORY_PAGE_SIZE;
+      memoryTotal = Number.isFinite(Number(data.total)) ? Number(data.total) : null;
+      memoryOffset = Number.isFinite(Number(data.next_offset)) ? Number(data.next_offset) : items.length;
+      memoryHasMore = typeof data.has_more === "boolean" ? data.has_more : items.length === MEMORY_PAGE_SIZE;
       $("#memoryList").innerHTML = latestMemoryItems.map((item) => memoryItem(item, { selectable: true, selectedSet: bulkSelection })).join("") || stateHtml("empty", "No memories found.", "Try clearing filters or broadening the memory content search.");
       bindMemoryClicks($("#memoryList"));
       bindBulkMemoryControls();
@@ -2194,8 +2207,9 @@
       const seen = new Set(latestMemoryItems.map((item) => item.id));
       const newItems = items.filter((item) => !seen.has(item.id));
       latestMemoryItems = mergeMemoryPage(latestMemoryItems, items, { append: true });
-      memoryOffset += items.length;
-      memoryHasMore = items.length === MEMORY_PAGE_SIZE;
+      memoryTotal = Number.isFinite(Number(data.total)) ? Number(data.total) : memoryTotal;
+      memoryOffset = Number.isFinite(Number(data.next_offset)) ? Number(data.next_offset) : memoryOffset + items.length;
+      memoryHasMore = typeof data.has_more === "boolean" ? data.has_more : items.length === MEMORY_PAGE_SIZE;
       const newHtml = newItems.map((item) => memoryItem(item, { selectable: true, selectedSet: bulkSelection })).join("");
       if (newHtml) $("#memoryList").insertAdjacentHTML("beforeend", newHtml);
       bindMemoryClicks($("#memoryList"));
@@ -2206,11 +2220,13 @@
   }
   async function loadExpiringSoonPreset() {
     memoryListIsPreset = true;
+    memoryTotal = null;
     $("#memoryList").innerHTML = skeletonHtml("Loading memories", 4);
     try {
       const params = memoryFilterParams({ kind: "all", status: "active", sort: "recent" }, 500, 0);
       const data = await api(endpoints.memories(params), { requestKey: "memories" });
       latestMemoryItems = sortByExpiringSoon(data.items || []).slice(0, 100);
+      memoryTotal = latestMemoryItems.length;
       memoryHasMore = false;
       $("#memoryList").innerHTML = latestMemoryItems.map((item) => memoryItem(item, { selectable: true, selectedSet: bulkSelection })).join("") || stateHtml("empty", "No memories with a scheduled expiry found.", "Expiring soon only lists active memories with an explicit expiry date set.");
       bindMemoryClicks($("#memoryList"));
@@ -2798,10 +2814,20 @@
     $("#reviewCards").innerHTML = "";
     $("#reviewQueueSelect").innerHTML = cards.map((card) => `<option value="${esc(card.key)}" ${card.key === selectedReviewQueue ? "selected" : ""}>${esc(card.title)} (${Number(card.count || 0).toLocaleString()})</option>`).join("");
     const newItems = queues[selectedReviewQueue]?.items || [];
-    latestReviewItems = append ? [...new Map([...latestReviewItems, ...newItems].map((item) => [item.id, item])).values()] : [...new Map(newItems.map((item) => [item.id, item])).values()];
+    const appendedItems = append ? newReviewItems(latestReviewItems, newItems) : newItems;
+    latestReviewItems = append ? mergeReviewItems(latestReviewItems, newItems) : mergeReviewItems([], newItems);
     $("#reviewQueueCount").textContent = `${Number(data.total ?? selectedCard.count ?? 0).toLocaleString()} total · ${latestReviewItems.length.toLocaleString()} listed`;
     const renderedQueue = { ...queues[selectedReviewQueue], items: latestReviewItems };
-    $("#reviewQueues").innerHTML = reviewQueueHtml(selectedReviewQueue, renderedQueue, { triage: true, selectedSet: reviewSelection });
+    const existingQueue = $(`#reviewQueues .review-queue[data-review-key="${CSS.escape(selectedReviewQueue)}"]`);
+    const existingList = existingQueue?.querySelector(".list.memory-grid");
+    if (append && existingQueue && existingList) {
+      const count = existingQueue.querySelector(".section-head.mini span");
+      if (count) count.textContent = `${latestReviewItems.length.toLocaleString()} listed`;
+      const newHtml = appendedItems.map((item) => reviewMemoryItem(selectedReviewQueue, item, { selectable: true, selectedSet: reviewSelection, checkClass: "review-check" })).join("");
+      if (newHtml) existingList.insertAdjacentHTML("beforeend", newHtml);
+    } else {
+      $("#reviewQueues").innerHTML = reviewQueueHtml(selectedReviewQueue, renderedQueue, { triage: true, selectedSet: reviewSelection });
+    }
     bindMemoryClicks($("#review"));
     bindReviewControls(queues);
     updateReviewBulkBar();

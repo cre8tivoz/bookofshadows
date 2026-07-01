@@ -28,6 +28,8 @@ That gives the Insights tab meaningful admin activity without touching real plug
 /Users/habibi/.local/bin/uv run --with websocket-client --python /Users/habibi/.local/bin/python3.11 python scripts/generate_mock_screenshots.py
 ```
 
+The generator removes obsolete PNGs from `docs/screenshots/` before writing the current gallery, so stale captures do not silently survive a refresh.
+
 Generated files are written to:
 
 ```text
@@ -39,6 +41,8 @@ The gallery manifest is:
 ```text
 docs/screenshots/manifest.json
 ```
+
+The manifest records the generation timestamp, source script, fictional-data guarantee, and every screenshot's file, theme, tab, and viewport.
 
 ## Safety Rules
 
