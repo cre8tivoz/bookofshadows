@@ -455,30 +455,38 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 **Goal:** add the charts and analysis layer Billy wants, but only after the architecture can support it.
 
-### High-value chart ideas
+- [x] Memory growth over time (working vs episodic split).
+- [x] Recall frequency distribution.
+- [x] Admin mutation/audit activity.
+- [ ] Trust/veracity mix over time.
+- [ ] Source breakdown over time.
+- [ ] Review backlog burn-down.
+- [ ] Lifecycle tier transitions: hot → warm → cold.
+- [ ] Entity/domain clusters.
+- [ ] Session activity heatmap.
 
-- Memory growth over time.
-- Working vs episodic memory split.
-- Trust/veracity mix over time.
-- Source breakdown over time.
-- Review backlog burn-down.
-- Recall frequency distribution.
-- Lifecycle tier transitions: hot → warm → cold.
-- Entity/domain clusters.
-- Session activity heatmap.
-- Admin mutation/audit activity.
+### Product-grade insight cards (not started)
 
-### Product-grade insight cards
-
-- “Needs review now” with reason.
-- “High-value memories at risk of degradation.”
-- “Most recalled entities this week.”
-- “Sessions generating the most durable memory.”
-- “Potential stale or contradicted memories.”
+- "Needs review now" with reason.
+- "High-value memories at risk of degradation."
+- "Most recalled entities this week."
+- "Sessions generating the most durable memory."
+- "Potential stale or contradicted memories."
 
 ### Implementation notes
 
 Use a lightweight charting layer only after modularisation. Avoid dumping a heavy chart library into the current raw frontend.
+
+### Phase 9 status update - 2026-07-01
+
+- Evaluated chart library options against the "usable, not decorative" requirement and shadcn's weight concerns (raised by Billy): shadcn charts pull in React + Tailwind + Radix, none of which this vanilla-JS/esbuild project has, so adopting it would mean a parallel framework just for charts. Chose **uPlot v1.6.32** instead — vendored as `static/vendor/uplot.esm.min.js` (~52KB min, ~22KB gzip), zero runtime dependencies, canvas-based, lazy-loaded via `import()` exactly like Three.js from Phase 8, and `--external` in both `package.json`'s `build:frontend` script and `scripts/check_frontend_bundle.mjs` so it never gets inlined into `static/app.js`.
+- Added three read-only backend aggregations in `dashboard_core.py` (`memory_growth_series`, `audit_activity_series`, `recall_distribution`) plus matching `/api/insights/*` routes in `server.py` and pytest coverage in `tests/test_dashboard_core.py`/`tests/test_server.py`.
+- Added a new **Insights** nav tab (`static/index.html`) with a day-window selector (7/30/90 days), two uPlot line/area charts (memory growth by kind, audit activity by action type), and a recall-frequency distribution reusing the existing `.pattern-bar` CSS pattern (no uPlot needed for that one). All three are genuinely interactive, not decorative: hovering either chart shows a themed tooltip with exact per-day values, and clicking a recall-frequency bucket jumps to Memories pre-filtered and sorted by recall count.
+- New `static/src/features/charts.js` feature module (mirrors the `features/graph.js` pattern from Phase 1) owns chart lifecycle: lazy-loads uPlot, builds/destroys chart instances, themes them from the app's existing `--chart-1`..`--chart-6`/`--chart-grid`/`--chart-axis` CSS variables (so charts follow the active theme without any chart-specific dark/light logic), and resizes on window resize. `switchTab()` disposes both chart instances when navigating away from Insights, matching the existing Three.js/Memory Palace disposal pattern.
+- Found and fixed a real uPlot integration bug during manual browser verification: the vendored `uplot.esm.min.js` ships with **no CSS of its own** (unlike the npm package, which bundles `uPlot.min.css`), and the JS only sets *some* of the DOM sizing it needs (exact pixel dimensions on `.u-wrap`, devicePixelRatio-scaled `width`/`height` attributes on the `<canvas>`) while relying entirely on companion CSS for the rest (`.u-wrap{position:relative}`, `canvas{width:100%;height:100%}`, legend layout via `.u-inline`). Without that CSS, charts rendered at their raw devicePixelRatio-scaled pixel size (e.g. 612×520 instead of 306×260) and overflowed their cards by several hundred pixels. Fixed by porting the relevant subset of upstream `uPlot.min.css` into `static/style.css`, scoped under `.chart-viewport`, with the app's own colors layered on top. Verified in both light and dark theme, at desktop and mobile widths, with a mock DB seeded with 60 days of recent-relative timestamps and 80 audit-log entries (fixed-date mock fixtures don't produce visible data against the sandbox's real clock).
+- Added a proportional background-fill bar to the existing Overview breakdown rows (Trust mix, Lifecycle, Sources, Scopes, Top sessions) — each `.break-row`'s fill width is the row's share of that panel's total (not share-of-max), with a 2% floor so small non-zero entries stay visible. Pure CSS/markup change to `ui/render.js`'s `breakdown()` helper; no backend change.
+- New/updated frontend tests: `tests/frontend/charts.test.js` (7 tests, pure data-transform helpers in `utils/charts.js`) and two new `render.test.js` cases for the breakdown fill-percentage math. Full frontend suite: 89 passed (was 82); backend suite: 58 passed; ruff clean; `check:frontend` bundle-sync clean.
+- Not attempted this phase (left for a future pass, tracked above as unchecked): trust/veracity-over-time, source-breakdown-over-time, review burn-down, lifecycle-tier-transition, entity/domain-cluster, and session-activity-heatmap charts, plus the "product-grade insight cards" list. These are additive on top of the same `features/charts.js` + `/api/insights/*` pattern established here.
 
 ## Phase 10 - Product Polish and Release Package
 

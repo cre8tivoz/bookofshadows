@@ -414,6 +414,7 @@ main{padding:20px clamp(20px,4vw,48px) 48px}
   padding:8px 12px;
 }
 .break-row{
+  position:relative;overflow:hidden;
   display:flex;align-items:center;justify-content:space-between;
   gap:8px;
   padding:5px 0;
@@ -421,7 +422,13 @@ main{padding:20px clamp(20px,4vw,48px) 48px}
   font-size:var(--fs-sm);
 }
 .break-row:last-child{border-bottom:none}
-.break-row span{color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.break-row-fill{
+  position:absolute;inset:0 auto 0 0;
+  background:linear-gradient(90deg,var(--accent-m),rgba(20,184,166,.03));
+  z-index:0;
+}
+.break-row-label,.break-row strong{position:relative;z-index:1}
+.break-row-label{color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .break-row strong{color:var(--text);font-weight:600;font-family:var(--font-mono);font-size:var(--fs-sm)}
 .break-row[role="button"]{cursor:pointer;border-radius:var(--r-sm);padding:5px 6px;margin:0 -6px;transition:background .12s}
 .break-row[role="button"]:hover{background:var(--card-bg-hov)}
@@ -741,7 +748,7 @@ tr:hover td{background:var(--card-bg-hov)}
   text-shadow:0 1px 3px rgba(0,0,0,.65),0 0 8px rgba(0,0,0,.35);
 }
 .three-label.memory{color:var(--chart-4)}
-.three-loading-card,.three-fallback-card{
+.three-loading-card,.three-fallback-card,.async-loading-card,.async-fallback-card{
   position:absolute;top:50%;left:50%;
   transform:translate(-50%,-50%);
   max-width:280px;text-align:center;
@@ -751,8 +758,58 @@ tr:hover td{background:var(--card-bg-hov)}
   background:var(--card-bg);
   box-shadow:var(--shadow-pop);
 }
-.three-loading-card h3,.three-fallback-card h3{margin:0 0 6px;font-size:15px}
-.three-loading-card p,.three-fallback-card p{margin:0;color:var(--text-muted);font-size:var(--fs-sm)}
+.three-loading-card h3,.three-fallback-card h3,.async-loading-card h3,.async-fallback-card h3{margin:0 0 6px;font-size:15px}
+.three-loading-card p,.three-fallback-card p,.async-loading-card p,.async-fallback-card p{margin:0;color:var(--text-muted);font-size:var(--fs-sm)}
+
+/* === INSIGHTS / CHARTS ======================================= */
+.insights-card{padding:14px}
+.insights-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.chart-viewport{
+  position:relative;
+  height:260px;min-height:260px;
+  margin-top:10px;
+  overflow:hidden;
+}
+/* uPlot structural defaults (upstream uPlot.min.css), scoped to .chart-viewport
+   since the vendored ESM build ships no CSS of its own. */
+.chart-viewport .uplot,.chart-viewport .uplot *,.chart-viewport .uplot *::before,.chart-viewport .uplot *::after{box-sizing:border-box}
+.chart-viewport .uplot{width:100%}
+.chart-viewport .u-wrap{position:relative}
+.chart-viewport .u-over,.chart-viewport .u-under{position:absolute}
+.chart-viewport .u-under{overflow:hidden}
+.chart-viewport .uplot canvas{display:block;position:relative;width:100%;height:100%;cursor:crosshair}
+.chart-viewport .u-axis{position:absolute}
+.chart-viewport .u-legend{font-size:var(--fs-xs);margin:auto;text-align:center;color:var(--text-sec)}
+.chart-viewport .u-inline{display:block}
+.chart-viewport .u-inline *{display:inline-block}
+.chart-viewport .u-inline tr{margin-right:16px}
+.chart-viewport .u-legend th{font-weight:600}
+.chart-viewport .u-legend th>*{vertical-align:middle;display:inline-block}
+.chart-viewport .u-legend .u-marker{width:1em;height:1em;margin-right:4px;background-clip:padding-box!important}
+.chart-viewport .u-inline.u-live th::after{content:":";vertical-align:middle}
+.chart-viewport .u-inline:not(.u-live) .u-value{display:none}
+.chart-viewport .u-series>*{padding:4px}
+.chart-viewport .u-series th{cursor:pointer}
+.chart-viewport .u-legend .u-off>*{opacity:.3}
+.chart-viewport .u-select{background:var(--accent-m);border:1px solid var(--accent);position:absolute;pointer-events:none}
+.chart-viewport .u-cursor-x,.chart-viewport .u-cursor-y{position:absolute;left:0;top:0;pointer-events:none;will-change:transform}
+.chart-viewport .u-hz .u-cursor-x,.chart-viewport .u-vt .u-cursor-y{height:100%;border-right:1px dashed var(--stroke-str)}
+.chart-viewport .u-hz .u-cursor-y,.chart-viewport .u-vt .u-cursor-x{width:100%;border-bottom:1px dashed var(--stroke-str)}
+.chart-viewport .u-cursor-pt{position:absolute;top:0;left:0;border-radius:50%;border:0 solid;pointer-events:none;will-change:transform;background-clip:padding-box!important}
+.chart-viewport .u-axis.u-off,.chart-viewport .u-select.u-off,.chart-viewport .u-cursor-x.u-off,.chart-viewport .u-cursor-y.u-off,.chart-viewport .u-cursor-pt.u-off{display:none}
+.chart-viewport .u-axis{color:var(--text-muted);font-size:10px}
+.chart-viewport .u-tooltip{
+  border:1px solid var(--stroke);
+  border-radius:var(--r-sm);
+  background:var(--card-bg);
+  color:var(--text);
+  box-shadow:var(--shadow-pop);
+  font-size:var(--fs-xs);
+  padding:6px 8px;
+}
+@media(max-width:980px){
+  .insights-grid{grid-template-columns:1fr}
+}
 
 /* === DRAWER ================================================== */
 .drawer{

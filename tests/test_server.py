@@ -126,6 +126,32 @@ def test_memory_intelligence_endpoints_are_read_only(tmp_path, monkeypatch):
         server.close()
 
 
+def test_insights_endpoints_return_series_and_distribution(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        status, _headers, body = _request(f"{server.base}/api/insights/memory-growth?days=14")
+        payload = json.loads(body)
+        assert status == 200
+        assert payload["read_only"] is True
+        assert len(payload["days"]) == 14
+        assert len(payload["working"]) == 14
+        assert len(payload["episodic"]) == 14
+
+        status, _headers, body = _request(f"{server.base}/api/insights/audit-activity?days=14")
+        payload = json.loads(body)
+        assert status == 200
+        assert len(payload["days"]) == 14
+        assert len(payload["total"]) == 14
+        assert set(payload["by_action"]) == {"invalidate", "importance", "veracity", "expiry", "supersede"}
+
+        status, _headers, body = _request(f"{server.base}/api/insights/recall-distribution")
+        payload = json.loads(body)
+        assert status == 200
+        assert {row["bucket"] for row in payload["items"]} == {"0", "1-2", "3-5", "6-10", "10+"}
+    finally:
+        server.close()
+
+
 def test_config_post_updates_server_and_database_settings(tmp_path, monkeypatch):
     server = ServerHarness(tmp_path, monkeypatch)
     try:

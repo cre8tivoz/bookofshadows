@@ -11,6 +11,7 @@ static/src/
   api/
     client.js
   features/
+    charts.js
     graph.js
     memories.js
     review.js
@@ -20,6 +21,7 @@ static/src/
     dom.js
     render.js
   utils/
+    charts.js
     escape.js
     format.js
     a11y.js
@@ -45,10 +47,12 @@ npm run build:frontend
 - `utils/format.js`: time and byte formatting.
 - `utils/a11y.js`: focus-trap utility (`trapFocus()`/`focusableElements()`) used by the drawer, action modal, and login overlay.
 - `utils/motion.js`: `prefersReducedMotion()`, shared by the canvas constellation, 3D visualiser, and Memory Palace render loops.
+- `utils/charts.js`: `loadUplotModule()` (memoized lazy `import()` of the vendored uPlot ESM build) and pure data-shaping helpers (`buildGrowthChartData`, `buildAuditActivityChartData`, `recallDistributionBars`) that convert `/api/insights/*` JSON into uPlot's `[x, ...series]` array format.
 - `state/routing.js`: pure route parse/serialize helpers and legacy tab aliases.
 - `features/memories.js`: pure memory card/meta rendering, mutability helper, paginated query params (`memoryFilterParams` with limit/offset), page merge/dedup (`mergeMemoryPage`), and saved filter presets (`MEMORY_FILTER_PRESETS`, `memoryPresetByKey`, `sortByExpiringSoon`).
 - `features/review.js`: review queue rendering, lifecycle queue wrapper, review query params, and selected-action helpers.
 - `features/graph.js`: graph layout, graph inspector HTML, SVG graph controller state, pan/zoom binding, and graph API query path.
+- `features/charts.js`: Insights tab controller (`createChartsFeature()`). Lazy-loads uPlot, builds/tears down the memory-growth and audit-activity chart instances, themes them from the app's `--chart-*`/`--text-muted` CSS variables, renders the recall-frequency `.pattern-bar` list, and wires click-to-filter (recall bucket → Memories, sorted by recall count) and window-resize handling.
 
 Large controller functions such as `switchTab()`, `applyRoute()`, feature loaders, drawer actions, and visualiser lifecycle remain in `static/src/app-main.js` for now. They should move only after dependencies are explicit and covered by tests. The visualiser code is the main remaining extraction target because it combines canvas, Three.js, and memory-palace state.
 
@@ -136,3 +140,13 @@ Phase 8 rounds out the visualiser lifecycle (lazy-load/WebGL-fallback/tab-switch
 - A `visibilitychange` listener stops the canvas/Three.js/Memory Palace render loops from rescheduling `requestAnimationFrame` while the browser tab is hidden, and resumes them (without disposing the scene) when it becomes visible again — separate from `switchTab()`'s existing full-disposal behaviour when navigating between dashboard tabs.
 - `.three-label`/`.three-labels` had no CSS at all before this phase (`position: static`), so the floating node-name overlays on both the 3D Visualiser and Memory Palace rendered as plain stacked text instead of floating over their nodes; fixed with the missing overlay positioning.
 - Removed ~368 lines of dead code: `renderMemoryPalaceDungeon`/`animateMemoryPalaceDungeon` and `renderMemoryPalaceIso`/`animateMemoryPalaceIso` (plus helpers used only by them) were earlier Memory Palace prototypes never reachable from the live `loadMemoryPalace()` entry point. esbuild's bundler was already tree-shaking them out of `static/app.js`, so this was a source-readability fix, not a shipped-bundle-size fix.
+
+## Charts and Insights Layer
+
+Phase 9 adds a real Insights tab, backed by three new read-only aggregation endpoints, using [uPlot](https://github.com/leeoniya/uPlot) rather than a React/Tailwind-based library like shadcn charts (this project has neither dependency, and pulling them in just for charts would mean a second framework alongside the vanilla-JS/esbuild frontend):
+
+- `DashboardStore.memory_growth_series(days)`, `.audit_activity_series(days)`, and `.recall_distribution()` in `dashboard_core.py` follow the existing raw-SQL/`_tables()`/`_columns()` aggregation style. `audit_activity_series` parses `plugin-data/mnemosyne-dashboard/audit.jsonl` (the same file `_audit()` writes to) rather than querying SQLite, since mutation history isn't stored in the DB. Exposed as `GET /api/insights/memory-growth`, `/api/insights/audit-activity` (both take `?days=` up to 180), and `/api/insights/recall-distribution`.
+- `static/vendor/uplot.esm.min.js` is a vendored, minified copy of uPlot v1.6.32's ESM build (~52KB min, ~22KB gzip, zero runtime deps), `--external`'d in both `package.json`'s `build:frontend` and `scripts/check_frontend_bundle.mjs`, and lazy-loaded via `utils/charts.js`'s memoized `loadUplotModule()` — the same lazy-vendor pattern Phase 8 established for Three.js.
+- **The vendored file ships no CSS.** The npm package bundles a companion `uPlot.min.css` that the JS assumes is present (e.g. it sets exact pixel dimensions on `.u-wrap` and devicePixelRatio-scaled `width`/`height` attributes on the `<canvas>`, but relies entirely on external CSS for `.u-wrap{position:relative}`, `canvas{width:100%;height:100%}`, and legend/cursor/axis layout). Without that CSS, a chart renders at its raw devicePixelRatio-scaled pixel size instead of its intended CSS size — e.g. 612×520 instead of 306×260 on a 2x display — and overflows its container. `static/style.css`'s `/* INSIGHTS / CHARTS */` section ports the relevant subset of upstream `uPlot.min.css`, scoped under `.chart-viewport`, with the app's own `--chart-1`..`--chart-6`/`--chart-grid`/`--chart-axis`/`--text-muted` variables layered on top so charts follow the active theme.
+- `features/charts.js`'s `createChartsFeature({ $, api, switchTab, loadMemories })` owns the Insights tab: lazy-loads uPlot, builds the two line/area chart instances (memory growth, audit activity) with a custom tooltip plugin (`hooks.init`/`hooks.setCursor`) that shows exact per-day values on hover, renders the recall-frequency distribution via the existing `.pattern-bar` CSS pattern (no uPlot needed there), and wires click-to-filter (a recall bucket click jumps to Memories filtered by `sort=recall`). `switchTab()` calls `disposeInsightsCharts()` when leaving the Insights section, mirroring the existing Three.js/Memory Palace disposal pattern.
+- Reused the Phase 9 work to make the existing Overview breakdown rows (`ui/render.js`'s `breakdown()`) show a proportional background-fill bar — each row's width is its share of that panel's total, with a small minimum so non-zero small entries stay visible. Pure frontend change; no new endpoint.

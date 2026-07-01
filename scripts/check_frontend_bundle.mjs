@@ -9,7 +9,7 @@ const buildOptions = {
   charset: "utf8",
   target: "es2020",
   legalComments: "none",
-  external: ["/static/vendor/three.module.min.js"],
+  external: ["/static/vendor/three.module.min.js", "/static/vendor/uplot.esm.min.js"],
   write: false,
 };
 

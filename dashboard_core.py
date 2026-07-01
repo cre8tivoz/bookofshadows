@@ -1405,6 +1405,100 @@ class DashboardStore:
         }
 
     @staticmethod
+    def _day_keys(days: int) -> list[str]:
+        start = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days - 1)).date()
+        return [(start + timedelta(days=i)).isoformat() for i in range(days)]
+
+    def memory_growth_series(self, days: int = 30) -> dict[str, Any]:
+        """Daily working/episodic memory creation counts for the last `days` days."""
+        days = max(1, min(int(days or 30), 180))
+        day_keys = self._day_keys(days)
+        counts = {"working": dict.fromkeys(day_keys, 0), "episodic": dict.fromkeys(day_keys, 0)}
+        with self.connect() as con:
+            tables = self._tables(con)
+            for table, kind in (("working_memory", "working"), ("episodic_memory", "episodic")):
+                if table not in tables:
+                    continue
+                rows = con.execute(
+                    f"""
+                    SELECT substr(COALESCE(timestamp, created_at, ''), 1, 10) AS day, COUNT(*) AS count
+                    FROM {table}
+                    WHERE substr(COALESCE(timestamp, created_at, ''), 1, 10) >= ?
+                    GROUP BY day
+                    """,
+                    (day_keys[0],),
+                )
+                for row in rows:
+                    day = row["day"]
+                    if day in counts[kind]:
+                        counts[kind][day] = int(row["count"] or 0)
+        return {
+            "read_only": True,
+            "days": day_keys,
+            "working": [counts["working"][d] for d in day_keys],
+            "episodic": [counts["episodic"][d] for d in day_keys],
+        }
+
+    def audit_activity_series(self, days: int = 30) -> dict[str, Any]:
+        """Daily admin mutation counts by action, parsed from the JSONL audit log."""
+        days = max(1, min(int(days or 30), 180))
+        day_keys = self._day_keys(days)
+        actions = ["invalidate", "importance", "veracity", "expiry", "supersede"]
+        by_action = {action: dict.fromkeys(day_keys, 0) for action in actions}
+        path = plugin_data_dir() / "audit.jsonl"
+        if path.exists():
+            first_day = day_keys[0]
+            for line in path.read_text().splitlines()[-20000:]:
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                day = str(entry.get("timestamp") or "")[:10]
+                if day < first_day:
+                    continue
+                action = entry.get("action")
+                counts = by_action.get(action)
+                if counts is not None and day in counts:
+                    counts[day] += 1
+        return {
+            "read_only": True,
+            "days": day_keys,
+            "by_action": {action: [counts[d] for d in day_keys] for action, counts in by_action.items()},
+            "total": [sum(by_action[action][d] for action in actions) for d in day_keys],
+        }
+
+    def recall_distribution(self) -> list[dict[str, Any]]:
+        """Bucketed recall_count histogram across active memories."""
+        bucket_order = ["0", "1-2", "3-5", "6-10", "10+"]
+        totals: Counter[str] = Counter()
+        now = _utc_now()
+        with self.connect() as con:
+            tables = self._tables(con)
+            for table in ("working_memory", "episodic_memory"):
+                if table not in tables:
+                    continue
+                columns = self._columns(con, table)
+                expr = "COALESCE(recall_count, 0)" if "recall_count" in columns else "0"
+                rows = con.execute(f"""
+                    SELECT
+                        CASE
+                            WHEN {expr} = 0 THEN '0'
+                            WHEN {expr} <= 2 THEN '1-2'
+                            WHEN {expr} <= 5 THEN '3-5'
+                            WHEN {expr} <= 10 THEN '6-10'
+                            ELSE '10+'
+                        END AS bucket,
+                        COUNT(*) AS count
+                    FROM {table}
+                    WHERE COALESCE(superseded_by, '') = ''
+                      AND (valid_until IS NULL OR valid_until = '' OR valid_until > ?)
+                    GROUP BY bucket
+                """, (now,))
+                for row in rows:
+                    totals[row["bucket"]] += int(row["count"] or 0)
+        return [{"bucket": b, "count": totals.get(b, 0)} for b in bucket_order]
+
+    @staticmethod
     def _split_context_metadata(text: str) -> tuple[str, list[dict[str, str]]]:
         parts = [p.strip() for p in str(text or "").split("|") if p.strip()]
         if not parts:

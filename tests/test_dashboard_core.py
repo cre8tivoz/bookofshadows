@@ -2,6 +2,7 @@ import importlib.metadata as md
 import sqlite3
 import sys
 import tomllib
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -621,6 +622,73 @@ def test_pattern_insights_surface_recurring_topics_entities_and_sources(tmp_path
     assert any(item['label'] == 'Relationship' for item in insights['memory_types'])
     assert any(item['label'] == 'Direct memory' for item in insights['origins'])
     assert insights['signals'] == []
+
+
+def test_memory_growth_series_counts_creations_by_day(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    con = sqlite3.connect(db)
+    today = datetime.now(UTC).replace(tzinfo=None)
+    yesterday = (today - timedelta(days=1)).date().isoformat()
+    two_days_ago = (today - timedelta(days=2)).date().isoformat()
+    con.execute("INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope) VALUES (?,?,?,?,?,?,?)",
+                ('w-recent-1', 'recent memory 1', 'test', f'{yesterday}T10:00:00', 's1', 0.5, 'global'))
+    con.execute("INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope) VALUES (?,?,?,?,?,?,?)",
+                ('w-recent-2', 'recent memory 2', 'test', f'{yesterday}T11:00:00', 's1', 0.5, 'global'))
+    con.execute("INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,summary_of) VALUES (?,?,?,?,?,?,?,?)",
+                ('e-recent-1', 'recent episodic 1', 'test', f'{two_days_ago}T09:00:00', 's1', 0.5, 'session', ''))
+    con.commit()
+    con.close()
+
+    store = DashboardStore(db)
+    series = store.memory_growth_series(days=7)
+
+    assert len(series['days']) == 7
+    assert series['days'][-1] == today.date().isoformat()
+    idx_yesterday = series['days'].index(yesterday)
+    idx_two_days_ago = series['days'].index(two_days_ago)
+    assert series['working'][idx_yesterday] == 2
+    assert series['episodic'][idx_two_days_ago] == 1
+    assert series['working'][idx_two_days_ago] == 0
+
+
+def test_audit_activity_series_counts_actions_by_day(tmp_path, monkeypatch):
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    store.set_memory_importance('w1', 0.42, backup=False)
+    store.set_memory_veracity('w2', 'stated', backup=False)
+    store.invalidate_memory('w3', backup=False)
+
+    series = store.audit_activity_series(days=7)
+    today = datetime.now(UTC).date().isoformat()
+    idx_today = series['days'].index(today)
+
+    assert series['by_action']['importance'][idx_today] == 1
+    assert series['by_action']['veracity'][idx_today] == 1
+    assert series['by_action']['invalidate'][idx_today] == 1
+    assert series['total'][idx_today] == 3
+
+
+def test_recall_distribution_buckets_by_recall_count(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    con = sqlite3.connect(db)
+    con.execute("UPDATE working_memory SET recall_count = 1 WHERE id = 'w1'")
+    con.execute("UPDATE working_memory SET recall_count = 4 WHERE id = 'w2'")
+    con.execute("UPDATE working_memory SET recall_count = 8 WHERE id = 'w3'")
+    con.execute("UPDATE working_memory SET recall_count = 15 WHERE id = 'w4'")
+    con.execute("UPDATE episodic_memory SET recall_count = 2 WHERE id = 'e1'")
+    con.commit()
+    con.close()
+
+    store = DashboardStore(db)
+    dist = {row['bucket']: row['count'] for row in store.recall_distribution()}
+
+    assert dist == {'0': 1, '1-2': 2, '3-5': 1, '6-10': 1, '10+': 1}
+
 
 def test_realtime_event_snapshot_orders_newest_first(tmp_path):
     db = tmp_path / 'mnemosyne.db'

@@ -41,6 +41,33 @@ describe("render helpers", () => {
     expect(breakdown([], "source")).toBe('<p class="muted">No data</p>');
   });
 
+  test("sizes each row's fill bar to its share of the total, not the max row", () => {
+    const html = breakdown(
+      [
+        { source: "chat", count: 6 },
+        { source: "tool", count: 2 },
+        { source: "api", count: 2 },
+      ],
+      "source",
+    );
+
+    expect(html).toContain('<span class="break-row-fill" style="width:60%"></span><span class="break-row-label">chat</span>');
+    expect(html).toContain('<span class="break-row-fill" style="width:20%"></span><span class="break-row-label">tool</span>');
+    expect(html).toContain('<span class="break-row-fill" style="width:20%"></span><span class="break-row-label">api</span>');
+  });
+
+  test("gives a small visible minimum fill to non-zero counts that would otherwise round to 0%", () => {
+    const html = breakdown(
+      [
+        { source: "big", count: 500 },
+        { source: "tiny", count: 1 },
+      ],
+      "source",
+    );
+
+    expect(html).toContain('<span class="break-row-fill" style="width:2%"></span><span class="break-row-label">tiny</span>');
+  });
+
   test("formats singular and plural count labels", () => {
     expect(countLabel(1, "memory")).toBe("1 memory");
     expect(countLabel(1200, "memory")).toBe("1,200 memories");

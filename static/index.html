@@ -51,6 +51,7 @@
         <button role="tab" aria-selected="false" data-tab="profile"><span>CB</span>Context Bank</button>
         <button role="tab" aria-selected="false" data-tab="lifecycle"><span>LC</span>Lifecycle</button>
         <button role="tab" aria-selected="false" data-tab="graph"><span>KG</span>Knowledge Graph</button>
+        <button role="tab" aria-selected="false" data-tab="insights"><span>IN</span>Insights</button>
         <button role="tab" aria-selected="false" data-tab="memoria"><span>MR</span>MEMORIA</button>
         <button role="tab" aria-selected="false" data-tab="activity"><span>HS</span>History</button>
         <button role="tab" aria-selected="false" data-tab="settings"><span>ST</span>Settings</button>
@@ -416,6 +417,33 @@
             <div class="section-head mini"><h2>Triples</h2><span>knowledge graph facts</span></div>
             <div class="toolbar glass"><input id="tripleQuery" placeholder="Search subject / predicate / object…" /><button id="tripleSearch" class="primary">Search</button></div>
             <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th></tr></thead><tbody id="tripleRows"></tbody></table></div>
+          </div>
+        </section>
+
+        <section id="insights" class="tab">
+          <div class="section-head"><h2>Insights</h2><span>trends across memory growth, admin activity, and recall</span></div>
+          <div class="toolbar glass">
+            <label for="insightsDays" class="muted">Window</label>
+            <select id="insightsDays">
+              <option value="7">7 days</option>
+              <option value="30" selected>30 days</option>
+              <option value="90">90 days</option>
+            </select>
+            <button id="insightsRefresh" class="primary">Refresh insights</button>
+          </div>
+          <div class="insights-grid">
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Memory growth</h2><span>working vs episodic, created per day</span></div>
+              <div id="growthChartViewport" class="chart-viewport"></div>
+            </div>
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Admin activity</h2><span>audit-logged mutations per day</span></div>
+              <div id="auditChartViewport" class="chart-viewport"></div>
+            </div>
+          </div>
+          <div class="insights-card glass">
+            <div class="section-head mini"><h2>Recall frequency</h2><span>how often active memories have been recalled — click a bucket to browse it</span></div>
+            <div id="recallDistribution"></div>
           </div>
         </section>
 

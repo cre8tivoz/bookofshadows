@@ -9,6 +9,7 @@ import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/rou
 import { bulkSelectionState, isMutableMemory, liveEventMeta, MEMORY_FILTER_PRESETS, MEMORY_PAGE_SIZE, memoryFilterParams, memoryItem, memoryPresetByKey, mergeMemoryPage, meta, selectedMutableIds, sortByExpiringSoon } from './features/memories.js';
 import { lifecycleQueueHtml, reviewActionableIds, reviewFilterParams, reviewQueueHtml } from './features/review.js';
 import { createGraphFeature } from './features/graph.js';
+import { createChartsFeature } from './features/charts.js';
 import { trapFocus } from './utils/a11y.js';
 import { prefersReducedMotion } from './utils/motion.js';
 
@@ -80,6 +81,7 @@ const { api, postJson, setCsrfToken } = createApiClient({
   onTiming: info => console.debug('[api]', info),
 });
 const { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
+const { loadInsights, disposeInsightsCharts } = createChartsFeature({ $, api, switchTab, loadMemories });
 function isCancelledRequest(error){ return error?.name === 'ApiError' && error.status === 0 && !error.retryable; }
 function bootErrorPayload(){
   return lastBootError ? JSON.stringify(lastBootError, null, 2) : '';
@@ -507,6 +509,7 @@ function switchTab(name, opts={}){
   if(section !== 'constellation') stopCanvasVisualiserLoop();
   if(section !== 'visualiser3d' && threeVis?.renderer) clearThreeScene();
   if(section !== 'memoryPalace' && memoryPalace?.renderer) clearPalaceScene();
+  if(section !== 'insights') disposeInsightsCharts();
   document.body.classList.toggle('compact-page', section !== 'overview');
   $$('.tab').forEach(x=>x.classList.remove('active'));
   $$('nav button').forEach(x=>{ x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
@@ -534,6 +537,7 @@ function switchTab(name, opts={}){
   if(section==='memoryPalace') loadMemoryPalace();
   if(section==='settings') { loadAuthStatus(); loadDiagnostics(); loadRuntimeDiagnostics(); loadRealtimePanel(); }
   if(section==='memoria') loadMemoria();
+  if(section==='insights') loadInsights();
 }
 
 async function loadStats(){
@@ -3368,6 +3372,7 @@ $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { i
 $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e.key==='Enter') loadGraph(); };
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };
 $('#graphResetView').onclick = resetGraphView;
+$('#insightsRefresh').onclick = loadInsights; $('#insightsDays').onchange = loadInsights;
 $('#constellationRefresh').onclick = loadConstellation;
 $('#constellationReset').onclick = resetConstellationView;
 $('#constellationPanMode').onclick = toggleConstellationPanMode;
