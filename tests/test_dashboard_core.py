@@ -842,6 +842,11 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="todayDegradation"' in html
     assert 'id="constellationFullscreen"' in html
     assert 'id="threeFullscreen"' in html
+    assert 'id="constellationCanvas" tabindex="0" role="application"' in html
+    assert 'id="threeViewport" class="three-viewport glass" tabindex="0" role="application"' in html
+    assert 'id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" tabindex="0" role="application"' in html
+    assert 'Use arrow keys to move between visible nodes' in html
+    assert 'Use arrow keys to rotate or pan' in html
     assert 'data-tab="palace"' in html
     assert 'data-tab="palace" class="nav-hidden" aria-hidden="true" tabindex="-1"' in html
     assert 'id="memoryPalace"' in html
@@ -940,6 +945,12 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert "toggleVisualiserFullscreen('#visualiser3d')" not in js
     assert "toggleVisualiserFullscreen('#constellation')" not in js
     assert 'visualiserResponsiveFill' in js
+    assert 'selectConstellationHit' in js
+    assert 'keyboardSelectableHits' in js
+    assert 'Canvas arrows' in js
+    assert '3D arrows' in js
+    assert 'Labyrinth WASD' in js
+    assert "threeVis.cameraZ /= 1.14" in js
     assert 'threeEffectiveCameraZ' in js
     assert ':fullscreen' in css
     assert '#threeViewport:fullscreen' in css
@@ -951,6 +962,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '.palace-reticle' in css
     assert '.palace-joystick' in css
     assert '.palace-zone-badge' in css
+    assert '.constellation-wrap:focus-within' in css
+    assert '#threeViewport:focus-visible' in css
+    assert '#palaceViewport:focus-visible' in css
     assert 'body:has(#memoryPalace.active) main' in css
     assert 'height:100svh' in css
     assert 'position:fixed;left:0;right:0;top:0;z-index:70' in css

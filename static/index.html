@@ -190,10 +190,10 @@
             <button id="constellationPanMode">Pan mode</button>
             <button id="constellationPause">Pause rotation</button>
             <button id="constellationFullscreen">Fullscreen</button>
-            <span id="visualiserHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.</span>
+            <span id="visualiserHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom · focus canvas for keyboard controls.</span>
           </div>
           <div class="constellation-layout">
-            <div class="constellation-wrap"><canvas id="constellationCanvas" aria-label="Interactive 3D memory constellation"></canvas><button id="constellationExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
+            <div class="constellation-wrap"><canvas id="constellationCanvas" tabindex="0" role="application" aria-label="Interactive 3D memory constellation. Use arrow keys to move between visible nodes, Enter to open a node, R to reset, P to pause or resume, and plus or minus to zoom." aria-describedby="visualiserHelp constellationInspector"></canvas><button id="constellationExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
             <aside id="constellationInspector" class="graph-inspector glass">
               <div class="inspector-kicker">Constellation inspector</div>
               <h3>Nothing selected</h3>
@@ -215,10 +215,10 @@
             <button id="threePanMode">Pan mode</button>
             <button id="threePause">Pause rotation</button>
             <button id="threeFullscreen">Fullscreen</button>
-            <span id="threeHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.</span>
+            <span id="threeHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom · focus viewport for keyboard controls.</span>
           </div>
           <div class="three-layout">
-            <div id="threeViewport" class="three-viewport glass" aria-label="Interactive 3D memory visualiser">
+            <div id="threeViewport" class="three-viewport glass" tabindex="0" role="application" aria-label="Interactive 3D memory visualiser. Use arrow keys to rotate or pan, plus and minus to zoom, R to reset, and P to pause or resume." aria-describedby="threeHelp threeInspector">
               <button id="threeExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
               <div id="threeLabels" class="three-labels"></div>
               <div id="threeLegend" class="constellation-legend three-legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div>
@@ -243,7 +243,7 @@
             <span class="muted">WASD to move · drag to look · tap relics · artifact rooms · Memory Diver + Hammy drone</span>
           </div>
           <div class="palace-layout">
-            <div id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" aria-label="First-person Mnemosyne Labyrinth explorer">
+            <div id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" tabindex="0" role="application" aria-label="First-person Mnemosyne Labyrinth explorer. Use W A S D or arrow keys to move, Shift to move faster, drag to look, and tap or click a nearby relic to scan it.">
               <button id="palaceExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
               <div id="palaceLabels" class="three-labels palace-labels"></div>
               <div class="palace-reticle" aria-hidden="true"></div>

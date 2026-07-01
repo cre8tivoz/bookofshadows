@@ -388,6 +388,12 @@ function openShortcutHelp(){
       <span>g m</span><strong>Go to Memories</strong>
       <span>g r</span><strong>Go to Review</strong>
       <span>g k</span><strong>Go to Knowledge Graph</strong>
+      <span>Canvas arrows</span><strong>Move between visible visualiser nodes</strong>
+      <span>Canvas Enter</span><strong>Open selected visualiser node</strong>
+      <span>Canvas R / P</span><strong>Reset or pause the canvas visualiser</strong>
+      <span>3D arrows</span><strong>Rotate or pan the 3D visualiser</strong>
+      <span>3D +/-</span><strong>Zoom the 3D visualiser</strong>
+      <span>Labyrinth WASD</span><strong>Move through the Memory Palace</strong>
     </div>`
   });
 }

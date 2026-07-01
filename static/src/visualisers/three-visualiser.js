@@ -37,8 +37,8 @@ export function createThreeVisualiser({
       ? '<span><i class="legend-dot entity"></i>Neuron hub</span><span><i class="legend-dot memory"></i>Memory soma</span><span><i class="legend-line"></i>Synapse</span>'
       : '<span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span>';
     const help = $('#threeHelp'); if(help) help.textContent = threeVis.mode === 'neural'
-      ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron.' : 'Drag to orbit the neural cloud · Pan mode/Shift-drag to pan · wheel/pinch to zoom.')
-      : 'Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.';
+      ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron · focus viewport for keys.' : 'Drag to orbit the neural cloud · Pan mode/Shift-drag or arrow keys to pan · +/- to zoom.')
+      : 'Drag to rotate · Pan mode/Shift-drag or arrow keys to pan · +/- to zoom · R reset · P pause.';
     const pause = $('#threePause'); if(pause) pause.textContent = threeVis.paused ? (threeVis.mode === 'neural' ? 'Resume drift' : 'Resume rotation') : (threeVis.mode === 'neural' ? 'Pause drift' : 'Pause rotation');
     const pan = $('#threePanMode'); if(pan) pan.textContent = threeVis.panMode ? 'Orbit mode' : 'Pan mode';
   }
@@ -641,6 +641,19 @@ export function createThreeVisualiser({
     };
     viewport.addEventListener('pointerup', end); viewport.addEventListener('pointercancel', end); viewport.addEventListener('pointerleave', end);
     viewport.addEventListener('click', e=>{ if(viewport.dataset.suppressClick==='true'){ viewport.dataset.suppressClick='false'; return; } pickThreeNode(e); });
+    viewport.addEventListener('keydown', e=>{
+      if(e.altKey || e.ctrlKey || e.metaKey) return;
+      const panStep = e.shiftKey || threeVis.panMode ? 34 : 0;
+      const rotateStep = e.shiftKey || threeVis.panMode ? 0 : .075;
+      if(e.key === 'ArrowLeft'){ e.preventDefault(); if(panStep) threeVis.panX -= panStep; else threeVis.yaw -= rotateStep; clampThreeCamera(); return; }
+      if(e.key === 'ArrowRight'){ e.preventDefault(); if(panStep) threeVis.panX += panStep; else threeVis.yaw += rotateStep; clampThreeCamera(); return; }
+      if(e.key === 'ArrowUp'){ e.preventDefault(); if(panStep) threeVis.panY += panStep; else threeVis.pitch = Math.max(-1.15, threeVis.pitch - rotateStep); clampThreeCamera(); return; }
+      if(e.key === 'ArrowDown'){ e.preventDefault(); if(panStep) threeVis.panY -= panStep; else threeVis.pitch = Math.min(1.15, threeVis.pitch + rotateStep); clampThreeCamera(); return; }
+      if(e.key === '+' || e.key === '='){ e.preventDefault(); threeVis.cameraZ /= 1.14; clampThreeCamera(); return; }
+      if(e.key === '-' || e.key === '_'){ e.preventDefault(); threeVis.cameraZ *= 1.14; clampThreeCamera(); return; }
+      if(e.key.toLowerCase() === 'r'){ e.preventDefault(); resetThreeCamera(); threeInspectorDefault(); return; }
+      if(e.key.toLowerCase() === 'p'){ e.preventDefault(); togglePause(); }
+    });
   }
   function pickThreeNode(e){
     if(!threeVis.camera || !threeVis.group) return;

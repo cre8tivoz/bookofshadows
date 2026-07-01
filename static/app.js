@@ -2153,7 +2153,7 @@
     prefersReducedMotion: prefersReducedMotion2,
     isActive
   }) {
-    let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], ...CONSTELLATION_DEFAULT_CAMERA, paused: false, mode: "rotate", visualiserMode: localStorage.getItem(VISUALISER_MODE_KEY) || "constellation", lastFrameTime: 0, lastInteraction: 0, hits: [], data: null, drag: null, pointers: /* @__PURE__ */ new Map() };
+    let constellationScene = { frame: 0, nodes: [], edges: [], byId: {}, stars: [], ...CONSTELLATION_DEFAULT_CAMERA, paused: false, mode: "rotate", visualiserMode: localStorage.getItem(VISUALISER_MODE_KEY) || "constellation", lastFrameTime: 0, lastInteraction: 0, hits: [], selectedNodeId: null, data: null, drag: null, pointers: /* @__PURE__ */ new Map() };
     function stopCanvasVisualiserLoop2() {
       if (constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
       constellationScene.frame = 0;
@@ -2167,12 +2167,21 @@
       $2("#constellationInspector").innerHTML = neural ? `<div class="inspector-kicker">Neural inspector</div><h3>Nothing selected</h3><p class="muted">Pick a neuron hub, memory soma, or synapse to inspect the underlying read-only source.</p>` : `<div class="inspector-kicker">Constellation inspector</div><h3>Nothing selected</h3><p class="muted">Pick a star, memory, or link to inspect the underlying read-only source.</p>`;
     }
     function inspectConstellationNode(node) {
+      constellationScene.selectedNodeId = node.id;
       $2("#constellationInspector").innerHTML = `<div class="inspector-kicker">${esc2(node.kind || "entity")}</div><h3>${esc2(node.label)}</h3><p class="muted">${esc2(node.category || "Other")} · ${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc2(node.preview)}</p>` : ""}<div class="inspector-actions">${node.memory_id ? '<button id="constellationMemory" class="primary tiny">Open memory</button>' : ""}<button id="constellationSearch" class="tiny">Search this</button></div>`;
       if (node.memory_id) $2("#constellationMemory").onclick = () => openMemoryDetail2(node.memory_id);
       $2("#constellationSearch").onclick = () => {
         $2("#memoryQuery").value = node.label.replace(/^memory:/, "");
         switchTab2("memories");
       };
+    }
+    function openConstellationNode(node) {
+      if (!node) return;
+      if (node.memory_id) openMemoryDetail2(node.memory_id);
+      else {
+        $2("#memoryQuery").value = String(node.label || "").replace(/^memory:/, "");
+        switchTab2("memories");
+      }
     }
     function constellationColors2() {
       const light = document.documentElement.dataset.theme === "light";
@@ -2525,6 +2534,17 @@
         const p = projected.get(n.id);
         if (!p) return;
         const drawn = drawNeuronSoma(ctx, n, p, c, t, compactCanvas, fast);
+        if (n.id === constellationScene.selectedNodeId) {
+          ctx.globalAlpha = 0.92;
+          ctx.strokeStyle = c.memory;
+          ctx.lineWidth = compactCanvas ? 2 : 2.5;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.max(18, drawn.halo * 0.72), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
         const labelRaw = (n.label || "").replace(/^memory:/, "mem ");
         const compactRaw = labelRaw.trim();
         const alphaChars = (compactRaw.match(/[A-Za-z]/g) || []).length;
@@ -2746,6 +2766,17 @@
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.restore();
+        if (n.id === constellationScene.selectedNodeId) {
+          ctx.globalAlpha = 0.92;
+          ctx.strokeStyle = c.memory;
+          ctx.lineWidth = compactCanvas ? 2 : 2.5;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.max(16, flare + 5), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
         const labelRaw = (n.label || "").replace(/^memory:/, "mem ");
         const labelKey = labelRaw.trim().toLowerCase();
         const compactRaw = labelRaw.trim();
@@ -2839,6 +2870,83 @@
       constellationScene.zoom = nextZoom;
       clampConstellationCamera(rect.width, rect.height);
     }
+    function keyboardSelectableHits() {
+      const seen = /* @__PURE__ */ new Set();
+      return (constellationScene.hits || []).filter((hit) => {
+        const id = hit.node?.id;
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    }
+    function selectConstellationHit(delta = 1) {
+      const hits = keyboardSelectableHits();
+      if (!hits.length) return;
+      const current = Math.max(0, hits.findIndex((hit) => hit.node?.id === constellationScene.selectedNodeId));
+      const index = (current + delta + hits.length) % hits.length;
+      inspectConstellationNode(hits[index].node);
+      redraw();
+    }
+    function selectedConstellationNode() {
+      const hits = keyboardSelectableHits();
+      return hits.find((hit) => hit.node?.id === constellationScene.selectedNodeId)?.node || hits[0]?.node || null;
+    }
+    function bindConstellationKeyboard(canvas) {
+      if (canvas.dataset.keyboardBound === "true") return;
+      canvas.dataset.keyboardBound = "true";
+      canvas.addEventListener("keydown", (e) => {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        const key = e.key;
+        if (["ArrowRight", "ArrowDown"].includes(key)) {
+          e.preventDefault();
+          selectConstellationHit(1);
+          return;
+        }
+        if (["ArrowLeft", "ArrowUp"].includes(key)) {
+          e.preventDefault();
+          selectConstellationHit(-1);
+          return;
+        }
+        if (key === "Enter" || key === " ") {
+          e.preventDefault();
+          const node = selectedConstellationNode();
+          if (node) {
+            inspectConstellationNode(node);
+            openConstellationNode(node);
+          }
+          return;
+        }
+        if (key.toLowerCase() === "r") {
+          e.preventDefault();
+          resetConstellationView2();
+          redraw();
+          return;
+        }
+        if (key.toLowerCase() === "p") {
+          e.preventDefault();
+          toggleConstellationPause2();
+          return;
+        }
+        if (key.toLowerCase() === "m") {
+          e.preventDefault();
+          toggleConstellationPanMode2();
+          return;
+        }
+        if (key === "+" || key === "=") {
+          e.preventDefault();
+          const rect = canvas.getBoundingClientRect();
+          zoomConstellation(1.18, rect.left + rect.width / 2, rect.top + rect.height / 2);
+          redraw();
+          return;
+        }
+        if (key === "-" || key === "_") {
+          e.preventDefault();
+          const rect = canvas.getBoundingClientRect();
+          zoomConstellation(1 / 1.18, rect.left + rect.width / 2, rect.top + rect.height / 2);
+          redraw();
+        }
+      });
+    }
     function bindConstellationControls(canvas) {
       if (canvas.dataset.controlsBound === "true") return;
       canvas.dataset.controlsBound = "true";
@@ -2902,6 +3010,7 @@
       };
       canvas.addEventListener("pointerup", endPointer);
       canvas.addEventListener("pointercancel", endPointer);
+      bindConstellationKeyboard(canvas);
     }
     function drawConstellation(data) {
       if (!isActive()) return;
@@ -2913,6 +3022,7 @@
       updateVisualiserModeUI2();
       const canvas = $2("#constellationCanvas");
       bindConstellationControls(canvas);
+      bindConstellationKeyboard(canvas);
       canvas.onclick = (e) => {
         if (canvas.dataset.suppressClick === "true") {
           canvas.dataset.suppressClick = "false";
@@ -3023,7 +3133,7 @@
       const legend = $2("#threeLegend");
       if (legend) legend.innerHTML = threeVis.mode === "neural" ? '<span><i class="legend-dot entity"></i>Neuron hub</span><span><i class="legend-dot memory"></i>Memory soma</span><span><i class="legend-line"></i>Synapse</span>' : '<span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span>';
       const help = $2("#threeHelp");
-      if (help) help.textContent = threeVis.mode === "neural" ? window.matchMedia("(max-width: 760px)").matches ? "Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron." : "Drag to orbit the neural cloud · Pan mode/Shift-drag to pan · wheel/pinch to zoom." : "Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.";
+      if (help) help.textContent = threeVis.mode === "neural" ? window.matchMedia("(max-width: 760px)").matches ? "Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron · focus viewport for keys." : "Drag to orbit the neural cloud · Pan mode/Shift-drag or arrow keys to pan · +/- to zoom." : "Drag to rotate · Pan mode/Shift-drag or arrow keys to pan · +/- to zoom · R reset · P pause.";
       const pause = $2("#threePause");
       if (pause) pause.textContent = threeVis.paused ? threeVis.mode === "neural" ? "Resume drift" : "Resume rotation" : threeVis.mode === "neural" ? "Pause drift" : "Pause rotation";
       const pan = $2("#threePanMode");
@@ -3817,6 +3927,61 @@
           return;
         }
         pickThreeNode(e);
+      });
+      viewport.addEventListener("keydown", (e) => {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        const panStep = e.shiftKey || threeVis.panMode ? 34 : 0;
+        const rotateStep = e.shiftKey || threeVis.panMode ? 0 : 0.075;
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          if (panStep) threeVis.panX -= panStep;
+          else threeVis.yaw -= rotateStep;
+          clampThreeCamera();
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          if (panStep) threeVis.panX += panStep;
+          else threeVis.yaw += rotateStep;
+          clampThreeCamera();
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          if (panStep) threeVis.panY += panStep;
+          else threeVis.pitch = Math.max(-1.15, threeVis.pitch - rotateStep);
+          clampThreeCamera();
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          if (panStep) threeVis.panY -= panStep;
+          else threeVis.pitch = Math.min(1.15, threeVis.pitch + rotateStep);
+          clampThreeCamera();
+          return;
+        }
+        if (e.key === "+" || e.key === "=") {
+          e.preventDefault();
+          threeVis.cameraZ /= 1.14;
+          clampThreeCamera();
+          return;
+        }
+        if (e.key === "-" || e.key === "_") {
+          e.preventDefault();
+          threeVis.cameraZ *= 1.14;
+          clampThreeCamera();
+          return;
+        }
+        if (e.key.toLowerCase() === "r") {
+          e.preventDefault();
+          resetThreeCamera2();
+          threeInspectorDefault2();
+          return;
+        }
+        if (e.key.toLowerCase() === "p") {
+          e.preventDefault();
+          togglePause();
+        }
       });
     }
     function pickThreeNode(e) {
@@ -5004,6 +5169,12 @@
       <span>g m</span><strong>Go to Memories</strong>
       <span>g r</span><strong>Go to Review</strong>
       <span>g k</span><strong>Go to Knowledge Graph</strong>
+      <span>Canvas arrows</span><strong>Move between visible visualiser nodes</strong>
+      <span>Canvas Enter</span><strong>Open selected visualiser node</strong>
+      <span>Canvas R / P</span><strong>Reset or pause the canvas visualiser</strong>
+      <span>3D arrows</span><strong>Rotate or pan the 3D visualiser</strong>
+      <span>3D +/-</span><strong>Zoom the 3D visualiser</strong>
+      <span>Labyrinth WASD</span><strong>Move through the Memory Palace</strong>
     </div>`
     });
   }
