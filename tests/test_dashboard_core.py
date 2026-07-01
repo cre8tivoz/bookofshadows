@@ -1077,29 +1077,30 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'Search results for' in js
     assert 'reviewReasonBadges' in js
     assert 'review-reasons' in js
+    assert 'createReviewController' in js
     assert 'selectedReviewQueue' in js
-    assert 'renderSelectedReviewQueue' in js
+    assert 'renderSelectedQueue' in js
     assert 'loadReviewPage' in js
     assert 'reviewOffset' in js
     assert 'REVIEW_PAGE_SIZE = 100' in js
     assert 'min_importance' in js
     assert 'reviewSearchQuery' in js
     assert 'reviewMinImportanceValue' in js
-    assert 'updateReviewImportanceLabel' in js
+    assert 'updateImportanceLabel' in js
     assert 'actionable selected' not in js
     assert "`${reviewSelection.size} selected`" in js
     assert 'active' not in js[js.index("$('#reviewSelectionStatus').textContent"):js.index("$('#reviewConfirm').disabled")]
     assert "$('#reviewSelectAll').onchange" in js
     assert "latestReviewItems.forEach" in js
     assert "loadReview();" not in js[js.index("$('#reviewSelectAll').onchange"):js.index("$('#reviewClear').onclick")]
-    assert "updateReviewBulkBar();" in js[js.index("$('#reviewSelectAll').onchange"):js.index("$('#reviewClear').onclick")]
+    assert "updateBulkBar();" in js[js.index("$('#reviewSelectAll').onchange"):js.index("$('#reviewClear').onclick")]
     select_visible_segment = js[js.index("$$('#review .review-select-visible')"):js.index('function reviewFilterParams')]
     assert 'latestReviewItems.forEach' in select_visible_segment
     assert '$$(\'#review .review-check\')' in select_visible_segment
     assert '/api/review?' in js
     assert 'reviewFilterParams({' in js
-    assert 'limit:REVIEW_PAGE_SIZE' in js
-    assert 'offset:reviewOffset' in js
+    assert 'limit: REVIEW_PAGE_SIZE' in js
+    assert 'offset: reviewOffset' in js
     assert '/api/review?limit=10000' not in js
     assert "Object.entries(queues).map(([key, queue]) => reviewQueueHtml" not in js
     assert 'Needs review' in js
@@ -1117,9 +1118,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'loadReview' in js
     assert 'applyReviewFilter' in js
     assert 'reviewSelection' in js
-    assert 'bindReviewControls' in js
-    assert 'updateReviewBulkBar' in js
-    assert 'confirmSelectedReviewMemories' in js
+    assert 'bindQueueControls' in js
+    assert 'updateBulkBar' in js
+    assert 'confirmSelectedMemories' in js
     assert 'reviewQueueCorrection' not in js
     assert 'Confirm shown' not in js
     assert 'headerSearch' not in js
