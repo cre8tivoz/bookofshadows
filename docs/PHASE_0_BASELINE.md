@@ -46,7 +46,7 @@ The screenshot baseline is generated from a temporary fictional SQLite database:
 The current manifest covers:
 
 - Desktop: Overview dark/light, Today, Context Bank/Profile, Visualiser Legacy, Visualiser Neural, Search, Review, Memories, Lifecycle, Knowledge Graph, MEMORIA, Timeline, Settings.
-- Mobile: Overview, Today, Context Bank/Profile, Visualiser Legacy, Visualiser Neural, Search, Timeline, Knowledge Graph, Settings.
+- Mobile: Overview, Today, Context Bank/Profile, Visualiser Legacy, Visualiser Neural, Search, Insights, Timeline, Knowledge Graph, Settings.
 
 See `docs/screenshots/manifest.json` for the exact file list, themes, tabs, and viewport sizes.
 

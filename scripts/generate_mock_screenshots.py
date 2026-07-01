@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -185,7 +186,17 @@ def run() -> None:
             ("mobile-light-graph.png", 390, 844, True, "light", "graph"),
             ("mobile-dark-settings.png", 390, 844, True, "dark", "settings"),
         ]
-        manifest: list[dict[str, Any]] = []
+        expected = {name for name, *_ in shots}
+        for stale in OUT_DIR.glob("*.png"):
+            if stale.name not in expected:
+                stale.unlink()
+                print(f"removed stale {stale.relative_to(ROOT)}")
+        manifest: dict[str, Any] = {
+            "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "source": "scripts/generate_mock_screenshots.py",
+            "data": "temporary fictional SQLite database and audit log",
+            "screenshots": [],
+        }
         for name, width, height, mobile, theme, tab in shots:
             with ChromeSession(free_port(), base_url, width, height, mobile) as chrome:
                 # Navigate to the correct URL with tab parameter
@@ -198,7 +209,7 @@ def run() -> None:
                 
                 out = OUT_DIR / name
                 chrome.screenshot(out)
-                manifest.append({"file": name, "theme": theme, "tab": tab, "viewport": f"{width}x{height}"})
+                manifest["screenshots"].append({"file": name, "theme": theme, "tab": tab, "viewport": f"{width}x{height}"})
                 print(f"wrote {out.relative_to(ROOT)}")
         (OUT_DIR / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     finally:

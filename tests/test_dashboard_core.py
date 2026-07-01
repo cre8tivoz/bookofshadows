@@ -349,6 +349,22 @@ def test_memory_query_from_raw_normalises_loose_input():
     assert MemoryQuery.from_raw(min_importance=0.5).min_importance == 0.5
 
 
+def test_count_memories_uses_same_filters_as_memory_query(tmp_path):
+    from dashboard_core import MemoryQuery
+
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    query = MemoryQuery.from_raw(kind='all', status='active', veracity='tool', limit=1)
+    assert [row['id'] for row in store.query_memories(query)] == ['w4']
+    assert store.count_memories(query) == 1
+
+    contaminated = MemoryQuery.from_raw(kind='all', status='active', contaminated_only=True, limit=2)
+    assert len(store.query_memories(contaminated)) == 2
+    assert store.count_memories(contaminated) == 5
+
+
 def test_graph_returns_nodes_edges_and_filterable_metadata(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)

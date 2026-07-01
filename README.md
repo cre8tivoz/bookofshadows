@@ -27,7 +27,7 @@ Dark mode uses iron-charcoal surfaces with teal accents. Light mode is warm bone
 - **Overview** — the big picture: how many memories you have, what kind, what's been happening lately
 - **Today** — a friendly daily digest of what got added, recalled, or tidied up
 - **Context Bank** — the patterns and context your agent has picked up about you
-- **Insights** — charts you can actually click on: memory growth over time, admin activity, how often things get recalled
+- **Insights** — operational charts and cards for growth, audit activity, trust mix, sources, review backlog, lifecycle events, clusters, and session heat
 - **Visualiser** — a constellation/neural-map view of your memories you can click through and explore
 - **Visualiser 3D** — the same idea, rendered in 3D, for the GPU-curious
 - **Memories** — the full browser: search, filter, sort, bulk-tidy, debug recall
@@ -79,7 +79,7 @@ We built this so you could hand it to someone nervous about "an app touching my 
 
 ## Screenshots
 
-All screenshots are generated from a temporary mock database — no real memory data, no real file paths, no private information.
+All screenshots are generated from a temporary fictional database and audit log. The current gallery source of truth is [docs/screenshots/manifest.json](docs/screenshots/manifest.json), which records the generated timestamp, covered tabs, themes, and viewport sizes.
 
 | ![Dark overview](docs/screenshots/desktop-dark-overview.png) | ![Light overview](docs/screenshots/desktop-light-overview.png) |
 |---|---|
@@ -93,14 +93,14 @@ All screenshots are generated from a temporary mock database — no real memory 
 |---|---|
 | Insights charts | Mobile insights |
 
-| ![Dark knowledge graph](docs/screenshots/desktop-light-graph.png) | ![Mobile dark overview](docs/screenshots/mobile-dark-overview.png) |
+| ![Light knowledge graph](docs/screenshots/desktop-light-graph.png) | ![Mobile dark overview](docs/screenshots/mobile-dark-overview.png) |
 |---|---|
 | Knowledge graph (light theme) | Mobile dark overview |
 
 Want to regenerate the whole gallery yourself? One command, using the same mock data:
 
 ```bash
-python3 scripts/generate_mock_screenshots.py
+/Users/habibi/.local/bin/uv run --with websocket-client --python /Users/habibi/.local/bin/python3.11 python scripts/generate_mock_screenshots.py
 ```
 
 More detail lives in [docs/DEMO_DATA.md](docs/DEMO_DATA.md).

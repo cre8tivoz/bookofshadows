@@ -40,6 +40,15 @@ export function reviewActionableIds(items, selectedSet) {
   return [...new Set(selectedMutableIds(items, selectedSet))];
 }
 
+export function mergeReviewItems(existingItems = [], newItems = []) {
+  return [...new Map([...existingItems, ...newItems].map((item) => [item.id, item])).values()];
+}
+
+export function newReviewItems(existingItems = [], newItems = []) {
+  const seen = new Set(existingItems.map((item) => item.id));
+  return newItems.filter((item) => !seen.has(item.id));
+}
+
 export function reviewFilterParams(filters = {}) {
   const params = new URLSearchParams(`queue=${encodeURIComponent(filters.queue || '')}&limit=${Number(filters.limit || 0)}&offset=${Number(filters.offset || 0)}`);
   const q = String(filters.q || '').trim();

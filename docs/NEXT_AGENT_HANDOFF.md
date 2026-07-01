@@ -1,6 +1,6 @@
 # Next Agent Handoff
 
-Updated on 2026-07-01 after Release 11A was completed.
+Updated on 2026-07-01 after Release 11B was completed.
 
 ## Current State
 
@@ -15,6 +15,7 @@ Updated on 2026-07-01 after Release 11A was completed.
   - demo-data notes,
   - release checklist.
 - Release 11A is complete: the Insights tab now includes trust mix, source mix, review backlog, lifecycle events, entity/domain clusters, session heatmap, and action cards, with matching read-only backend endpoints and tests.
+- Release 11B is complete: `/api/memories` now returns exact filtered totals and pagination metadata, the memory browser shows loaded vs total counts, and Review queue "Load more" appends only new cards without rebuilding the existing queue.
 
 ## Useful Commands
 
@@ -34,7 +35,6 @@ Regenerate public screenshots:
 
 ## Future Release Backlog
 
-- Release 11B: Review queue append pagination and exact filtered memory totals.
 - Release 11C: Extract visualiser, auth/settings, review, and detail-drawer controllers from `static/src/app-main.js`.
 - Release 11D: Add keyboard equivalents and accessible data paths for canvas/WebGL visualisers.
 

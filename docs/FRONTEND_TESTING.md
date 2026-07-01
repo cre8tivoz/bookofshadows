@@ -49,7 +49,7 @@ Regenerate the screenshot gallery with:
 /Users/habibi/.local/bin/uv run --with websocket-client --python /Users/habibi/.local/bin/python3.11 python scripts/generate_mock_screenshots.py
 ```
 
-Screenshots are generated from the same fictional data model and written under `docs/screenshots/`.
+Screenshots are generated from the same fictional data model and written under `docs/screenshots/`. The generator prunes stale PNGs first and updates `docs/screenshots/manifest.json` with the current timestamp, covered routes, themes, and viewport sizes.
 
 ## Static Checks
 

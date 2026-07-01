@@ -1,152 +1,157 @@
-[
-  {
-    "file": "desktop-dark-overview.png",
-    "theme": "dark",
-    "tab": "overview",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-light-overview.png",
-    "theme": "light",
-    "tab": "overview",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-today.png",
-    "theme": "dark",
-    "tab": "today",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-light-profile.png",
-    "theme": "light",
-    "tab": "profile",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-constellation.png",
-    "theme": "dark",
-    "tab": "constellation",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-neural.png",
-    "theme": "dark",
-    "tab": "neural",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-search.png",
-    "theme": "dark",
-    "tab": "search",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-review.png",
-    "theme": "dark",
-    "tab": "review",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-memories.png",
-    "theme": "dark",
-    "tab": "memories",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-lifecycle.png",
-    "theme": "dark",
-    "tab": "lifecycle",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-insights.png",
-    "theme": "dark",
-    "tab": "insights",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-light-graph.png",
-    "theme": "light",
-    "tab": "graph",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-memoria.png",
-    "theme": "dark",
-    "tab": "memoria",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-timeline.png",
-    "theme": "dark",
-    "tab": "timelineView",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "desktop-dark-settings.png",
-    "theme": "dark",
-    "tab": "settings",
-    "viewport": "1440x1000"
-  },
-  {
-    "file": "mobile-dark-overview.png",
-    "theme": "dark",
-    "tab": "overview",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-light-today.png",
-    "theme": "light",
-    "tab": "today",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-dark-profile.png",
-    "theme": "dark",
-    "tab": "profile",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-light-constellation.png",
-    "theme": "light",
-    "tab": "constellation",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-dark-neural.png",
-    "theme": "dark",
-    "tab": "neural",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-light-search.png",
-    "theme": "light",
-    "tab": "search",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-dark-insights.png",
-    "theme": "dark",
-    "tab": "insights",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-dark-timeline.png",
-    "theme": "dark",
-    "tab": "timelineView",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-light-graph.png",
-    "theme": "light",
-    "tab": "graph",
-    "viewport": "390x844"
-  },
-  {
-    "file": "mobile-dark-settings.png",
-    "theme": "dark",
-    "tab": "settings",
-    "viewport": "390x844"
-  }
-]
+{
+  "generated_at": "2026-07-01T09:44:07+00:00",
+  "source": "scripts/generate_mock_screenshots.py",
+  "data": "temporary fictional SQLite database and audit log",
+  "screenshots": [
+    {
+      "file": "desktop-dark-overview.png",
+      "theme": "dark",
+      "tab": "overview",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-light-overview.png",
+      "theme": "light",
+      "tab": "overview",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-today.png",
+      "theme": "dark",
+      "tab": "today",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-light-profile.png",
+      "theme": "light",
+      "tab": "profile",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-constellation.png",
+      "theme": "dark",
+      "tab": "constellation",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-neural.png",
+      "theme": "dark",
+      "tab": "neural",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-search.png",
+      "theme": "dark",
+      "tab": "search",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-review.png",
+      "theme": "dark",
+      "tab": "review",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-memories.png",
+      "theme": "dark",
+      "tab": "memories",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-lifecycle.png",
+      "theme": "dark",
+      "tab": "lifecycle",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-insights.png",
+      "theme": "dark",
+      "tab": "insights",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-light-graph.png",
+      "theme": "light",
+      "tab": "graph",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-memoria.png",
+      "theme": "dark",
+      "tab": "memoria",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-timeline.png",
+      "theme": "dark",
+      "tab": "timelineView",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "desktop-dark-settings.png",
+      "theme": "dark",
+      "tab": "settings",
+      "viewport": "1440x1000"
+    },
+    {
+      "file": "mobile-dark-overview.png",
+      "theme": "dark",
+      "tab": "overview",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-light-today.png",
+      "theme": "light",
+      "tab": "today",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-dark-profile.png",
+      "theme": "dark",
+      "tab": "profile",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-light-constellation.png",
+      "theme": "light",
+      "tab": "constellation",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-dark-neural.png",
+      "theme": "dark",
+      "tab": "neural",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-light-search.png",
+      "theme": "light",
+      "tab": "search",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-dark-insights.png",
+      "theme": "dark",
+      "tab": "insights",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-dark-timeline.png",
+      "theme": "dark",
+      "tab": "timelineView",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-light-graph.png",
+      "theme": "light",
+      "tab": "graph",
+      "viewport": "390x844"
+    },
+    {
+      "file": "mobile-dark-settings.png",
+      "theme": "dark",
+      "tab": "settings",
+      "viewport": "390x844"
+    }
+  ]
+}

@@ -71,6 +71,25 @@ def test_invalid_limit_query_falls_back_instead_of_500(tmp_path, monkeypatch):
         payload = json.loads(body)
         assert status == 200
         assert len(payload["items"]) == 6
+        assert payload["total"] == 6
+        assert payload["listed"] == 6
+        assert payload["has_more"] is False
+    finally:
+        server.close()
+
+
+def test_memories_endpoint_reports_filtered_totals_and_next_offset(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        status, _headers, body = _request(f"{server.base}/api/memories?veracity=tool&limit=1&offset=0")
+        payload = json.loads(body)
+        assert status == 200
+        assert [item["id"] for item in payload["items"]] == ["w4"]
+        assert payload["total"] == 1
+        assert payload["listed"] == 1
+        assert payload["offset"] == 0
+        assert payload["next_offset"] == 1
+        assert payload["has_more"] is False
     finally:
         server.close()
 
