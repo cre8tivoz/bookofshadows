@@ -356,25 +356,36 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 ### Tasks
 
-- [ ] Add paginated or virtualised rendering for memory grids.
-- [ ] Avoid rebuilding entire lists via `innerHTML` on every minor state change.
-- [ ] Add stable item keys.
-- [ ] Cache source/scope/session filter lists.
-- [ ] Add visible count and loaded count indicators.
-- [ ] Add saved filter presets:
+- [x] Add paginated or virtualised rendering for memory grids.
+- [x] Avoid rebuilding entire lists via `innerHTML` on every minor state change.
+- [x] Add stable item keys.
+- [x] Cache source/scope/session filter lists.
+- [x] Add visible count and loaded count indicators.
+- [x] Add saved filter presets:
   - Needs review
   - High importance
   - Recently recalled
   - Expiring soon
   - Tool-generated
   - Unknown trust
-- [ ] Add bulk selection persistence across paginated loads only if explicit.
+- [x] Add bulk selection persistence across paginated loads only if explicit.
 
 ### Acceptance criteria
 
 - Memory browser remains responsive with 1,000+ items.
 - Loading more does not re-render the whole world.
 - Filter changes feel instant or clearly loading.
+
+### Phase 6 status update - 2026-07-01
+
+- The memory browser (`#memoryList`) previously fetched a single flat page (`limit=150`, no offset) with no way to see more than the first 150 matches. It now paginates: `loadMemories()` fetches page 1 and resets state, `loadMoreMemories()` fetches subsequent pages and `insertAdjacentHTML('beforeend', ...)`s only the *new* cards instead of re-rendering the whole list — verified live in a browser with a 410-row synthetic dataset that the first card's DOM node is preserved (same reference) across a "Load more" click, going from 150 to 300 to 410 loaded, with the Load-more control correctly hiding once the last (partial) page comes back.
+- `memoryFilterParams()` (`features/memories.js`) gained an `offset` parameter; `mergeMemoryPage()` handles both the "replace" (new filter search) and "append, dedup by id" (load more) cases, reusing the existing `data-id` as the stable key.
+- Added `#memoryListCount` ("N loaded") next to the search controls. A true filtered "N total" was deliberately not added: the only existing precedent (`review_queues()` in `dashboard_core.py`) computes totals by fetching up to 10,000 rows and counting them in Python, which is backend surgery/cost better suited to the real `MemoryQuery` work in Phase 7, not this frontend-scoped phase.
+- Added a "Saved views" preset row (`MEMORY_FILTER_PRESETS` in `features/memories.js`) covering all six named presets: Needs review, High importance, Recently recalled, Tool-generated, and Unknown trust map directly onto existing filter/sort controls; Expiring soon has no server-side sort mode, so it fetches a bounded active batch and sorts client-side by `valid_until` ascending (`sortByExpiringSoon()`), capped at 100 results, with the Load-more control hidden since it's a curated snapshot rather than a paginated stream.
+- Found and fixed a real bug while testing presets in a browser: `applyMemoryRouteFilters()` only touches a dropdown when the filters object explicitly includes that key, so clicking "Tool-generated" (sets `veracity=tool`) then "Needs review" (doesn't mention `veracity`) silently left the stale `tool` filter active and zeroed out the results. Fixed by extracting a `resetMemoryFilterControls()` helper (used by both the existing "Clear" button and every preset) that clears all filter fields before a preset applies its own.
+- Verified rather than re-implemented: source/scope/session filter dropdown options are populated once in `loadStats()` (itself covered by Phase 2's low-volatility TTL cache), not on every `loadMemories()` search — this criterion was already satisfied. Memory cards already key off the stable `data-id` attribute used for dedup. Bulk selection (`bulkSelection`, a `Set` keyed by id) is untouched by pagination appends, so selections persist naturally across "Load more" without extra state — no explicit cross-page persistence feature was added beyond that, per the task's "only if explicit" guidance.
+- New/updated frontend tests in `tests/frontend/memories.test.js`: `memoryFilterParams` offset handling, `mergeMemoryPage` replace/append-dedup behavior, and preset resolution/sorting (`memoryPresetByKey`, `sortByExpiringSoon`). Full suite: 77 passed.
+- Known remaining gap: the Review queue's own "Load more" (`loadReviewPage`/`renderSelectedReviewQueue`) still fully re-renders its accumulated list on every page — the same anti-pattern this phase fixed for the memory browser. Left alone here to keep the PR scoped to "memory grids" as named in the plan; worth revisiting alongside Phase 7's backend query work.
 
 ## Phase 7 - Backend Interface Cleanup
 

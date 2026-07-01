@@ -44,7 +44,7 @@ npm run build:frontend
 - `utils/format.js`: time and byte formatting.
 - `utils/a11y.js`: focus-trap utility (`trapFocus()`/`focusableElements()`) used by the drawer, action modal, and login overlay.
 - `state/routing.js`: pure route parse/serialize helpers and legacy tab aliases.
-- `features/memories.js`: pure memory card/meta rendering and mutability helper.
+- `features/memories.js`: pure memory card/meta rendering, mutability helper, paginated query params (`memoryFilterParams` with limit/offset), page merge/dedup (`mergeMemoryPage`), and saved filter presets (`MEMORY_FILTER_PRESETS`, `memoryPresetByKey`, `sortByExpiringSoon`).
 - `features/review.js`: review queue rendering, lifecycle queue wrapper, review query params, and selected-action helpers.
 - `features/graph.js`: graph layout, graph inspector HTML, SVG graph controller state, pan/zoom binding, and graph API query path.
 
@@ -105,3 +105,12 @@ Phase 5 raises interactive elements and overlays to a consistent baseline:
 - `static/style.css` adds a global `:focus-visible` ring (mouse-driven `:focus` stays ring-free), a `prefers-reduced-motion` block that collapses transition/animation durations and disables hover transforms, and `font-variant-numeric: tabular-nums` on counters, tables, and diagnostics.
 - `--text-subtle` (both themes) and light-mode `--text-muted` were adjusted after a contrast audit found them below WCAG AA (~2.7-3.1:1) against the surfaces they render on; they now land at ~4.0-4.5:1. `--text-subtle` is still not guaranteed to clear 4.5:1 on every surface — treat it as decorative/redundant-label text only, not the sole carrier of information.
 - The 3D/canvas visualisers remain mouse-driven; keyboard equivalents are out of scope for this phase (see `docs/PHASE_0_BASELINE.md`/Phase 8 notes on visualiser work).
+
+## Memory Browser Scalability
+
+Phase 6 paginates the memory browser instead of fetching everything in one shot:
+
+- `loadMemories()` fetches page one (`memoryFilterParams(filters, MEMORY_PAGE_SIZE, 0)`) and replaces `#memoryList`; `loadMoreMemories()` fetches the next offset and appends only the newly-returned cards via `insertAdjacentHTML('beforeend', ...)`, leaving previously-rendered DOM nodes untouched. `mergeMemoryPage()` (replace vs. append+dedup-by-id) tracks the accumulated `latestMemoryItems` array either way.
+- `#memoryListCount` shows a "N loaded" indicator; the `#memoryLoadBar` (`Load 150 more`) hides once a page returns fewer than `MEMORY_PAGE_SIZE` items. There is no exact filtered "N total" — see the Phase 6 status update in `TRANSFORMATION_PLAN.md` for why that was deliberately left out of this frontend-scoped phase.
+- `#memoryPresetBar` offers six saved filter views (`MEMORY_FILTER_PRESETS` in `features/memories.js`). `applyMemoryPreset()` always calls `resetMemoryFilterControls()` before applying a preset's filters, so an earlier preset's leftover filter value (e.g. `veracity`) can't silently suppress a later preset's results. "Expiring soon" is the one preset that can't be expressed as existing filter/sort controls — it fetches a bounded active batch and sorts client-side by `valid_until` (`sortByExpiringSoon()`), and disables further pagination for that view.
+- Bulk selection (`bulkSelection`, a `Set` of ids) is untouched by pagination appends, so selections persist across "Load more" without any special-cased logic.

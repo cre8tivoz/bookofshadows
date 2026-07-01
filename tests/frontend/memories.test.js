@@ -6,8 +6,11 @@ import {
   liveEventMeta,
   memoryFilterParams,
   memoryItem,
+  memoryPresetByKey,
+  mergeMemoryPage,
   meta,
   selectedMutableIds,
+  sortByExpiringSoon,
 } from "../../static/src/features/memories.js";
 
 describe("memory rendering", () => {
@@ -86,8 +89,15 @@ describe("memory browser state helpers", () => {
     });
 
     expect(params.toString()).toBe(
-      "kind=working&q=oath+ledger&source=dashboard&scope=global&session_id=session-7&veracity=stated&degradation_tier=2&contaminated_only=&degraded_only=&due_for_degradation=1&status=active&sort=oldest&limit=150",
+      "kind=working&q=oath+ledger&source=dashboard&scope=global&session_id=session-7&veracity=stated&degradation_tier=2&contaminated_only=&degraded_only=&due_for_degradation=1&status=active&sort=oldest&limit=150&offset=0",
     );
+  });
+
+  test("carries an explicit page offset for pagination", () => {
+    const params = memoryFilterParams({ kind: "all" }, 150, 300);
+
+    expect(params.get("limit")).toBe("150");
+    expect(params.get("offset")).toBe("300");
   });
 
   test("selects only active memories for bulk mutations", () => {
@@ -119,5 +129,51 @@ describe("memory browser state helpers", () => {
 
     expect(bulkSelectionState(items, new Set(["m-1"]), false).actionsDisabled).toBe(true);
     expect(bulkSelectionState([], new Set(), true).selectAllDisabled).toBe(true);
+  });
+
+  test("merges a fresh page by replacing the existing items", () => {
+    const existing = [{ id: "m-1" }, { id: "m-2" }];
+    const page = [{ id: "m-3" }];
+
+    expect(mergeMemoryPage(existing, page)).toEqual([{ id: "m-3" }]);
+  });
+
+  test("appends a page while deduplicating by id", () => {
+    const existing = [{ id: "m-1", content: "old" }, { id: "m-2" }];
+    const page = [{ id: "m-2", content: "refreshed" }, { id: "m-3" }];
+
+    expect(mergeMemoryPage(existing, page, { append: true })).toEqual([
+      { id: "m-1", content: "old" },
+      { id: "m-2", content: "refreshed" },
+      { id: "m-3" },
+    ]);
+  });
+});
+
+describe("saved memory filter presets", () => {
+  test("resolves a known preset by key", () => {
+    const preset = memoryPresetByKey("needs-review");
+
+    expect(preset).toMatchObject({ label: "Needs review", filters: { trust: "contaminated" } });
+  });
+
+  test("returns null for an unknown preset key", () => {
+    expect(memoryPresetByKey("not-a-real-preset")).toBeNull();
+  });
+
+  test("flags expiring-soon as a preset requiring client-side sorting", () => {
+    const preset = memoryPresetByKey("expiring-soon");
+
+    expect(preset.special).toBe("expiring-soon");
+  });
+
+  test("sorts items with a scheduled expiry ascending and drops items without one", () => {
+    const items = [
+      { id: "m-1", valid_until: "2026-08-01T00:00:00Z" },
+      { id: "m-2", valid_until: null },
+      { id: "m-3", valid_until: "2026-07-10T00:00:00Z" },
+    ];
+
+    expect(sortByExpiringSoon(items).map((item) => item.id)).toEqual(["m-3", "m-1"]);
   });
 });
