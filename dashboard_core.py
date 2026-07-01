@@ -1467,6 +1467,182 @@ class DashboardStore:
             "total": [sum(by_action[action][d] for action in actions) for d in day_keys],
         }
 
+    def _bounded_memory_rows(self, status: str = "all", limit: int = 10000) -> list[dict[str, Any]]:
+        return self.list_memories(kind="all", status=status, sort="recent", limit=max(1, min(int(limit or 10000), 10000)))
+
+    @staticmethod
+    def _memory_day(row: dict[str, Any]) -> str:
+        return str(row.get("timestamp") or row.get("created_at") or "")[:10]
+
+    def veracity_mix_series(self, days: int = 30) -> dict[str, Any]:
+        """Daily memory creations by current veracity label."""
+        days = max(1, min(int(days or 30), 180))
+        day_keys = self._day_keys(days)
+        labels = ["stated", "unknown", "inferred", "imported", "tool"]
+        by_veracity = {label: dict.fromkeys(day_keys, 0) for label in labels}
+        for row in self._bounded_memory_rows(status="all"):
+            day = self._memory_day(row)
+            label = str(row.get("veracity") or "unknown").lower()
+            if day in day_keys and label in by_veracity:
+                by_veracity[label][day] += 1
+        return {
+            "read_only": True,
+            "days": day_keys,
+            "by_veracity": {label: [counts[d] for d in day_keys] for label, counts in by_veracity.items()},
+        }
+
+    def source_breakdown_series(self, days: int = 30, limit: int = 6) -> dict[str, Any]:
+        """Daily memory creations for the top current sources in the selected window."""
+        days = max(1, min(int(days or 30), 180))
+        limit = max(3, min(int(limit or 6), 12))
+        day_keys = self._day_keys(days)
+        rows = [row for row in self._bounded_memory_rows(status="all") if self._memory_day(row) in day_keys]
+        top_sources = [source for source, _ in Counter(str(row.get("source") or "unknown") for row in rows).most_common(limit)]
+        if not top_sources:
+            top_sources = ["unknown"]
+        by_source = {source: dict.fromkeys(day_keys, 0) for source in top_sources}
+        other = dict.fromkeys(day_keys, 0)
+        for row in rows:
+            day = self._memory_day(row)
+            source = str(row.get("source") or "unknown")
+            if source in by_source:
+                by_source[source][day] += 1
+            else:
+                other[day] += 1
+        if any(other.values()):
+            by_source["Other"] = other
+        return {
+            "read_only": True,
+            "days": day_keys,
+            "sources": list(by_source),
+            "by_source": {source: [counts[d] for d in day_keys] for source, counts in by_source.items()},
+        }
+
+    def review_backlog_series(self, days: int = 30) -> dict[str, Any]:
+        """Cumulative current review backlog by day based on active memory timestamps."""
+        days = max(1, min(int(days or 30), 180))
+        day_keys = self._day_keys(days)
+        active = self._bounded_memory_rows(status="active")
+        categories = {
+            "needs_review": lambda row: str(row.get("veracity") or "unknown") in CONTAMINATED_VERACITIES,
+            "high_value": lambda row: str(row.get("veracity") or "unknown") in CONTAMINATED_VERACITIES and float(row.get("importance") or 0) >= 0.7,
+            "degraded": lambda row: bool(row.get("degraded_at")) or int(row.get("degradation_tier") or 1) >= 3,
+        }
+        by_queue = {key: [] for key in categories}
+        for day in day_keys:
+            for key, predicate in categories.items():
+                by_queue[key].append(sum(1 for row in active if self._memory_day(row) <= day and predicate(row)))
+        return {"read_only": True, "days": day_keys, "by_queue": by_queue}
+
+    def lifecycle_transition_series(self, days: int = 30) -> dict[str, Any]:
+        """Daily episodic lifecycle tier events using degraded_at when available."""
+        days = max(1, min(int(days or 30), 180))
+        day_keys = self._day_keys(days)
+        labels = ["hot", "warm", "cold"]
+        by_tier = {label: dict.fromkeys(day_keys, 0) for label in labels}
+        for row in self._bounded_memory_rows(status="all"):
+            if row.get("memory_kind") != "episodic":
+                continue
+            tier = int(row.get("degradation_tier") or 1)
+            label = DEGRADATION_LABELS.get(tier, "hot")
+            day = str(row.get("degraded_at") or row.get("timestamp") or row.get("created_at") or "")[:10]
+            if day in day_keys:
+                by_tier[label][day] += 1
+        return {
+            "read_only": True,
+            "days": day_keys,
+            "by_tier": {label: [counts[d] for d in day_keys] for label, counts in by_tier.items()},
+        }
+
+    def entity_domain_clusters(self, limit: int = 10) -> dict[str, Any]:
+        """Top domain and entity clusters using existing taxonomy and graph extraction helpers."""
+        limit = max(3, min(int(limit or 10), 30))
+        patterns = self.pattern_insights(limit=limit)
+        triples = self.triples(limit=500)
+        entity_terms: list[str] = []
+        for triple in triples:
+            entity_terms.extend(self._entity_terms(str(triple.get("subject") or ""), str(triple.get("object") or ""), limit=8))
+        entities = [{"label": label, "count": count, "query": label} for label, count in Counter(entity_terms).most_common(limit)]
+        return {
+            "read_only": True,
+            "domains": patterns.get("context_domains", [])[:limit],
+            "entities": entities,
+            "sources": patterns.get("origins", [])[:limit],
+        }
+
+    def session_activity_heatmap(self, days: int = 30) -> dict[str, Any]:
+        """Memory activity counts by weekday and hour for the selected window."""
+        days = max(1, min(int(days or 30), 180))
+        first_day = self._day_keys(days)[0]
+        matrix = [[0 for _ in range(24)] for _ in range(7)]
+        for row in self._bounded_memory_rows(status="all"):
+            timestamp = str(row.get("timestamp") or row.get("created_at") or "")
+            if timestamp[:10] < first_day:
+                continue
+            try:
+                dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            matrix[dt.weekday()][dt.hour] += 1
+        return {
+            "read_only": True,
+            "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+            "hours": list(range(24)),
+            "matrix": matrix,
+        }
+
+    def actionable_insight_cards(self) -> dict[str, Any]:
+        """Small decision-oriented summaries for the Insights tab."""
+        review = self.review_queues(limit=500)
+        queues = review.get("queues", {})
+        contaminated = queues.get("contaminated", {}).get("items", [])
+        high_value = queues.get("high_importance_contaminated", {}).get("items", [])
+        degraded = queues.get("degraded", {}).get("items", [])
+        patterns = self.pattern_insights(limit=5)
+        sessions = self.stats().get("by_session", [])[:1]
+        top_entity = (patterns.get("context_domains") or [{"label": "No dominant domain", "count": 0}])[0]
+        top_session = sessions[0] if sessions else {"session_id": "No active session cluster", "count": 0}
+        return {
+            "read_only": True,
+            "cards": [
+                {
+                    "key": "needs_review",
+                    "title": "Needs review now",
+                    "value": len(contaminated),
+                    "detail": "Active memories with inferred, tool, imported, or unknown trust.",
+                    "action": {"tab": "review", "queue": "contaminated"},
+                },
+                {
+                    "key": "high_value_at_risk",
+                    "title": "High-value memories at risk",
+                    "value": len(high_value),
+                    "detail": "Important memories that still need trust review.",
+                    "action": {"tab": "review", "queue": "high_importance_contaminated"},
+                },
+                {
+                    "key": "degraded",
+                    "title": "Cold or degraded memories",
+                    "value": len(degraded),
+                    "detail": "Lifecycle items that may need refresh or confirmation.",
+                    "action": {"tab": "review", "queue": "degraded"},
+                },
+                {
+                    "key": "top_domain",
+                    "title": "Most active domain",
+                    "value": top_entity.get("count", 0),
+                    "detail": str(top_entity.get("label") or "No dominant domain"),
+                    "action": {"tab": "memories", "q": top_entity.get("query") or top_entity.get("label") or ""},
+                },
+                {
+                    "key": "durable_session",
+                    "title": "Most durable session",
+                    "value": top_session.get("count", 0),
+                    "detail": str(top_session.get("session_id") or "No active session cluster"),
+                    "action": {"tab": "memories", "session_id": top_session.get("session_id") or ""},
+                },
+            ],
+        }
+
     def recall_distribution(self) -> list[dict[str, Any]]:
         """Bucketed recall_count histogram across active memories."""
         bucket_order = ["0", "1-2", "3-5", "6-10", "10+"]

@@ -226,7 +226,14 @@
     review: (params = {}) => `/api/review?${new URLSearchParams(params).toString()}`,
     memoryGrowth: (days = 30) => `/api/insights/memory-growth?${query({ days: String(days) })}`,
     auditActivity: (days = 30) => `/api/insights/audit-activity?${query({ days: String(days) })}`,
-    recallDistribution: () => "/api/insights/recall-distribution"
+    recallDistribution: () => "/api/insights/recall-distribution",
+    veracityMix: (days = 30) => `/api/insights/veracity-mix?${query({ days: String(days) })}`,
+    sourceBreakdown: (days = 30, limit = 6) => `/api/insights/source-breakdown?${query({ days: String(days), limit: String(limit) })}`,
+    reviewBacklog: (days = 30) => `/api/insights/review-backlog?${query({ days: String(days) })}`,
+    lifecycleTransitions: (days = 30) => `/api/insights/lifecycle-transitions?${query({ days: String(days) })}`,
+    entityClusters: (limit = 10) => `/api/insights/entity-clusters?${query({ limit: String(limit) })}`,
+    sessionHeatmap: (days = 30) => `/api/insights/session-heatmap?${query({ days: String(days) })}`,
+    actionCards: () => "/api/insights/action-cards"
   };
   var lowVolatilityTtlMs = {
     "/api/auth/status": 3e3,
@@ -824,6 +831,9 @@
     const xValues = days.map(isoDayToUnixSeconds);
     return [xValues, series?.working || days.map(() => 0), series?.episodic || days.map(() => 0)];
   }
+  function zeroes(days) {
+    return days.map(() => 0);
+  }
   var AUDIT_ACTION_ORDER = ["invalidate", "veracity", "expiry", "importance", "supersede"];
   var AUDIT_ACTION_LABELS = {
     invalidate: "Expired",
@@ -836,7 +846,43 @@
     const days = series?.days || [];
     const xValues = days.map(isoDayToUnixSeconds);
     const byAction = series?.by_action || {};
-    return [xValues, ...AUDIT_ACTION_ORDER.map((action) => byAction[action] || days.map(() => 0))];
+    return [xValues, ...AUDIT_ACTION_ORDER.map((action) => byAction[action] || zeroes(days))];
+  }
+  var VERACITY_ORDER = ["stated", "unknown", "inferred", "imported", "tool"];
+  var VERACITY_LABELS = {
+    stated: "Stated",
+    unknown: "Unknown",
+    inferred: "Inferred",
+    imported: "Imported",
+    tool: "Tool"
+  };
+  function buildVeracityMixChartData(series) {
+    const days = series?.days || [];
+    const xValues = days.map(isoDayToUnixSeconds);
+    const byVeracity = series?.by_veracity || {};
+    return [xValues, ...VERACITY_ORDER.map((label) => byVeracity[label] || zeroes(days))];
+  }
+  function buildNamedSeriesChartData(series, namesKey, valuesKey) {
+    const days = series?.days || [];
+    const xValues = days.map(isoDayToUnixSeconds);
+    const names = series?.[namesKey] || Object.keys(series?.[valuesKey] || {});
+    const values = series?.[valuesKey] || {};
+    return { names, data: [xValues, ...names.map((name) => values[name] || zeroes(days))] };
+  }
+  function buildReviewBacklogChartData(series) {
+    const days = series?.days || [];
+    const xValues = days.map(isoDayToUnixSeconds);
+    const order = ["needs_review", "high_value", "degraded"];
+    const labels = ["Needs review", "High value", "Degraded"];
+    const values = series?.by_queue || {};
+    return { labels, data: [xValues, ...order.map((name) => values[name] || zeroes(days))] };
+  }
+  function buildLifecycleTransitionChartData(series) {
+    const days = series?.days || [];
+    const xValues = days.map(isoDayToUnixSeconds);
+    const labels = ["hot", "warm", "cold"];
+    const values = series?.by_tier || {};
+    return { labels: ["Hot", "Warm", "Cold"], data: [xValues, ...labels.map((name) => values[name] || zeroes(days))] };
   }
   function recallDistributionBars(items = []) {
     const counts = items.map((item) => Number(item.count || 0));
@@ -849,6 +895,30 @@
         percent: count ? Math.max(4, Math.round(count / max * 100)) : 0
       };
     });
+  }
+  function rankedBars(items = [], labelKey = "label") {
+    const counts = items.map((item) => Number(item.count || 0));
+    const max = Math.max(1, ...counts);
+    return items.map((item) => {
+      const count = Number(item.count || 0);
+      return {
+        label: item[labelKey] || item.label || "unknown",
+        query: item.query || item[labelKey] || item.label || "",
+        count,
+        percent: count ? Math.max(4, Math.round(count / max * 100)) : 0
+      };
+    });
+  }
+  function heatmapCells(payload = {}) {
+    const matrix = payload.matrix || [];
+    const max = Math.max(1, ...matrix.flat().map((value) => Number(value || 0)));
+    return (payload.weekdays || []).map((day, rowIndex) => ({
+      day,
+      cells: (payload.hours || []).map((hour, colIndex) => {
+        const count = Number(matrix[rowIndex]?.[colIndex] || 0);
+        return { hour, count, intensity: count ? Math.max(0.12, count / max) : 0 };
+      })
+    }));
   }
 
   // static/src/features/charts.js
@@ -907,11 +977,23 @@
   function createChartsFeature({ $: $2, api: api2, switchTab: switchTab2, loadMemories: loadMemories2 }) {
     let growthChart = null;
     let auditChart = null;
+    let veracityChart = null;
+    let sourceChart = null;
+    let reviewBacklogChart = null;
+    let lifecycleChart = null;
     function disposeInsightsCharts2() {
       growthChart?.destroy();
       auditChart?.destroy();
+      veracityChart?.destroy();
+      sourceChart?.destroy();
+      reviewBacklogChart?.destroy();
+      lifecycleChart?.destroy();
       growthChart = null;
       auditChart = null;
+      veracityChart = null;
+      sourceChart = null;
+      reviewBacklogChart = null;
+      lifecycleChart = null;
     }
     function baseChartOptions(viewport, series) {
       const axisColor = resolveCssVar("--text-muted");
@@ -975,6 +1057,84 @@
         viewport
       );
     }
+    async function renderMultiSeriesChart({ viewportId, labels, data, colors, currentChart, assignChart }) {
+      const viewport = $2(`#${viewportId}`);
+      if (!viewport) return;
+      const { default: uPlot } = await loadUplotModule();
+      const series = [
+        {},
+        ...labels.map((label, i) => ({
+          label,
+          stroke: colors[i % colors.length],
+          width: 2,
+          fill: labels.length <= 4 ? withAlpha(colors[i % colors.length], "1c") : void 0
+        }))
+      ];
+      currentChart?.destroy();
+      viewport.innerHTML = "";
+      assignChart(new uPlot(
+        { ...baseChartOptions(viewport, series), plugins: [chartTooltipPlugin(labels, colors)] },
+        data,
+        viewport
+      ));
+    }
+    function chartColors(count) {
+      const vars = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-6"];
+      return Array.from({ length: count }, (_, i) => resolveCssVar(vars[i % vars.length]));
+    }
+    async function renderVeracityChart(seriesData) {
+      const data = buildVeracityMixChartData(seriesData);
+      const labels = VERACITY_ORDER.map((name) => VERACITY_LABELS[name]);
+      await renderMultiSeriesChart({
+        viewportId: "veracityChartViewport",
+        labels,
+        data,
+        colors: chartColors(labels.length),
+        currentChart: veracityChart,
+        assignChart: (chart) => {
+          veracityChart = chart;
+        }
+      });
+    }
+    async function renderSourceChart(seriesData) {
+      const { names, data } = buildNamedSeriesChartData(seriesData, "sources", "by_source");
+      await renderMultiSeriesChart({
+        viewportId: "sourceChartViewport",
+        labels: names,
+        data,
+        colors: chartColors(names.length),
+        currentChart: sourceChart,
+        assignChart: (chart) => {
+          sourceChart = chart;
+        }
+      });
+    }
+    async function renderReviewBacklogChart(seriesData) {
+      const { labels, data } = buildReviewBacklogChartData(seriesData);
+      await renderMultiSeriesChart({
+        viewportId: "reviewBacklogChartViewport",
+        labels,
+        data,
+        colors: chartColors(labels.length),
+        currentChart: reviewBacklogChart,
+        assignChart: (chart) => {
+          reviewBacklogChart = chart;
+        }
+      });
+    }
+    async function renderLifecycleChart(seriesData) {
+      const { labels, data } = buildLifecycleTransitionChartData(seriesData);
+      await renderMultiSeriesChart({
+        viewportId: "lifecycleChartViewport",
+        labels,
+        data,
+        colors: chartColors(labels.length),
+        currentChart: lifecycleChart,
+        assignChart: (chart) => {
+          lifecycleChart = chart;
+        }
+      });
+    }
     function renderRecallDistribution(items) {
       const el = $2("#recallDistribution");
       if (!el) return;
@@ -996,26 +1156,123 @@
         };
       });
     }
+    function renderBars(el, items, emptyText, onClick) {
+      if (!el) return;
+      const bars = rankedBars(items);
+      if (!bars.some((bar) => bar.count > 0)) {
+        el.innerHTML = `<span class="muted">${esc(emptyText)}</span>`;
+        return;
+      }
+      el.innerHTML = bars.map(
+        (bar) => `<button class="pattern-bar" data-query="${esc(bar.query)}"><span class="pattern-bar-fill" style="width:${bar.percent}%"></span><span class="pattern-bar-label">${esc(bar.label)}</span><strong>${bar.count.toLocaleString()}</strong></button>`
+      ).join("");
+      el.querySelectorAll(".pattern-bar").forEach((btn) => {
+        btn.onclick = () => onClick(btn.dataset.query || "");
+      });
+    }
+    function renderClusters(payload) {
+      const jumpToMemories = (query2) => {
+        switchTab2("memories");
+        $2("#memoryStatus").value = "active";
+        $2("#memoryQuery").value = query2 || "";
+        loadMemories2();
+      };
+      renderBars($2("#domainClusters"), payload?.domains || [], "No domain clusters detected yet.", jumpToMemories);
+      renderBars($2("#entityClusters"), payload?.entities || [], "No entity clusters detected yet.", jumpToMemories);
+    }
+    function renderSessionHeatmap(payload) {
+      const el = $2("#sessionHeatmap");
+      if (!el) return;
+      const rows = heatmapCells(payload);
+      if (!rows.length || !rows.some((row) => row.cells.some((cell) => cell.count > 0))) {
+        el.innerHTML = '<span class="muted">No recent session activity found.</span>';
+        return;
+      }
+      el.innerHTML = `
+      <div class="heatmap-hours">${(payload.hours || []).map((hour) => `<span>${hour % 6 === 0 ? hour : ""}</span>`).join("")}</div>
+      ${rows.map((row) => `
+        <div class="heatmap-row">
+          <strong>${esc(row.day)}</strong>
+          <div class="heatmap-cells">${row.cells.map((cell) => `<span class="heat-cell" title="${esc(row.day)} ${cell.hour}:00 · ${cell.count} memories" style="--heat:${cell.intensity}"></span>`).join("")}</div>
+        </div>
+      `).join("")}
+    `;
+    }
+    function renderActionCards(payload) {
+      const el = $2("#insightCards");
+      if (!el) return;
+      const cards = payload?.cards || [];
+      if (!cards.length) {
+        el.innerHTML = '<span class="muted">No insight cards available yet.</span>';
+        return;
+      }
+      el.innerHTML = cards.map((card) => `
+      <button class="insight-action-card" data-tab="${esc(card.action?.tab || "")}" data-queue="${esc(card.action?.queue || "")}" data-query="${esc(card.action?.q || "")}" data-session="${esc(card.action?.session_id || "")}">
+        <span>${esc(card.title || "Insight")}</span>
+        <strong>${Number(card.value || 0).toLocaleString()}</strong>
+        <em>${esc(card.detail || "")}</em>
+      </button>
+    `).join("");
+      el.querySelectorAll(".insight-action-card").forEach((card) => {
+        card.onclick = () => {
+          if (card.dataset.tab === "review") {
+            switchTab2("review");
+            const select = $2("#reviewQueueSelect");
+            if (select && card.dataset.queue) select.value = card.dataset.queue;
+            return;
+          }
+          switchTab2("memories");
+          $2("#memoryStatus").value = "active";
+          if (card.dataset.query) $2("#memoryQuery").value = card.dataset.query;
+          if (card.dataset.session) $2("#memorySession").value = card.dataset.session;
+          loadMemories2();
+        };
+      });
+    }
     async function loadInsights2() {
       const days = Number($2("#insightsDays")?.value || 30);
-      const growthViewport = $2("#growthChartViewport");
-      const auditViewport = $2("#auditChartViewport");
-      if (growthViewport) growthViewport.innerHTML = loadingCardHtml("Loading chart…", "Fetching memory growth history.");
-      if (auditViewport) auditViewport.innerHTML = loadingCardHtml("Loading chart…", "Fetching admin activity history.");
+      const loadingTargets = [
+        ["growthChartViewport", "Fetching memory growth history."],
+        ["auditChartViewport", "Fetching admin activity history."],
+        ["veracityChartViewport", "Fetching trust mix history."],
+        ["sourceChartViewport", "Fetching source breakdown history."],
+        ["reviewBacklogChartViewport", "Fetching review backlog history."],
+        ["lifecycleChartViewport", "Fetching lifecycle events."]
+      ];
+      loadingTargets.forEach(([id, detail]) => {
+        const el = $2(`#${id}`);
+        if (el) el.innerHTML = loadingCardHtml("Loading chart…", detail);
+      });
       try {
-        const [growth, audit, recall] = await Promise.all([
+        const [growth, audit, recall, veracity, sources, reviewBacklog, lifecycle, clusters, heatmap, actionCards] = await Promise.all([
           api2(endpoints.memoryGrowth(days), { requestKey: "insights-growth" }),
           api2(endpoints.auditActivity(days), { requestKey: "insights-audit" }),
-          api2(endpoints.recallDistribution(), { requestKey: "insights-recall" })
+          api2(endpoints.recallDistribution(), { requestKey: "insights-recall" }),
+          api2(endpoints.veracityMix(days), { requestKey: "insights-veracity" }),
+          api2(endpoints.sourceBreakdown(days), { requestKey: "insights-sources" }),
+          api2(endpoints.reviewBacklog(days), { requestKey: "insights-review-backlog" }),
+          api2(endpoints.lifecycleTransitions(days), { requestKey: "insights-lifecycle" }),
+          api2(endpoints.entityClusters(10), { requestKey: "insights-clusters" }),
+          api2(endpoints.sessionHeatmap(days), { requestKey: "insights-heatmap" }),
+          api2(endpoints.actionCards(), { requestKey: "insights-cards" })
         ]);
         await renderGrowthChart(growth);
         await renderAuditChart(audit);
+        await renderVeracityChart(veracity);
+        await renderSourceChart(sources);
+        await renderReviewBacklogChart(reviewBacklog);
+        await renderLifecycleChart(lifecycle);
         renderRecallDistribution(recall.items || []);
+        renderClusters(clusters);
+        renderSessionHeatmap(heatmap);
+        renderActionCards(actionCards);
       } catch (e) {
         if (isCancelledRequest(e)) return;
         const message = e?.message || "Try again.";
-        if (growthViewport) growthViewport.innerHTML = fallbackCardHtml("Could not load chart", message);
-        if (auditViewport) auditViewport.innerHTML = fallbackCardHtml("Could not load chart", message);
+        loadingTargets.forEach(([id]) => {
+          const el = $2(`#${id}`);
+          if (el) el.innerHTML = fallbackCardHtml("Could not load chart", message);
+        });
       }
     }
     function resizeInsightsCharts() {
@@ -1027,6 +1284,14 @@
       if (auditChart && auditViewport) {
         auditChart.setSize({ width: auditViewport.clientWidth || 600, height: auditViewport.clientHeight || CHART_HEIGHT_FALLBACK });
       }
+      [
+        [veracityChart, $2("#veracityChartViewport")],
+        [sourceChart, $2("#sourceChartViewport")],
+        [reviewBacklogChart, $2("#reviewBacklogChartViewport")],
+        [lifecycleChart, $2("#lifecycleChartViewport")]
+      ].forEach(([chart, viewport]) => {
+        if (chart && viewport) chart.setSize({ width: viewport.clientWidth || 600, height: viewport.clientHeight || CHART_HEIGHT_FALLBACK });
+      });
     }
     window.addEventListener("resize", resizeInsightsCharts, { passive: true });
     return { loadInsights: loadInsights2, disposeInsightsCharts: disposeInsightsCharts2 };

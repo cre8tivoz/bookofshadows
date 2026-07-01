@@ -56,6 +56,17 @@ npm run build:frontend
 
 Large controller functions such as `switchTab()`, `applyRoute()`, feature loaders, drawer actions, and visualiser lifecycle remain in `static/src/app-main.js` for now. They should move only after dependencies are explicit and covered by tests. The visualiser code is the main remaining extraction target because it combines canvas, Three.js, and memory-palace state.
 
+## Future Extraction Targets
+
+The current architecture is intentionally transitional rather than a full rewrite. The next useful extraction passes are:
+
+- visualiser controllers: canvas constellation/neural map, 3D Visualiser, and Memory Palace;
+- auth/settings controller: login, config save, diagnostics, backup actions;
+- review controller: queue loading, pagination, and bulk review mutation flows;
+- detail drawer controller: memory/session drawer state, focus lifecycle, and deep-link restoration.
+
+Review queue pagination is a known smaller follow-up: it currently deduplicates accumulated items but still re-renders the full review queue on "Load more", while the memory browser appends only new cards.
+
 ## Test Strategy
 
 Frontend unit tests live in `tests/frontend/` and run with Vitest + happy-dom:
@@ -150,3 +161,12 @@ Phase 9 adds a real Insights tab, backed by three new read-only aggregation endp
 - **The vendored file ships no CSS.** The npm package bundles a companion `uPlot.min.css` that the JS assumes is present (e.g. it sets exact pixel dimensions on `.u-wrap` and devicePixelRatio-scaled `width`/`height` attributes on the `<canvas>`, but relies entirely on external CSS for `.u-wrap{position:relative}`, `canvas{width:100%;height:100%}`, and legend/cursor/axis layout). Without that CSS, a chart renders at its raw devicePixelRatio-scaled pixel size instead of its intended CSS size — e.g. 612×520 instead of 306×260 on a 2x display — and overflows its container. `static/style.css`'s `/* INSIGHTS / CHARTS */` section ports the relevant subset of upstream `uPlot.min.css`, scoped under `.chart-viewport`, with the app's own `--chart-1`..`--chart-6`/`--chart-grid`/`--chart-axis`/`--text-muted` variables layered on top so charts follow the active theme.
 - `features/charts.js`'s `createChartsFeature({ $, api, switchTab, loadMemories })` owns the Insights tab: lazy-loads uPlot, builds the two line/area chart instances (memory growth, audit activity) with a custom tooltip plugin (`hooks.init`/`hooks.setCursor`) that shows exact per-day values on hover, renders the recall-frequency distribution via the existing `.pattern-bar` CSS pattern (no uPlot needed there), and wires click-to-filter (a recall bucket click jumps to Memories filtered by `sort=recall`). `switchTab()` calls `disposeInsightsCharts()` when leaving the Insights section, mirroring the existing Three.js/Memory Palace disposal pattern.
 - Reused the Phase 9 work to make the existing Overview breakdown rows (`ui/render.js`'s `breakdown()`) show a proportional background-fill bar — each row's width is its share of that panel's total, with a small minimum so non-zero small entries stay visible. Pure frontend change; no new endpoint.
+
+## Release Package Docs
+
+Phase 10 keeps release-facing docs separate from architecture internals:
+
+- `docs/SETUP.md`: install, standalone run, environment overrides, and development commands.
+- `docs/ACCESSIBILITY.md`: current accessibility support, known limitations, and manual release checks.
+- `docs/DEMO_DATA.md`: fictional mock database/audit-log generation and screenshot safety rules.
+- `docs/RELEASE_CHECKLIST.md`: pre-release build, test, screenshot, safety, and git hygiene checklist.

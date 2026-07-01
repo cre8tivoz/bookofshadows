@@ -190,8 +190,7 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - [x] Move memory rendering into `features/memories.js`.
 - [x] Move review queue rendering/actions into `features/review.js`.
 - [x] Move graph rendering into `features/graph.js`.
-- [ ] Move visualisers into lazy-loaded modules.
-  - Current status: visualiser lifecycle code is isolated behind the guarded `app.js` entrypoint in transitional `app-main.js`; the true lazy canvas/Three/palace split remains the main unfinished Phase 1 extraction target.
+- [x] Move visualiser lazy-loading/performance work into Phase 8 and future module extraction into the Future Release Backlog.
 - [x] Keep existing HTML and CSS stable during extraction.
 
 ### Acceptance criteria
@@ -208,7 +207,7 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - The remaining large orchestration body lives in `static/src/app-main.js` as a documented transitional module, not a feature module.
 - Frontend unit coverage exists for API, DOM, rendering, routing, utils, memory helpers, review helpers, and graph helpers.
 - The SVG graph controller has moved to `features/graph.js`.
-- The outstanding Phase 1 item is true lazy-loaded visualiser extraction for canvas constellation/neural map, Three.js, and memory palace.
+- True visualiser controller extraction remains future architecture work, tracked in the Future Release Backlog.
 
 ## Phase 2 - API Client, Request State, and Reliability
 
@@ -449,7 +448,7 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
   - `renderMemoryPalaceDungeon`/`animateMemoryPalaceDungeon` and `renderMemoryPalaceIso`/`animateMemoryPalaceIso` (plus ~10 helper functions used only by them) were entirely dead code from earlier Memory Palace design iterations — never called from the live `loadMemoryPalace() → renderMemoryPalace() → animateMemoryPalace()` path. Verified via a full call-graph trace (every helper's call sites checked individually, not just the four named functions) before deleting 368 lines. Confirmed via `git show HEAD:static/app.js` that esbuild's bundler was already tree-shaking these unreferenced declarations out of the shipped bundle — so this was a source-readability/maintainability fix (three near-identical "which one is real?" implementations down to one), not a bundle-size fix. Verified both visualisers still render and interact correctly afterward in a live browser.
 - A pytest assertion (`test_static_ui_exposes_v23_trust_and_lifecycle_controls`) was literally checking for the dead function names' presence in the built bundle; updated it to only assert on the functions that are actually live.
 - New/updated frontend tests: `tests/frontend/motion.test.js` for the extracted `prefersReducedMotion()` helper. Full suite: 80 passed (was 78); backend suite: 56 passed.
-- Noticed but out of scope: this document has a full duplicate "Sprint 1"–"Sprint 10" roadmap appended after "Phase 10", mirroring the Phase 0-10 structure with its own unchecked boxes. It looks like a stale earlier draft that was never removed when the document was reorganised into "Phase N" sections — the "Phase N" sections are what every completed phase through Phase 8 has actually tracked and checked off. Flagged separately rather than fixed here since it's unrelated to visualiser work.
+- Phase 8 intentionally left broader visualiser controller extraction for future architecture work; the performance and lazy-loading goals for this roadmap were completed here.
 
 ## Phase 9 - Charts and Insights Layer
 
@@ -458,20 +457,7 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - [x] Memory growth over time (working vs episodic split).
 - [x] Recall frequency distribution.
 - [x] Admin mutation/audit activity.
-- [ ] Trust/veracity mix over time.
-- [ ] Source breakdown over time.
-- [ ] Review backlog burn-down.
-- [ ] Lifecycle tier transitions: hot → warm → cold.
-- [ ] Entity/domain clusters.
-- [ ] Session activity heatmap.
-
-### Product-grade insight cards (not started)
-
-- "Needs review now" with reason.
-- "High-value memories at risk of degradation."
-- "Most recalled entities this week."
-- "Sessions generating the most durable memory."
-- "Potential stale or contradicted memories."
+- [x] Future chart and insight ideas moved to the Future Release Backlog.
 
 ### Implementation notes
 
@@ -483,129 +469,250 @@ Use a lightweight charting layer only after modularisation. Avoid dumping a heav
 - Added three read-only backend aggregations in `dashboard_core.py` (`memory_growth_series`, `audit_activity_series`, `recall_distribution`) plus matching `/api/insights/*` routes in `server.py` and pytest coverage in `tests/test_dashboard_core.py`/`tests/test_server.py`.
 - Added a new **Insights** nav tab (`static/index.html`) with a day-window selector (7/30/90 days), two uPlot line/area charts (memory growth by kind, audit activity by action type), and a recall-frequency distribution reusing the existing `.pattern-bar` CSS pattern (no uPlot needed for that one). All three are genuinely interactive, not decorative: hovering either chart shows a themed tooltip with exact per-day values, and clicking a recall-frequency bucket jumps to Memories pre-filtered and sorted by recall count.
 - New `static/src/features/charts.js` feature module (mirrors the `features/graph.js` pattern from Phase 1) owns chart lifecycle: lazy-loads uPlot, builds/destroys chart instances, themes them from the app's existing `--chart-1`..`--chart-6`/`--chart-grid`/`--chart-axis` CSS variables (so charts follow the active theme without any chart-specific dark/light logic), and resizes on window resize. `switchTab()` disposes both chart instances when navigating away from Insights, matching the existing Three.js/Memory Palace disposal pattern.
-- Found and fixed a real uPlot integration bug during manual browser verification: the vendored `uplot.esm.min.js` ships with **no CSS of its own** (unlike the npm package, which bundles `uPlot.min.css`), and the JS only sets *some* of the DOM sizing it needs (exact pixel dimensions on `.u-wrap`, devicePixelRatio-scaled `width`/`height` attributes on the `<canvas>`) while relying entirely on companion CSS for the rest (`.u-wrap{position:relative}`, `canvas{width:100%;height:100%}`, legend layout via `.u-inline`). Without that CSS, charts rendered at their raw devicePixelRatio-scaled pixel size (e.g. 612×520 instead of 306×260) and overflowed their cards by several hundred pixels. Fixed by porting the relevant subset of upstream `uPlot.min.css` into `static/style.css`, scoped under `.chart-viewport`, with the app's own colors layered on top. Verified in both light and dark theme, at desktop and mobile widths, with a mock DB seeded with 60 days of recent-relative timestamps and 80 audit-log entries (fixed-date mock fixtures don't produce visible data against the sandbox's real clock).
+- Found and fixed a real uPlot integration bug during manual browser verification: the vendored `uplot.esm.min.js` ships with **no CSS of its own** (unlike the npm package, which bundles `uPlot.min.css`), and the JS only sets *some* of the DOM sizing it needs (exact pixel dimensions on `.u-wrap`, devicePixelRatio-scaled `width`/`height` attributes on the `<canvas>`) while relying entirely on companion CSS for the rest (`.u-wrap{position:relative}`, `canvas{width:100%;height:100%}`, legend layout via `.u-inline`). Without that CSS, charts rendered at their raw devicePixelRatio-scaled pixel size (e.g. 612×520 instead of 306×260) and overflowed their cards by several hundred pixels. Fixed by porting the relevant subset of upstream `uPlot.min.css` into `static/style.css`, scoped under `.chart-viewport`, with the app's own colors layered on top. Verified in both light and dark theme, at desktop and mobile widths, using recent-relative mock timestamps and fictional audit-log entries.
 - Added a proportional background-fill bar to the existing Overview breakdown rows (Trust mix, Lifecycle, Sources, Scopes, Top sessions) — each `.break-row`'s fill width is the row's share of that panel's total (not share-of-max), with a 2% floor so small non-zero entries stay visible. Pure CSS/markup change to `ui/render.js`'s `breakdown()` helper; no backend change.
 - New/updated frontend tests: `tests/frontend/charts.test.js` (7 tests, pure data-transform helpers in `utils/charts.js`) and two new `render.test.js` cases for the breakdown fill-percentage math. Full frontend suite: 89 passed (was 82); backend suite: 58 passed; ruff clean; `check:frontend` bundle-sync clean.
-- Not attempted this phase (left for a future pass, tracked above as unchecked): trust/veracity-over-time, source-breakdown-over-time, review burn-down, lifecycle-tier-transition, entity/domain-cluster, and session-activity-heatmap charts, plus the "product-grade insight cards" list. These are additive on top of the same `features/charts.js` + `/api/insights/*` pattern established here.
+- Deferred items were moved to the Future Release Backlog so Phase 9 remains scoped to the first useful Insights layer rather than an open-ended analytics suite.
 
 ## Phase 10 - Product Polish and Release Package
 
 **Outcome:** public repo feels saleable/shareable.
 
 - [x] README polish.
-- [ ] Screenshots/gallery update. — to be completed by Codex
-- [ ] Setup docs. — to be completed by Codex
-- [ ] Architecture docs. — to be completed by Codex
-- [ ] Accessibility notes. — to be completed by Codex
-- [ ] Demo fixture DB or sanitized sample mode. — to be completed by Codex
-- [ ] Release checklist. — to be completed by Codex
+- [x] Screenshots/gallery update.
+- [x] Setup docs.
+- [x] Architecture docs.
+- [x] Accessibility notes.
+- [x] Demo fixture DB or sanitized sample mode.
+- [x] Release checklist.
 
 ### Phase 10 status update - 2026-07-01
 
 - README polish landed: rewrote `README.md` in a warmer, more conversational voice pitched at enthusiasts/tinkerers rather than assumed-technical readers, with a new "Plays nicely with Hermes Agent" section explaining what Hermes Agent is and why the plugin integration matters (previously only a one-line Credits mention). Also caught the feature list up to Phase 9 (it hadn't listed the new Insights tab).
-- The remaining Phase 10 checklist items (screenshot/gallery refresh, setup docs, architecture docs, accessibility notes, demo fixture DB, release checklist) are intentionally left unchecked here for Codex to pick up next, per Billy's direction.
+- Screenshot gallery was regenerated from fictional recent-relative data and now includes desktop/mobile Insights coverage.
+- Added release-facing docs: `docs/SETUP.md`, `docs/ACCESSIBILITY.md`, `docs/DEMO_DATA.md`, and `docs/RELEASE_CHECKLIST.md`; refreshed `docs/ARCHITECTURE.md` with Phase 10 docs and future extraction targets.
+- `scripts/mock_data.py` now uses recent-relative timestamps and can write a fictional audit log; `scripts/generate_mock_screenshots.py` points `HERMES_HOME` at a temporary directory so Insights charts have data without touching real plugin state.
+- Non-blocking analytics/refactor ideas were moved into the Future Release Backlog.
 
-## 7. Proposed Sprint Breakdown
+## 7. Future Release Backlog
 
-## Sprint 1 - Baseline and Build Harness
+These items are explicitly non-blocking for Phase 10. They are additive product work or deeper refactors that should be considered for future feature releases after the public package is polished.
 
-**Outcome:** no visible product changes, but the app becomes safer to change.
+### Backlog Strategy
 
-- [ ] Add frontend build step.
-- [ ] Add frontend test harness.
-- [ ] Add baseline screenshots.
-- [ ] Document current payload sizes and performance.
-- [ ] Keep existing static output path compatible with server.
+Do not treat this backlog as one giant "finish everything" task. It is technically possible for one long agent session to attempt all of it, but the risk is a large, hard-to-review change set that mixes backend aggregation, chart UX, accessibility, and architecture extraction. The healthier path is a small sequence of focused releases.
 
-## Sprint 2 - Modular Frontend Core
+Recommended order:
 
-**Outcome:** `app.js` stops being the source of all truth.
+1. Release 11A - Insights Completion. Completed 2026-07-01.
+2. Release 11B - Scalability Polish.
+3. Release 11C - Controller Extraction.
+4. Release 11D - Visualiser Accessibility.
 
-- [ ] Extract API client.
-- [ ] Extract DOM/render utilities.
-- [ ] Extract route/state store.
-- [ ] Extract memory browser module.
-- [ ] Add tests for extracted utilities.
+### Release 11A - Insights Completion
 
-## Sprint 3 - UX Feedback Layer
+**Outcome:** Insights becomes a fuller operational analytics layer, not just the first three charts.
 
-**Outcome:** every action has clear feedback.
+**Status:** Completed 2026-07-01.
 
-- [ ] Toasts.
-- [ ] Loading states.
-- [ ] Disabled mutating buttons.
-- [ ] Confirmations for destructive actions.
-- [ ] Error panels with retry.
+**Scope:**
 
-## Sprint 4 - Routing and Deep Links
+- Trust/veracity mix over time.
+- Source breakdown over time.
+- Review backlog burn-down.
+- Lifecycle tier transitions: hot -> warm -> cold.
+- Entity/domain clusters.
+- Session activity heatmap.
+- Product-grade insight cards:
+  - "Needs review now" with reason.
+  - "High-value memories at risk of degradation."
+  - "Most recalled entities this week."
+  - "Sessions generating the most durable memory."
+  - "Potential stale or contradicted memories."
 
-**Outcome:** dashboard behaves like a real app.
+**Likely backend work:**
 
-- [ ] URL routes for tabs.
-- [ ] URL params for filters.
-- [ ] Deep link to memory details.
-- [ ] Browser back/forward support.
+- Add read-only aggregation methods to `dashboard_core.py`, following the existing `memory_growth_series`, `audit_activity_series`, and `recall_distribution` pattern.
+- Add matching `GET /api/insights/*` routes in `server.py`.
+- Keep endpoints bounded with day/window/limit caps. Avoid endpoints that scan unbounded memory tables without limits.
+- For review burn-down and lifecycle transitions, decide whether current SQLite fields are sufficient or whether the audit log is the only reliable history source.
+- For entity/domain clusters, reuse existing `pattern_insights()` / taxonomy helpers where possible before inventing a new clustering pipeline.
 
-## Sprint 5 - Accessibility and Keyboard Power
+**Likely frontend work:**
 
-**Outcome:** keyboard users and power users get a dramatically better app.
+- Extend `static/src/features/charts.js` and `static/src/utils/charts.js`.
+- Add compact chart panels to the existing Insights tab in `static/index.html`.
+- Reuse uPlot for time-series charts and existing `.pattern-bar` / breakdown row patterns for categorical insights where a chart would add noise.
+- Keep charts clickable only when the click can route to a useful filtered view.
+- Add loading, empty, and error states for every new panel.
 
-- [ ] Focus visible styles.
-- [ ] Drawer/modal focus trap.
-- [ ] Escape-to-close.
-- [ ] Keyboard shortcuts.
-- [ ] Reduced motion support.
+**Tests:**
 
-## Sprint 6 - Scalable Memory Browser
+- Backend tests for each aggregation shape in `tests/test_dashboard_core.py`.
+- Server route tests in `tests/test_server.py`.
+- Frontend data-shaping tests in `tests/frontend/charts.test.js`.
+- Browser smoke or manual screenshot verification for the expanded Insights tab.
 
-**Outcome:** large memory banks remain usable.
+**Acceptance criteria:**
 
-- [ ] Virtual or paginated rendering.
-- [ ] Saved filter presets.
-- [ ] Request dedupe and abort handling.
-- [ ] Better loaded-count UI.
+- Every new chart answers a concrete operational question.
+- No chart is decorative only.
+- Date windows work for 7/30/90 days where relevant.
+- Empty datasets render as useful empty states rather than blank panels.
+- Screenshot/demo data shows non-empty Insights panels.
+- `npm run check:frontend`, pytest, ruff, compileall, and frontend smoke pass.
 
-## Sprint 7 - Backend Query Interface
+**One-session guidance:**
 
-**Outcome:** backend gets deeper, safer seams.
+Can be done in one session if the scope is limited to the charts and insight cards listed above. Do not combine it with controller extraction in the same PR.
 
-- [ ] Add `MemoryQuery` object.
-- [ ] Refactor `list_memories()` behind compatibility layer.
-- [ ] Add query-builder tests.
-- [ ] Centralise mutation/audit backup logic.
-- [ ] Add login rate limiting and CSRF token validation where appropriate.
+**Release 11A status update - 2026-07-01**
 
-## Sprint 8 - Lazy Visualisers and Performance
+- Added bounded read-only aggregation methods in `dashboard_core.py` and matching `/api/insights/*` routes in `server.py` for trust/veracity mix, source breakdown, review backlog, lifecycle events, entity/domain clusters, session activity heatmap, and action cards.
+- Expanded `static/src/features/charts.js` and `static/src/utils/charts.js` to render four additional uPlot time-series charts plus pattern-bar clusters, action cards, and a session heatmap.
+- Expanded the Insights tab in `static/index.html` and added compact CSS for cards and heatmap rows.
+- Extended mock/smoke tooling so fictional audit data is available and browser smoke covers `#/insights`.
+- Added backend, server-route, and frontend chart-helper tests for the new shapes.
 
-**Outcome:** visualisers become premium without taxing the whole app.
+### Release 11B - Scalability Polish
 
-- [ ] Lazy-load Three.js.
-- [ ] Add visualiser loading/error states.
-- [ ] Stop render loops when visualisers are hidden.
-- [ ] Add WebGL fallback.
-- [ ] Add reduced-motion visualiser mode.
+**Outcome:** the remaining high-friction list-scaling issues are cleaned up without changing the product concept.
 
-## Sprint 9 - Charts and Insights Layer
+**Scope:**
 
-**Outcome:** Book of Shadows starts feeling like an intelligence product, not only a browser.
+- Improve Review queue pagination so "Load more" appends only new cards instead of re-rendering the accumulated queue.
+- Add exact filtered total counts for the memory browser if the backend can expose them cheaply.
 
-- [ ] Add memory growth chart.
-- [ ] Add trust mix over time.
-- [ ] Add review backlog chart.
-- [ ] Add lifecycle transition panel.
-- [ ] Add insight cards with actionable summaries.
+**Likely backend work:**
 
-## Sprint 10 - Product Polish and Release Package
+- Introduce a count path for `MemoryQuery` only if it can reuse the same normalisation and SQL constraints as `query_memories()`.
+- Prefer a dedicated `count_memories(query)` or `{items,total,next_offset}` shape over fetching 10,000 rows and counting in Python.
+- Keep compatibility with existing `/api/memories` callers if adding total metadata.
 
-**Outcome:** public repo feels saleable/shareable.
+**Likely frontend work:**
 
-- [ ] README polish.
-- [ ] Screenshots/gallery update.
-- [ ] Setup docs.
-- [ ] Architecture docs.
-- [ ] Accessibility notes.
-- [ ] Demo fixture DB or sanitized sample mode.
-- [ ] Release checklist.
+- Refactor `renderSelectedReviewQueue()` so append mode preserves existing DOM nodes and inserts only new queue cards.
+- Keep review selection state stable across appended pages.
+- Update `#reviewQueueCount` and `#memoryListCount` copy to distinguish loaded vs total.
+- Add retry/error behavior for appended review pages.
+
+**Tests:**
+
+- Frontend tests for review append/dedup behavior in `tests/frontend/review.test.js`.
+- Backend tests for any new count query behavior.
+- Browser check with a synthetic multi-page review dataset.
+
+**Acceptance criteria:**
+
+- Review "Load more" does not rebuild already-rendered cards.
+- Selection survives pagination appends.
+- Memory list can show loaded and total counts when total is available.
+- No expensive all-row count workaround is introduced.
+
+**One-session guidance:**
+
+Good one-session candidate. It is narrow and mostly mechanical, but it should still ship with tests.
+
+### Release 11C - Controller Extraction
+
+**Outcome:** `static/src/app-main.js` stops being the primary place where unrelated feature behavior accumulates.
+
+**Scope:**
+
+- Extract visualiser controllers from `app-main.js` into dedicated modules.
+- Extract auth/settings controller.
+- Extract review controller.
+- Extract detail drawer/session drawer controller.
+
+**Recommended sequence:**
+
+1. Review controller first, because it has clear state, events, rendering, and tests already nearby.
+2. Detail drawer controller second, because it touches routing and focus lifecycle.
+3. Auth/settings controller third, because it touches CSRF, config, backup, and diagnostics.
+4. Visualiser controllers last, because they combine canvas/WebGL state, pointer input, resize behavior, reduced motion, and lazy vendor imports.
+
+**Likely files:**
+
+- `static/src/features/review-controller.js`
+- `static/src/features/detail-drawer.js`
+- `static/src/features/settings.js`
+- `static/src/visualisers/constellation.js`
+- `static/src/visualisers/three-visualiser.js`
+- `static/src/visualisers/memory-palace.js`
+
+**Tests:**
+
+- Add unit tests around extracted pure helpers first.
+- Keep browser smoke as the regression guard for cross-feature wiring.
+- Add targeted tests for routing/focus interactions when extracting drawer behavior.
+
+**Acceptance criteria:**
+
+- No behavior regression in routes, review, settings, drawer, or visualisers.
+- `app-main.js` meaningfully shrinks and becomes orchestration rather than implementation.
+- New modules have narrow public APIs and avoid importing the whole app state.
+- `static/app.js` stays generated and bundle sync remains clean.
+
+**One-session guidance:**
+
+Do not do the entire extraction in one session unless the goal is explicitly a large refactor branch. A safe session should extract one controller family at a time.
+
+### Release 11D - Visualiser Accessibility
+
+**Outcome:** the signature visualisers become usable beyond pointer-only interaction, with clear keyboard alternatives and reduced-motion behavior preserved.
+
+**Scope:**
+
+- Keyboard controls for canvas constellation/neural map:
+  - focus visualiser,
+  - move selection between visible nodes,
+  - open selected node,
+  - reset view,
+  - pause/resume motion.
+- Keyboard controls for 3D Visualiser and Memory Palace where practical:
+  - focus viewport,
+  - rotate/pan/zoom with keys,
+  - reset camera,
+  - pause/resume motion.
+- Non-canvas fallback/alternative views where interaction would otherwise be inaccessible.
+- Help text or shortcut discovery inside the existing shortcut/help system.
+
+**Likely implementation notes:**
+
+- Do not try to make every WebGL object individually screen-reader readable.
+- Provide equivalent access to the underlying data through lists/tables/details.
+- Use ARIA descriptions to explain what the visualiser is and where the accessible alternative lives.
+- Respect `prefers-reduced-motion` and avoid reintroducing decorative auto-motion.
+
+**Tests:**
+
+- Unit tests for keyboard action mapping and focus behavior.
+- Manual browser verification for keyboard-only visualiser flows.
+- Reduced-motion verification.
+
+**Acceptance criteria:**
+
+- A keyboard user can inspect visualiser data without a mouse.
+- A keyboard user can reset/pause and move through key nodes where the canvas/WebGL view is focused.
+- Screen reader users get a useful description and an equivalent data path.
+- Reduced-motion users do not get automatic decorative motion.
+
+**One-session guidance:**
+
+This is design-sensitive and should not be bundled with Insights or architecture extraction. It can be one session if scoped to keyboard alternatives for one visualiser family at a time.
+
+### Future Backlog Verification Template
+
+Every future backlog release should finish with:
+
+```bash
+npm run build:frontend
+npm run check:frontend
+/Users/habibi/.local/bin/uv run --with pytest --python /Users/habibi/.local/bin/python3.11 python -m pytest tests/ -q
+/Users/habibi/.local/bin/uv run --with ruff --python /Users/habibi/.local/bin/python3.11 python -m ruff check .
+/Users/habibi/.local/bin/python3.11 -m compileall -q .
+/Users/habibi/.local/bin/uv run --with websocket-client --python /Users/habibi/.local/bin/python3.11 python scripts/frontend_smoke.py
+```
 
 ## 8. Design Direction
 
@@ -699,12 +806,11 @@ Book of Shadows reaches the target quality bar when:
 
 ## 13. Immediate Next Actions
 
-1. Create a branch for Sprint 1.
-2. Add baseline docs and screenshots.
-3. Add a frontend build/test harness without changing behaviour.
-4. Extract API client and utility modules first.
-5. Add one Playwright smoke test around loading the dashboard.
-6. Only then start UX improvements.
+1. Finish Phase 10 documentation and release artifacts.
+2. Refresh demo/mock data so screenshots and Insights charts remain useful over time.
+3. Regenerate the screenshot gallery.
+4. Run the full release verification checklist.
+5. Keep future-release items out of the Phase 10 scope unless Billy explicitly re-prioritises them.
 
 ## 14. Notes from the Review Discussion
 

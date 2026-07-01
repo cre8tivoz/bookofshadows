@@ -394,6 +394,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(self.store.audit_activity_series(days=_safe_int(q.get("days"), 30, maximum=180)))
             if path == "/api/insights/recall-distribution":
                 return self._send_json({"items": self.store.recall_distribution()})
+            if path == "/api/insights/veracity-mix":
+                return self._send_json(self.store.veracity_mix_series(days=_safe_int(q.get("days"), 30, maximum=180)))
+            if path == "/api/insights/source-breakdown":
+                return self._send_json(self.store.source_breakdown_series(days=_safe_int(q.get("days"), 30, maximum=180), limit=_safe_int(q.get("limit"), 6, maximum=12)))
+            if path == "/api/insights/review-backlog":
+                return self._send_json(self.store.review_backlog_series(days=_safe_int(q.get("days"), 30, maximum=180)))
+            if path == "/api/insights/lifecycle-transitions":
+                return self._send_json(self.store.lifecycle_transition_series(days=_safe_int(q.get("days"), 30, maximum=180)))
+            if path == "/api/insights/entity-clusters":
+                return self._send_json(self.store.entity_domain_clusters(limit=_safe_int(q.get("limit"), 10, maximum=30)))
+            if path == "/api/insights/session-heatmap":
+                return self._send_json(self.store.session_activity_heatmap(days=_safe_int(q.get("days"), 30, maximum=180)))
+            if path == "/api/insights/action-cards":
+                return self._send_json(self.store.actionable_insight_cards())
             if path == "/api/review":
                 return self._send_json(self.store.review_queues(
                     queue=q.get("queue", "contaminated"), q=q.get("q", ""),

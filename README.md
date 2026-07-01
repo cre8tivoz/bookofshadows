@@ -89,6 +89,10 @@ All screenshots are generated from a temporary mock database — no real memory 
 |---|---|
 | Constellation visualiser | Search results |
 
+| ![Dark insights](docs/screenshots/desktop-dark-insights.png) | ![Mobile insights](docs/screenshots/mobile-dark-insights.png) |
+|---|---|
+| Insights charts | Mobile insights |
+
 | ![Dark knowledge graph](docs/screenshots/desktop-light-graph.png) | ![Mobile dark overview](docs/screenshots/mobile-dark-overview.png) |
 |---|---|
 | Knowledge graph (light theme) | Mobile dark overview |
@@ -98,6 +102,8 @@ Want to regenerate the whole gallery yourself? One command, using the same mock 
 ```bash
 python3 scripts/generate_mock_screenshots.py
 ```
+
+More detail lives in [docs/DEMO_DATA.md](docs/DEMO_DATA.md).
 
 ## Tinkering on the code
 
@@ -111,6 +117,14 @@ npm run build:frontend
 npm run test:frontend
 node --check static/app.js
 ```
+
+For fuller release notes, see:
+
+- [Setup](docs/SETUP.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Accessibility notes](docs/ACCESSIBILITY.md)
+- [Frontend testing](docs/FRONTEND_TESTING.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
 
 ## Credits
 
