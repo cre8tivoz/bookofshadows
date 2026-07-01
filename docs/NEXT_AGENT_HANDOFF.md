@@ -1,11 +1,11 @@
 # Next Agent Handoff
 
-Paused on 2026-07-01 after Phase 7 was completed.
+Paused on 2026-07-01 after Phase 8 was completed.
 
 ## Current State
 
-- Phases 0 through 7 are complete and checked off in `TRANSFORMATION_PLAN.md`.
-- The active product direction is still the transformation plan; continue with Phase 8 next.
+- Phases 0 through 8 are complete and checked off in `TRANSFORMATION_PLAN.md`.
+- The active product direction is still the transformation plan; continue with Phase 9 next.
 - Work completed so far:
   - Phase 0: baseline docs, screenshots, smoke tooling, payload sizes, and verification commands.
   - Phase 1: frontend source extraction and esbuild/Vitest harness.
@@ -14,26 +14,25 @@ Paused on 2026-07-01 after Phase 7 was completed.
   - Phase 4: toasts, pending buttons, skeleton states, command search, shortcuts, confirmations, and safer bulk action summaries.
   - Phase 5: focus-visible styles, reduced-motion handling, tabular-nums, keyboard-operable clickable rows, modal/drawer focus trapping, ARIA roles, a WCAG contrast audit and fix, and an emoji-as-icon audit.
   - Phase 6: paginated memory browser (load-more appends without re-rendering), a loaded-count indicator, and six saved filter presets.
-  - Phase 7: `MemoryQuery` value object + `query_memories()` (query normalisation split from SQL construction), centralised mutation backup/audit via `_apply_memory_mutation()`, CSRF token validation for mutating POSTs, and login rate limiting. Details in `TRANSFORMATION_PLAN.md`'s Phase 7 status update and `docs/ARCHITECTURE.md`'s "Backend Interface Cleanup" section.
+  - Phase 7: `MemoryQuery` value object + `query_memories()`, centralised mutation backup/audit via `_apply_memory_mutation()`, CSRF token validation, and login rate limiting.
+  - Phase 8: visualiser loading/error states, a shared `prefersReducedMotion()` mode for the 3D Visualiser and Memory Palace, `visibilitychange`-based render-loop pausing, a fix for the floating node-label overlay CSS (was completely unstyled), and removal of ~368 lines of dead Memory Palace prototype code. Details in `TRANSFORMATION_PLAN.md`'s Phase 8 status update and `docs/ARCHITECTURE.md`'s "Lazy Visualisers and Performance" section.
 
 ## Recommended Next Step
 
-Start Phase 8: Lazy Visualisers and Performance.
+Start Phase 9: Charts and Insights Layer.
 
-Suggested first slice:
+Per the plan, this phase is explicitly meant to come *after* architecture can support it — modularisation (Phase 1), API reliability (Phase 2), and now visualiser hygiene (Phase 8) are all in place, so this is a reasonable time to start. The plan's own implementation note: "Use a lightweight charting layer only after modularisation. Avoid dumping a heavy chart library into the current raw frontend." — worth deciding deliberately (a small dependency-free SVG/canvas chart helper vs. a real charting library) before writing chart code, given the project's stated preference for a minimal dependency footprint (stdlib Python backend, zero external JS runtime before this point apart from Three.js).
 
-1. Lazy-load Three.js — it's currently loaded upfront (`static/vendor/three.module.min.js`, ~656K per the Phase 0 baseline) even for users who never open the 3D Visualiser tab. Load it dynamically (`import()`) only when that tab is first opened.
-2. Add loading/error states for the visualisers while Three.js/canvas assets are being fetched or initialised.
-3. Stop render loops (`requestAnimationFrame`) when a visualiser tab is not the active/visible one — `switchTab()` in `static/src/app-main.js` already calls `stopCanvasVisualiserLoop()`/`clearThreeScene()`/`clearPalaceScene()` when leaving a visualiser tab, so check whether that coverage is already sufficient or has gaps (e.g. backgrounded browser tab, not just dashboard tab switch).
-4. Add a WebGL fallback (detect `WebGLRenderingContext` support before initialising Three.js; show a clear message instead of a blank/broken viewport).
-5. Add a reduced-motion visualiser mode — Phase 5 already gated the canvas constellation's `requestAnimationFrame` loop on `prefers-reduced-motion`; check whether the same needs doing for the Three.js and Memory Palace render loops.
-6. Verify with `npm run build:frontend && npm run check:frontend`, `scripts/frontend_smoke.py`, `pytest`, `ruff`, and `compileall`.
+High-value chart ideas from the plan to prioritize: memory growth over time, working vs. episodic split, trust/veracity mix over time, review backlog burn-down, recall frequency distribution, lifecycle tier transitions (hot → warm → cold), and admin mutation/audit activity. Most of the underlying data already exists via `/api/stats`, `/api/lifecycle`, `/api/review`, and `/api/digest/today` — check whether any new backend endpoints are actually needed or if this is achievable by reshaping/aggregating existing responses on the frontend.
 
-Known deliberately-out-of-scope items from recent phases, in case they resurface:
+Verify with `npm run build:frontend && npm run check:frontend`, `scripts/frontend_smoke.py`, `pytest`, `ruff`, and `compileall`.
 
-- The Review queue's own "Load more" (`loadReviewPage()`/`renderSelectedReviewQueue()`) still fully re-renders its accumulated list on every page — the same anti-pattern Phase 6 fixed for the memory browser. A follow-up task for this was spun off in a separate session; check whether it's already been picked up before redoing it.
-- Phase 7 did not add a true filtered "N total" count for the memory browser (only "N loaded") — the only existing precedent for a real total (`review_queues()`) computes it by fetching up to 10,000 rows and counting in Python, which felt like real backend cost/scope better suited to a dedicated pass rather than something to bolt on quietly.
-- `supersede_memory()` intentionally does not share the exact same mutation-closure signature as the other four admin mutations (see the Phase 7 status update for why) — don't "fix" this into uniformity without re-reading that reasoning first.
+Known deliberately-out-of-scope items, in case they resurface:
+
+- The Review queue's own "Load more" still fully re-renders its accumulated list on every page (the same anti-pattern Phase 6 fixed for the memory browser). A follow-up task for this was spun off in a separate session; check whether it's already been picked up.
+- `TRANSFORMATION_PLAN.md` has a full duplicate "Sprint 1"–"Sprint 10" roadmap appended after the real "Phase 0"–"Phase 10" plan — a stale earlier draft, never referenced by any completed phase. A follow-up task to delete it was spun off in a separate session; check whether it's already been picked up before doing it again.
+- Phase 7 did not add a true filtered "N total" count for the memory browser (only "N loaded") — deliberately deferred since the only existing precedent for a real total computes it by fetching up to 10,000 rows and counting in Python.
+- `supersede_memory()` intentionally does not share the exact same mutation-closure signature as the other four admin mutations (see the Phase 7 status update for why).
 
 ## Useful Commands
 
