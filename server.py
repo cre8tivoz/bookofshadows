@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import mimetypes
 import os
 import subprocess
+import threading
 import time
 import tomllib
 import urllib.parse
@@ -13,7 +15,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from config import auth_cookie_value, data_dir, effective_config, public_config, save_config, verify_password
+from config import (
+    auth_cookie_value,
+    csrf_token_value,
+    data_dir,
+    effective_config,
+    public_config,
+    save_config,
+    verify_password,
+)
 from dashboard_core import DashboardStore, default_db_path
 
 ROOT = Path(__file__).parent
@@ -36,6 +46,29 @@ def _safe_int(value: str | None, default: int, minimum: int = 1, maximum: int = 
         parsed = default
     return max(minimum, min(parsed, maximum))
 AUTH_COOKIE = "mnemo_auth"
+
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300
+_login_attempts: dict[str, list[float]] = {}
+_login_attempts_lock = threading.Lock()
+
+
+def _login_rate_limited(client_ip: str) -> bool:
+    now = time.time()
+    with _login_attempts_lock:
+        attempts = [t for t in _login_attempts.get(client_ip, []) if now - t < LOGIN_WINDOW_SECONDS]
+        _login_attempts[client_ip] = attempts
+        return len(attempts) >= LOGIN_MAX_ATTEMPTS
+
+
+def _record_login_failure(client_ip: str) -> None:
+    with _login_attempts_lock:
+        _login_attempts.setdefault(client_ip, []).append(time.time())
+
+
+def _clear_login_attempts(client_ip: str) -> None:
+    with _login_attempts_lock:
+        _login_attempts.pop(client_ip, None)
 
 
 def _json_bytes(obj: Any) -> bytes:
@@ -264,12 +297,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _auth_status(self) -> dict[str, Any]:
         cfg = self.cfg
-        return {
+        authenticated = self._authenticated()
+        status: dict[str, Any] = {
             "auth_enabled": cfg.auth_enabled,
             "has_password": cfg.has_password,
-            "authenticated": self._authenticated(),
+            "authenticated": authenticated,
             "config": public_config(cfg),
         }
+        if cfg.auth_enabled and authenticated:
+            status["csrf_token"] = csrf_token_value(cfg)
+        return status
 
     def _require_auth(self, path: str) -> bool:
         public_paths = {"/api/auth/status", "/api/auth/login"}
@@ -278,6 +315,16 @@ class Handler(BaseHTTPRequestHandler):
         if self._authenticated():
             return True
         self._send_json({"error": "auth required", **self._auth_status()}, 401)
+        return False
+
+    def _require_csrf(self) -> bool:
+        cfg = self.cfg
+        if not cfg.auth_enabled:
+            return True
+        provided = self.headers.get("X-CSRF-Token", "")
+        if provided and hmac.compare_digest(provided, csrf_token_value(cfg)):
+            return True
+        self._send_json({"error": "missing or invalid CSRF token"}, 403)
         return False
 
     def _require_admin(self) -> bool:
@@ -413,13 +460,20 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = self.cfg
                 if not cfg.auth_enabled:
                     return self._send_json({"ok": True, "auth_enabled": False})
+                client_ip = self.client_address[0]
+                if _login_rate_limited(client_ip):
+                    return self._send_json({"ok": False, "error": "too many login attempts, try again later"}, 429)
                 if verify_password(str(body.get("password") or ""), cfg):
+                    _clear_login_attempts(client_ip)
                     return self._send_json(
                         {"ok": True, **self._auth_status()},
                         headers={"Set-Cookie": f"{AUTH_COOKIE}={auth_cookie_value(cfg)}; Path=/; SameSite=Lax; HttpOnly"},
                     )
+                _record_login_failure(client_ip)
                 return self._send_json({"ok": False, "error": "invalid password"}, 403)
             if not self._require_auth(path):
+                return
+            if not self._require_csrf():
                 return
             if path == "/api/auth/logout":
                 return self._send_json({"ok": True}, headers={"Set-Cookie": f"{AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"})

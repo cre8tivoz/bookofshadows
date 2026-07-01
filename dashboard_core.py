@@ -8,6 +8,8 @@ import shutil
 import sqlite3
 import uuid
 from collections import Counter
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -66,6 +68,87 @@ def _truthy(value: object) -> bool:
 def default_db_path() -> Path:
     home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
     return home / "mnemosyne" / "data" / "mnemosyne.db"
+
+
+@dataclass(frozen=True)
+class MemoryQuery:
+    """Normalised, validated memory list filters.
+
+    Build one via `MemoryQuery.from_raw(...)` rather than the constructor
+    directly, so raw/loosely-typed caller input (query-string strings,
+    "1"/"true" flags, etc.) goes through the same coercion `list_memories()`
+    has always applied. `DashboardStore.query_memories()` takes only this
+    object, keeping SQL construction free of normalisation concerns.
+    """
+
+    kind: str = "all"
+    q: str = ""
+    source: str = ""
+    scope: str = ""
+    session_id: str = ""
+    sort: str = "recent"
+    limit: int = 100
+    offset: int = 0
+    status: str = "active"
+    veracity: str = ""
+    degradation_tier: int | None = None
+    contaminated_only: bool = False
+    degraded_only: bool = False
+    due_for_degradation: bool = False
+    min_importance: float | None = None
+
+    @classmethod
+    def from_raw(
+        cls,
+        kind: str = "all",
+        q: str = "",
+        source: str = "",
+        scope: str = "",
+        session_id: str = "",
+        sort: str = "recent",
+        limit: int = 100,
+        offset: int = 0,
+        status: str = "active",
+        veracity: str = "",
+        degradation_tier: int | str | None = None,
+        contaminated_only: bool | str = False,
+        degraded_only: bool | str = False,
+        due_for_degradation: bool | str = False,
+        min_importance: float | str | None = None,
+    ) -> MemoryQuery:
+        normalised_status = (status or "active").strip().lower()
+        if normalised_status not in {"active", "expired", "superseded", "all"}:
+            normalised_status = "active"
+        normalised_veracity = (veracity or "").strip().lower()
+        if normalised_veracity and normalised_veracity not in VERACITY_WEIGHTS:
+            normalised_veracity = ""
+        try:
+            min_importance_value = float(min_importance) if min_importance not in (None, "") else None
+        except (TypeError, ValueError):
+            min_importance_value = None
+        try:
+            degradation_tier_value = int(degradation_tier) if degradation_tier not in (None, "") else None
+        except (TypeError, ValueError):
+            degradation_tier_value = None
+        if degradation_tier_value not in DEGRADATION_LABELS:
+            degradation_tier_value = None
+        return cls(
+            kind=kind,
+            q=(q or "").strip(),
+            source=(source or "").strip(),
+            scope=(scope or "").strip(),
+            session_id=(session_id or "").strip(),
+            sort=(sort or "recent").strip(),
+            limit=max(1, min(int(limit or 100), 10000)),
+            offset=max(0, int(offset or 0)),
+            status=normalised_status,
+            veracity=normalised_veracity,
+            degradation_tier=degradation_tier_value,
+            contaminated_only=_truthy(contaminated_only),
+            degraded_only=_truthy(degraded_only),
+            due_for_degradation=_truthy(due_for_degradation),
+            min_importance=min_importance_value,
+        )
 
 
 class DashboardStore:
@@ -499,32 +582,33 @@ class DashboardStore:
         due_for_degradation: bool | str = False,
         min_importance: float | str | None = None,
     ) -> list[dict[str, Any]]:
-        limit = max(1, min(int(limit or 100), 10000))
-        offset = max(0, int(offset or 0))
-        q = (q or "").strip()
-        source = (source or "").strip()
-        scope = (scope or "").strip()
-        session_id = (session_id or "").strip()
-        sort = (sort or "recent").strip()
-        status = (status or "active").strip().lower()
-        veracity = (veracity or "").strip().lower()
-        if veracity and veracity not in VERACITY_WEIGHTS:
-            veracity = ""
-        try:
-            min_importance_value = float(min_importance) if min_importance not in (None, "") else None
-        except (TypeError, ValueError):
-            min_importance_value = None
-        try:
-            degradation_tier_value = int(degradation_tier) if degradation_tier not in (None, "") else None
-        except (TypeError, ValueError):
-            degradation_tier_value = None
-        if degradation_tier_value not in DEGRADATION_LABELS:
-            degradation_tier_value = None
-        contaminated = _truthy(contaminated_only)
-        degraded = _truthy(degraded_only)
-        due = _truthy(due_for_degradation)
-        if status not in {"active", "expired", "superseded", "all"}:
-            status = "active"
+        """Compatibility wrapper: normalises raw filter args and delegates to `query_memories()`.
+
+        New callers should build a `MemoryQuery` directly and call `query_memories()`;
+        this keeps the wide parameter list working for existing call sites without
+        every one of them needing to change at once.
+        """
+        query = MemoryQuery.from_raw(
+            kind=kind,
+            q=q,
+            source=source,
+            scope=scope,
+            session_id=session_id,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+            status=status,
+            veracity=veracity,
+            degradation_tier=degradation_tier,
+            contaminated_only=contaminated_only,
+            degraded_only=degraded_only,
+            due_for_degradation=due_for_degradation,
+            min_importance=min_importance,
+        )
+        return self.query_memories(query)
+
+    def query_memories(self, query: MemoryQuery) -> list[dict[str, Any]]:
+        """Run an already-normalised `MemoryQuery` against working/episodic memory."""
         now = _utc_now()
         now_dt = datetime.now(UTC).replace(tzinfo=None)
         try:
@@ -539,11 +623,11 @@ class DashboardStore:
             "oldest": "COALESCE(timestamp, created_at) ASC",
             "importance": "importance DESC, COALESCE(timestamp, created_at) DESC",
             "recall": "recall_count DESC, COALESCE(last_recalled, timestamp, created_at) DESC",
-        }.get(sort, "COALESCE(timestamp, created_at) DESC")
+        }.get(query.sort, "COALESCE(timestamp, created_at) DESC")
         wanted = []
-        if kind in ("all", "working"):
+        if query.kind in ("all", "working"):
             wanted.append(("working_memory", "working"))
-        if kind in ("all", "episodic"):
+        if query.kind in ("all", "episodic"):
             wanted.append(("episodic_memory", "episodic"))
 
         rows: list[dict[str, Any]] = []
@@ -555,52 +639,52 @@ class DashboardStore:
                 columns = self._columns(con, table)
                 where = []
                 params: list[Any] = []
-                if q:
+                if query.q:
                     where.append("(content REGEXP ? OR id REGEXP ? OR session_id REGEXP ? OR source REGEXP ? OR scope REGEXP ?)")
-                    pattern = self._prefix_pattern(q)
+                    pattern = self._prefix_pattern(query.q)
                     params += [pattern, pattern, pattern, pattern, pattern]
-                if source:
+                if query.source:
                     where.append("source = ?")
-                    params.append(source)
-                if scope:
+                    params.append(query.source)
+                if query.scope:
                     where.append("scope = ?")
-                    params.append(scope)
-                if session_id:
+                    params.append(query.scope)
+                if query.session_id:
                     where.append("session_id = ?")
-                    params.append(session_id)
-                if min_importance_value is not None:
+                    params.append(query.session_id)
+                if query.min_importance is not None:
                     where.append("COALESCE(importance, 0) >= ?")
-                    params.append(min_importance_value)
+                    params.append(query.min_importance)
                 veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
-                if veracity:
+                if query.veracity:
                     where.append(f"{veracity_expr} = ?")
-                    params.append(veracity)
-                if contaminated:
+                    params.append(query.veracity)
+                if query.contaminated_only:
                     where.append(f"{veracity_expr} IN ('inferred','tool','imported','unknown')")
                 if memory_kind == "episodic":
                     tier_expr = "COALESCE(tier, 1)" if "tier" in columns else "1"
-                    if degradation_tier_value:
+                    if query.degradation_tier:
                         where.append(f"{tier_expr} = ?")
-                        params.append(degradation_tier_value)
-                    if degraded:
+                        params.append(query.degradation_tier)
+                    if query.degraded_only:
                         if "degraded_at" in columns:
                             where.append("COALESCE(degraded_at, '') != ''")
                         else:
                             where.append("0 = 1")
-                    if due:
+                    if query.due_for_degradation:
                         where.append(f"(({tier_expr} = 1 AND COALESCE(created_at, timestamp, '') < ?) OR ({tier_expr} = 2 AND COALESCE(created_at, timestamp, '') < ?))")
                         params.extend([tier2_ts, tier3_ts])
-                elif degradation_tier_value or degraded or due:
+                elif query.degradation_tier or query.degraded_only or query.due_for_degradation:
                     where.append("0 = 1")
-                if status == "active":
+                if query.status == "active":
                     where.append("COALESCE(superseded_by, '') = ''")
                     where.append("(valid_until IS NULL OR valid_until = '' OR valid_until > ?)")
                     params.append(now)
-                elif status == "expired":
+                elif query.status == "expired":
                     where.append("COALESCE(superseded_by, '') = ''")
                     where.append("valid_until IS NOT NULL AND valid_until != '' AND valid_until <= ?")
                     params.append(now)
-                elif status == "superseded":
+                elif query.status == "superseded":
                     where.append("COALESCE(superseded_by, '') != ''")
                 clause = "WHERE " + " AND ".join(where) if where else ""
                 select_cols = self._memory_select_columns(columns, memory_kind)
@@ -611,13 +695,13 @@ class DashboardStore:
                     ORDER BY {sql_order}
                     LIMIT ? OFFSET 0
                 """
-                for row in con.execute(sql, [*params, limit + offset]):
+                for row in con.execute(sql, [*params, query.limit + query.offset]):
                     d = self._enrich_memory(self._dict(row), memory_kind)
                     rows.append(d)
         rows.sort(key=lambda r: (
-            float(r.get("importance") or 0) if sort == "importance" else int(r.get("recall_count") or 0) if sort == "recall" else (r.get("timestamp") or r.get("created_at") or "")
-        ), reverse=sort != "oldest")
-        return rows[offset:offset + limit]
+            float(r.get("importance") or 0) if query.sort == "importance" else int(r.get("recall_count") or 0) if query.sort == "recall" else (r.get("timestamp") or r.get("created_at") or "")
+        ), reverse=query.sort != "oldest")
+        return rows[query.offset:query.offset + query.limit]
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
         with self.connect() as con:
@@ -917,7 +1001,23 @@ class DashboardStore:
         shutil.copy2(self.db_path, target)
         return {"path": str(target), "size_bytes": target.stat().st_size, "created_at": _utc_now()}
 
-    def invalidate_memory(self, memory_id: str, backup: bool = True) -> dict[str, Any]:
+    def _apply_memory_mutation(
+        self,
+        memory_id: str,
+        action: str,
+        backup: bool,
+        mutate: Callable[[sqlite3.Connection], object],
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Shared backup+audit template for single-memory admin mutations.
+
+        `mutate(con)` performs the SQL writes inside a `connect_rw()` context
+        (it must not commit) and returns a truthy "rows changed" value used
+        for the `ok` field. This is the one place invalidate/importance/
+        veracity/expiry/supersede all route through so backup-before-write
+        and audit-after-write stay consistent instead of each method
+        repeating the sequence.
+        """
         memory_id = (memory_id or "").strip()
         if not memory_id:
             raise ValueError("memory_id is required")
@@ -925,117 +1025,110 @@ class DashboardStore:
         if not before:
             raise ValueError("memory not found")
         backup_info = self.backup_database() if backup else None
-        now = _utc_now()
         with self.connect_rw() as con:
+            changed = mutate(con)
+            con.commit()
+        after = self.get_memory(memory_id)
+        self._audit(action, memory_id, before, after, {**(extra or {}), "backup": backup_info})
+        return {"ok": bool(changed), "memory_id": memory_id, "backup": backup_info, "item": after}
+
+    def invalidate_memory(self, memory_id: str, backup: bool = True) -> dict[str, Any]:
+        target = (memory_id or "").strip()
+
+        def mutate(con: sqlite3.Connection) -> int:
+            now = _utc_now()
             updated = 0
             for table in ("working_memory", "episodic_memory"):
                 if table in self._tables(con):
-                    cur = con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = NULL WHERE id = ?", (now, memory_id))
+                    cur = con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = NULL WHERE id = ?", (now, target))
                     updated += cur.rowcount
             if "memories" in self._tables(con):
                 cols = {r[1] for r in con.execute("PRAGMA table_info(memories)")}
                 if "valid_until" in cols:
-                    con.execute("UPDATE memories SET valid_until = ? WHERE id = ?", (now, memory_id))
-            con.commit()
-        after = self.get_memory(memory_id)
-        self._audit("invalidate", memory_id, before, after, {"backup": backup_info})
-        return {"ok": updated > 0, "memory_id": memory_id, "status": "expired", "backup": backup_info, "item": after}
+                    con.execute("UPDATE memories SET valid_until = ? WHERE id = ?", (now, target))
+            return updated
+
+        result = self._apply_memory_mutation(memory_id, "invalidate", backup, mutate)
+        return {**result, "status": "expired"}
 
     def set_memory_importance(self, memory_id: str, importance: float, backup: bool = True) -> dict[str, Any]:
-        memory_id = (memory_id or "").strip()
-        if not memory_id:
-            raise ValueError("memory_id is required")
         importance = float(importance)
         if not 0 <= importance <= 1:
             raise ValueError("importance must be between 0.0 and 1.0")
-        before = self.get_memory(memory_id)
-        if not before:
-            raise ValueError("memory not found")
-        backup_info = self.backup_database() if backup else None
-        with self.connect_rw() as con:
+        target = (memory_id or "").strip()
+
+        def mutate(con: sqlite3.Connection) -> int:
             updated = 0
             for table in ("working_memory", "episodic_memory", "memories"):
                 if table in self._tables(con):
                     cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
                     if "importance" in cols:
-                        cur = con.execute(f"UPDATE {table} SET importance = ? WHERE id = ?", (importance, memory_id))
+                        cur = con.execute(f"UPDATE {table} SET importance = ? WHERE id = ?", (importance, target))
                         updated += cur.rowcount
-            con.commit()
-        after = self.get_memory(memory_id)
-        self._audit("importance", memory_id, before, after, {"importance": importance, "backup": backup_info})
-        return {"ok": updated > 0, "memory_id": memory_id, "importance": importance, "backup": backup_info, "item": after}
+            return updated
+
+        result = self._apply_memory_mutation(memory_id, "importance", backup, mutate, extra={"importance": importance})
+        return {**result, "importance": importance}
 
     def set_memory_veracity(self, memory_id: str, veracity: str, backup: bool = True) -> dict[str, Any]:
-        memory_id = (memory_id or "").strip()
         veracity = (veracity or "").strip().lower()
-        if not memory_id:
-            raise ValueError("memory_id is required")
         if veracity not in VERACITY_WEIGHTS:
             raise ValueError("veracity must be one of: " + ", ".join(VERACITY_WEIGHTS))
-        before = self.get_memory(memory_id)
-        if not before:
-            raise ValueError("memory not found")
-        backup_info = self.backup_database() if backup else None
-        with self.connect_rw() as con:
+        target = (memory_id or "").strip()
+
+        def mutate(con: sqlite3.Connection) -> int:
             updated = 0
             for table in ("working_memory", "episodic_memory", "memories"):
                 if table in self._tables(con):
                     cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
                     if "veracity" in cols:
-                        cur = con.execute(f"UPDATE {table} SET veracity = ? WHERE id = ?", (veracity, memory_id))
+                        cur = con.execute(f"UPDATE {table} SET veracity = ? WHERE id = ?", (veracity, target))
                         updated += cur.rowcount
-            con.commit()
-        after = self.get_memory(memory_id)
-        self._audit("veracity", memory_id, before, after, {"veracity": veracity, "backup": backup_info})
-        return {"ok": updated > 0, "memory_id": memory_id, "veracity": veracity, "backup": backup_info, "item": after}
+            return updated
+
+        result = self._apply_memory_mutation(memory_id, "veracity", backup, mutate, extra={"veracity": veracity})
+        return {**result, "veracity": veracity}
 
     def set_memory_expiry(self, memory_id: str, valid_until: str, backup: bool = True) -> dict[str, Any]:
-        memory_id = (memory_id or "").strip()
         valid_until = (valid_until or "").strip()
-        if not memory_id:
-            raise ValueError("memory_id is required")
         if valid_until:
             try:
                 datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
             except ValueError as exc:
                 raise ValueError("valid_until must be an ISO timestamp or empty") from exc
-        before = self.get_memory(memory_id)
-        if not before:
-            raise ValueError("memory not found")
-        backup_info = self.backup_database() if backup else None
         value = valid_until or None
-        with self.connect_rw() as con:
+        target = (memory_id or "").strip()
+
+        def mutate(con: sqlite3.Connection) -> int:
             updated = 0
             for table in ("working_memory", "episodic_memory", "memories"):
                 if table in self._tables(con):
                     cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
                     if "valid_until" in cols:
-                        cur = con.execute(f"UPDATE {table} SET valid_until = ? WHERE id = ?", (value, memory_id))
+                        cur = con.execute(f"UPDATE {table} SET valid_until = ? WHERE id = ?", (value, target))
                         updated += cur.rowcount
-            con.commit()
-        after = self.get_memory(memory_id)
-        self._audit("expiry", memory_id, before, after, {"valid_until": value, "backup": backup_info})
-        return {"ok": updated > 0, "memory_id": memory_id, "valid_until": value, "backup": backup_info, "item": after}
+            return updated
+
+        result = self._apply_memory_mutation(memory_id, "expiry", backup, mutate, extra={"valid_until": value})
+        return {**result, "valid_until": value}
 
     def supersede_memory(self, memory_id: str, content: str, importance: float | None = None, backup: bool = True) -> dict[str, Any]:
-        memory_id = (memory_id or "").strip()
+        target = (memory_id or "").strip()
         content = (content or "").strip()
-        if not memory_id:
-            raise ValueError("memory_id is required")
         if not content:
             raise ValueError("replacement content is required")
-        before = self.get_memory(memory_id)
-        if not before:
+        existing = self.get_memory(target)
+        if not existing:
             raise ValueError("memory not found")
-        replacement_id = f"dash_{uuid.uuid4().hex}"
-        now = _utc_now()
-        new_importance = float(before.get("importance") if importance is None else importance)
+        new_importance = float(existing.get("importance") if importance is None else importance)
         if not 0 <= new_importance <= 1:
             raise ValueError("importance must be between 0.0 and 1.0")
-        metadata = dict(before.get("metadata") or {})
-        metadata.update({"supersedes": memory_id, "created_by": "mnemosyne-dashboard"})
-        backup_info = self.backup_database() if backup else None
-        with self.connect_rw() as con:
+        replacement_id = f"dash_{uuid.uuid4().hex}"
+
+        def mutate(con: sqlite3.Connection) -> bool:
+            now = _utc_now()
+            metadata = dict(existing.get("metadata") or {})
+            metadata.update({"supersedes": target, "created_by": "mnemosyne-dashboard"})
             tables = self._tables(con)
             if "working_memory" not in tables:
                 raise ValueError("working_memory table not found")
@@ -1047,29 +1140,29 @@ class DashboardStore:
             """, (
                 replacement_id,
                 content,
-                before.get("source"),
+                existing.get("source"),
                 now,
-                before.get("session_id") or "default",
+                existing.get("session_id") or "default",
                 new_importance,
                 json.dumps(metadata, ensure_ascii=False, sort_keys=True),
                 now,
-                before.get("scope") or "session",
-                before.get("author_id"),
-                before.get("author_type"),
-                before.get("channel_id"),
+                existing.get("scope") or "session",
+                existing.get("author_id"),
+                existing.get("author_type"),
+                existing.get("channel_id"),
             ))
             for table in ("working_memory", "episodic_memory"):
                 if table in tables:
-                    con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = ? WHERE id = ?", (now, replacement_id, memory_id))
+                    con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = ? WHERE id = ?", (now, replacement_id, target))
             if "memories" in tables:
                 cols = {r[1] for r in con.execute("PRAGMA table_info(memories)")}
                 if {"id", "content"} <= cols:
                     keys = ["id", "content"]
                     values = [replacement_id, content]
                     optional = {
-                        "source": before.get("source"),
+                        "source": existing.get("source"),
                         "timestamp": now,
-                        "session_id": before.get("session_id") or "default",
+                        "session_id": existing.get("session_id") or "default",
                         "importance": new_importance,
                         "metadata_json": json.dumps(metadata, ensure_ascii=False, sort_keys=True),
                     }
@@ -1087,13 +1180,13 @@ class DashboardStore:
                         if "superseded_by" in cols:
                             sets.append("superseded_by = ?")
                             vals.append(replacement_id)
-                        vals.append(memory_id)
+                        vals.append(target)
                         con.execute(f"UPDATE memories SET {', '.join(sets)} WHERE id = ?", vals)
-            con.commit()
+            return True
+
+        result = self._apply_memory_mutation(memory_id, "supersede", backup, mutate, extra={"replacement_id": replacement_id})
         replacement = self.get_memory(replacement_id)
-        after = self.get_memory(memory_id)
-        self._audit("supersede", memory_id, before, after, {"replacement_id": replacement_id, "backup": backup_info})
-        return {"ok": True, "memory_id": memory_id, "replacement_id": replacement_id, "backup": backup_info, "item": after, "replacement": replacement}
+        return {**result, "replacement_id": replacement_id, "replacement": replacement}
 
 
     @staticmethod

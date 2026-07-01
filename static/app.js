@@ -291,6 +291,7 @@
     const inflight = /* @__PURE__ */ new Map();
     const cache = /* @__PURE__ */ new Map();
     const keyedControllers = /* @__PURE__ */ new Map();
+    let csrfToken = "";
     function timing(start, path, method, status, cached = false) {
       if (!devTiming) return;
       onTiming({ method, path, status, durationMs: now() - start, cached });
@@ -350,13 +351,18 @@
       return request;
     }
     async function postJson2(path, body) {
+      const headers = { "Content-Type": "application/json" };
+      if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
       const result = await api2(path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body || {})
       });
       clearCache();
       return result;
+    }
+    function setCsrfToken2(token) {
+      csrfToken = token || "";
     }
     function clearCache(predicate = null) {
       if (!predicate) {
@@ -367,7 +373,7 @@
         if (predicate(key, entry)) cache.delete(key);
       }
     }
-    return { api: api2, postJson: postJson2, clearCache };
+    return { api: api2, postJson: postJson2, clearCache, setCsrfToken: setCsrfToken2 };
   }
 
   // static/src/state/routing.js
@@ -908,7 +914,7 @@
     loginFocusRelease?.();
     loginFocusRelease = null;
   }
-  var { api, postJson } = createApiClient({
+  var { api, postJson, setCsrfToken } = createApiClient({
     onUnauthorized: showLogin,
     devTiming: localStorage.getItem("mnemosyne-debug-api") === "1",
     onTiming: (info) => console.debug("[api]", info)
@@ -3220,6 +3226,7 @@
   }
   async function refreshAuthState() {
     authState = await api("/api/auth/status");
+    setCsrfToken(authState.csrf_token || "");
     return authState;
   }
   async function loadAuthStatus() {
@@ -5108,6 +5115,7 @@
   $("#copyBootError").onclick = copyBootErrorDetails;
   $("#logoutAuth").onclick = async () => {
     await runButtonAction($("#logoutAuth"), "Logging out...", () => postJson("/api/auth/logout", {}), { tone: "success", title: "Logged out" });
+    setCsrfToken("");
     showLogin();
   };
   function toggleTheme() {
