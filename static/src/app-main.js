@@ -7,7 +7,8 @@ import { createApiClient } from './api/client.js';
 import { endpoints } from './api/endpoints.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
 import { bulkSelectionState, isMutableMemory, liveEventMeta, MEMORY_FILTER_PRESETS, MEMORY_PAGE_SIZE, memoryFilterParams, memoryItem, memoryPresetByKey, mergeMemoryPage, meta, selectedMutableIds, sortByExpiringSoon } from './features/memories.js';
-import { lifecycleQueueHtml, mergeReviewItems, newReviewItems, reviewActionableIds, reviewFilterParams, reviewMemoryItem, reviewQueueHtml } from './features/review.js';
+import { lifecycleQueueHtml } from './features/review.js';
+import { createReviewController } from './features/review-controller.js';
 import { createGraphFeature } from './features/graph.js';
 import { createChartsFeature } from './features/charts.js';
 import { trapFocus } from './utils/a11y.js';
@@ -29,17 +30,11 @@ let applyingHistory = false;
 let lastBootError = null;
 let drawerFocusRelease = null;
 let bulkSelection = new Set();
-let reviewSelection = new Set();
-let selectedReviewQueue = 'contaminated';
-let reviewOffset = 0;
-let latestReviewData = null;
-const REVIEW_PAGE_SIZE = 100;
 let latestMemoryItems = [];
 let memoryOffset = 0;
 let memoryHasMore = true;
 let memoryTotal = null;
 let memoryListIsPreset = false;
-let latestReviewItems = [];
 let goChordUntil = 0;
 let toastTimer = 0;
 const CONSTELLATION_MIN_ZOOM = .55;
@@ -83,6 +78,23 @@ const { api, postJson, setCsrfToken } = createApiClient({
 });
 const { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
 const { loadInsights, disposeInsightsCharts } = createChartsFeature({ $, api, switchTab, loadMemories });
+const reviewController = createReviewController({
+  $,
+  $$,
+  api,
+  postJson,
+  bindMemoryClicks,
+  canAdmin,
+  confirmAction,
+  askVeracity,
+  askExpiry,
+  runButtonAction,
+  runBulkMutation,
+  loadStats,
+  showToast,
+  isCancelledRequest,
+  openMemoryFilter: applyReviewFilter,
+});
 function isCancelledRequest(error){ return error?.name === 'ApiError' && error.status === 0 && !error.retryable; }
 function bootErrorPayload(){
   return lastBootError ? JSON.stringify(lastBootError, null, 2) : '';
@@ -1260,153 +1272,8 @@ function applyReviewFilter(filter={}){
   $('#memorySort').value = filter.sort || 'importance';
   switchTab('memories');
 }
-function updateReviewBulkBar(){
-  const bar = $('#reviewBulkBar');
-  if(!bar) return;
-  const admin = canAdmin();
-  const visible = latestReviewItems.length;
-  const actionable = reviewActionableIds(latestReviewItems, reviewSelection).length;
-  bar.classList.toggle('hidden', !visible);
-  $('#reviewSelectionStatus').textContent = `${reviewSelection.size} selected`;
-  $('#reviewConfirm').disabled = !admin || !actionable;
-  $('#reviewVeracity').disabled = !admin || !actionable;
-  $('#reviewExpiry').disabled = !admin || !actionable;
-  $('#reviewExpire').disabled = !admin || !actionable;
-  $('#reviewSelectAll').checked = visible > 0 && latestReviewItems.every(x => reviewSelection.has(x.id));
-  $('#reviewSelectAll').disabled = !visible;
-}
-function bindReviewControls(queues){
-  $$('#review .review-check').forEach(chk => chk.onchange = e => { e.stopPropagation(); chk.checked ? reviewSelection.add(chk.dataset.id) : reviewSelection.delete(chk.dataset.id); updateReviewBulkBar(); });
-  $$('#review .review-select-visible').forEach(el => el.onclick = e => {
-    e.stopPropagation();
-    latestReviewItems.forEach(x => reviewSelection.add(x.id));
-    $$('#review .review-check').forEach(chk => { chk.checked = true; });
-    updateReviewBulkBar();
-  });
-}
-function updateReviewImportanceLabel(){
-  const slider = $('#reviewMinImportance');
-  const label = $('#reviewMinImportanceValue');
-  if(!slider || !label) return;
-  const value = Number(slider.value || 0);
-  label.textContent = value > 0 ? `≥ ${value.toFixed(2)}` : 'any';
-}
-function renderSelectedReviewQueue(data, append=false){
-  latestReviewData = data;
-  const queues = data.queues || {};
-  const cards = data.cards || [];
-  const keys = cards.map(card => card.key).filter(key => queues[key]);
-  if(!keys.length){
-    latestReviewItems = [];
-    $('#reviewCards').innerHTML = '';
-    $('#reviewQueueSelect').innerHTML = '';
-    $('#reviewQueueCount').textContent = '0 listed';
-    $('#reviewQueues').innerHTML = '<p class="muted">No review queues available.</p>';
-    $('#reviewLoadMore').classList.add('hidden');
-    updateReviewBulkBar();
-    return;
-  }
-  if(!queues[selectedReviewQueue]) selectedReviewQueue = data.queue || keys[0];
-  const selectedCard = cards.find(card => card.key === selectedReviewQueue) || {count: data.total || 0};
-  $('#reviewCards').innerHTML = '';
-  $('#reviewQueueSelect').innerHTML = cards.map(card => `<option value="${esc(card.key)}" ${card.key === selectedReviewQueue ? 'selected' : ''}>${esc(card.title)} (${Number(card.count || 0).toLocaleString()})</option>`).join('');
-  const newItems = queues[selectedReviewQueue]?.items || [];
-  const appendedItems = append ? newReviewItems(latestReviewItems, newItems) : newItems;
-  latestReviewItems = append ? mergeReviewItems(latestReviewItems, newItems) : mergeReviewItems([], newItems);
-  $('#reviewQueueCount').textContent = `${Number(data.total ?? selectedCard.count ?? 0).toLocaleString()} total · ${latestReviewItems.length.toLocaleString()} listed`;
-  const renderedQueue = {...queues[selectedReviewQueue], items:latestReviewItems};
-  const existingQueue = $(`#reviewQueues .review-queue[data-review-key="${CSS.escape(selectedReviewQueue)}"]`);
-  const existingList = existingQueue?.querySelector('.list.memory-grid');
-  if(append && existingQueue && existingList){
-    const count = existingQueue.querySelector('.section-head.mini span');
-    if(count) count.textContent = `${latestReviewItems.length.toLocaleString()} listed`;
-    const newHtml = appendedItems.map(item => reviewMemoryItem(selectedReviewQueue, item, {selectable:true, selectedSet:reviewSelection, checkClass:'review-check'})).join('');
-    if(newHtml) existingList.insertAdjacentHTML('beforeend', newHtml);
-  } else {
-    $('#reviewQueues').innerHTML = reviewQueueHtml(selectedReviewQueue, renderedQueue, {triage:true, selectedSet:reviewSelection});
-  }
-  bindMemoryClicks($('#review'));
-  bindReviewControls(queues);
-  updateReviewBulkBar();
-  $('#reviewQueueSelect').onchange = e => { selectedReviewQueue = e.target.value; reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
-  $('#reviewMinImportance').oninput = updateReviewImportanceLabel;
-  updateReviewImportanceLabel();
-  $('#reviewApplyFilters').onclick = () => { reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
-  $('#reviewClearFilters').onclick = () => { $('#reviewSearchQuery').value = ''; $('#reviewMinImportance').value = '0'; updateReviewImportanceLabel(); reviewOffset = 0; reviewSelection.clear(); loadReviewPage(false); };
-  $('#reviewLoadMore').onclick = () => { if(data.next_offset != null){ reviewOffset = data.next_offset; loadReviewPage(true); } };
-  $('#reviewLoadMore').classList.toggle('hidden', !data.has_more);
-  $$('#review .review-filter').forEach(el => {
-    el.onclick = e => { e.stopPropagation(); const key = el.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); };
-  });
-}
-async function loadReviewPage(append=false){
-  if(!append) $('#reviewQueues').innerHTML = skeletonHtml('Loading review queue', 4);
-  try {
-    const data = await api(endpoints.review(reviewFilterParams({
-      queue:selectedReviewQueue,
-      limit:REVIEW_PAGE_SIZE,
-      offset:reviewOffset,
-      q:$('#reviewSearchQuery')?.value || '',
-      minImportance:$('#reviewMinImportance')?.value || ''
-    })), {requestKey:'review'});
-    renderSelectedReviewQueue(data, append);
-  } catch(e) {
-    if(isCancelledRequest(e)) return;
-    $('#reviewQueues').innerHTML = stateHtml('error', 'Could not load review queue.', e.message || 'Try again.');
-  }
-}
-async function confirmSelectedReviewMemories(button){
-  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
-  if(!ids.length) return;
-  const ok = await confirmAction({title:'Confirm selected memories?', description:`Mark ${ids.length} selected active memories as stated.`, confirmText:'Confirm selected'});
-  if(!ok) return;
-  const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  await runButtonAction(button, 'Confirming...', async () => {
-    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/veracity', {memory_id:id, veracity:'stated', backup}), 'Confirmed');
-    if(!result.failed) reviewSelection.clear();
-    await loadStats(); await loadReview();
-  });
-}
-async function setSelectedReviewVeracity(button){
-  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
-  if(!ids.length) return;
-  const v = await askVeracity('stated');
-  if(v === null) return;
-  const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  await runButtonAction(button, 'Saving...', async () => {
-    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/veracity', {memory_id:id, veracity:v, backup}), 'Updated');
-    if(!result.failed) reviewSelection.clear();
-    await loadStats(); await loadReview();
-  });
-}
-async function setSelectedReviewExpiry(button){
-  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
-  if(!ids.length) return;
-  const v = await askExpiry('');
-  if(v === null) return;
-  const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  await runButtonAction(button, 'Saving...', async () => {
-    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/expiry', {memory_id:id, valid_until:v, backup}), 'Updated');
-    if(!result.failed) reviewSelection.clear();
-    await loadStats(); await loadReview();
-  });
-}
-async function expireSelectedReviewMemories(button){
-  const ids = reviewActionableIds(latestReviewItems, reviewSelection);
-  if(!ids.length) return;
-  const ok = await confirmAction({title:'Expire selected memories?', description:`Expire ${ids.length} selected active memories. Backups and audit entries will be created.`, confirmText:'Expire selected', tone:'warn'});
-  if(!ok) return;
-  const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  await runButtonAction(button, 'Expiring...', async () => {
-    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/invalidate', {memory_id:id, backup}), 'Expired');
-    if(!result.failed) reviewSelection.clear();
-    await loadStats(); await loadReview();
-  });
-}
 async function loadReview(){
-  reviewOffset = 0;
-  reviewSelection.clear();
-  await loadReviewPage(false);
+  await reviewController.loadReview();
 }
 async function loadLifecycle(){
   const data = await api(endpoints.lifecycle(80));
@@ -3364,21 +3231,7 @@ $('#bulkExpire').onclick = () => expireSelectedMemories($('#bulkExpire'));
 $('#bulkVeracity').onclick = () => setSelectedVeracity($('#bulkVeracity'));
 $('#bulkExpiry').onclick = () => setSelectedExpiry($('#bulkExpiry'));
 $('#bulkImportance').onclick = () => setSelectedImportance($('#bulkImportance')); $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') refreshMemoriesRouteAndLoad(); };
-$('#reviewSelectAll').onchange = () => {
-  const checked = $('#reviewSelectAll').checked;
-  latestReviewItems.forEach(x => checked ? reviewSelection.add(x.id) : reviewSelection.delete(x.id));
-  $$('#review .review-check').forEach(chk => { chk.checked = checked; });
-  updateReviewBulkBar();
-};
-$('#reviewClear').onclick = () => {
-  const previous = new Set(reviewSelection);
-  reviewSelection.clear(); loadReview();
-  showToast({tone:'info', title:'Review selection cleared', body:`Cleared ${previous.size} selected memories.`, actionLabel:'Undo', action:() => { reviewSelection = previous; loadReviewPage(false); }});
-};
-$('#reviewConfirm').onclick = () => confirmSelectedReviewMemories($('#reviewConfirm'));
-$('#reviewVeracity').onclick = () => setSelectedReviewVeracity($('#reviewVeracity'));
-$('#reviewExpiry').onclick = () => setSelectedReviewExpiry($('#reviewExpiry'));
-$('#reviewExpire').onclick = () => expireSelectedReviewMemories($('#reviewExpire'));
+reviewController.bindGlobalControls();
 $('#globalSearchButton').onclick = () => runButtonAction($('#globalSearchButton'), 'Searching...', loadGlobalSearch); $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') $('#globalSearchButton').click(); };
 $('#menuSearchButton').onclick = () => runButtonAction($('#menuSearchButton'), 'Searching...', menuSearch); $('#menuSearchQuery').onkeydown = e => { if(e.key==='Enter') $('#menuSearchButton').click(); };
 $('#recallButton').onclick = () => runButtonAction($('#recallButton'), 'Explaining...', loadRecallDebug); $('#recallQuery').onkeydown = e => { if(e.key==='Enter') $('#recallButton').click(); };

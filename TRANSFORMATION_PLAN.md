@@ -627,6 +627,8 @@ Good one-session candidate. It is narrow and mostly mechanical, but it should st
 
 **Outcome:** `static/src/app-main.js` stops being the primary place where unrelated feature behavior accumulates.
 
+**Status:** In progress. Review controller extracted 2026-07-01.
+
 **Scope:**
 
 - Extract visualiser controllers from `app-main.js` into dedicated modules.
@@ -666,6 +668,13 @@ Good one-session candidate. It is narrow and mostly mechanical, but it should st
 **One-session guidance:**
 
 Do not do the entire extraction in one session unless the goal is explicitly a large refactor branch. A safe session should extract one controller family at a time.
+
+**Release 11C status update - 2026-07-01**
+
+- Extracted Review queue state, rendering, pagination, selection, filter controls, and admin mutation handlers from `static/src/app-main.js` into `static/src/features/review-controller.js`.
+- Kept `app-main.js` as the route/orchestration layer: the Review route now calls `reviewController.loadReview()`, and startup wiring calls `reviewController.bindGlobalControls()`.
+- Preserved existing Review helper tests and used the frontend bundle/test suite plus browser smoke as the regression guard for this controller slice.
+- Remaining 11C controller families: detail/session drawer, auth/settings, and visualisers.
 
 ### Release 11D - Visualiser Accessibility
 
