@@ -1001,6 +1001,35 @@ tr:hover td{background:var(--card-bg-hov)}
 .state-empty{border-color:var(--stroke)}
 .state-loading{border-color:rgba(59,130,246,.25)}
 .state-error{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.06)}
+.state-skeleton{border-color:rgba(20,184,166,.22)}
+.skeleton-lines{display:grid;gap:7px;margin-top:8px}
+.skeleton-line{
+  display:block;height:10px;border-radius:999px;
+  background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(20,184,166,.16),rgba(255,255,255,.05));
+  background-size:220% 100%;
+  animation:skeleton-shimmer 1.35s ease-in-out infinite;
+}
+.skeleton-line-2{width:76%}
+.skeleton-line-3{width:88%}
+.skeleton-line-4{width:61%}
+@keyframes skeleton-shimmer{0%{background-position:120% 0}100%{background-position:-120% 0}}
+.toast-host{position:fixed;right:18px;bottom:18px;z-index:80;display:grid;gap:8px;max-width:min(380px,calc(100vw - 24px))}
+.toast{
+  border:1px solid var(--stroke-str);border-radius:var(--r-md);
+  background:rgba(12,14,12,.88);color:var(--text);box-shadow:var(--shadow);
+  backdrop-filter:blur(18px);padding:12px;display:grid;gap:4px;
+}
+[data-theme="light"] .toast{background:rgba(252,249,244,.92)}
+.toast strong{font-size:var(--fs-sm)}
+.toast p{margin:0;color:var(--text-sec);font-size:var(--fs-xs);line-height:1.35}
+.toast-success{border-color:rgba(34,197,94,.38)}
+.toast-warning{border-color:rgba(245,158,11,.42)}
+.toast-error{border-color:rgba(239,68,68,.45)}
+.toast-action{justify-self:start;margin-top:4px;height:28px;min-height:28px;border-radius:var(--r-sm);font-size:var(--fs-xs)}
+button[aria-busy="true"]{cursor:progress;opacity:.72}
+.shortcut-grid{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 12px;align-items:center}
+.shortcut-grid span{font-family:var(--font-mono);font-size:var(--fs-xs);padding:4px 6px;border:1px solid var(--stroke);border-radius:var(--r-sm);background:var(--input-bg);color:var(--text)}
+.shortcut-grid strong{font-size:var(--fs-sm);color:var(--text-sec)}
 .boot-error-stack{
   margin:6px 0 0;padding:10px;
   border-radius:var(--r-sm);
