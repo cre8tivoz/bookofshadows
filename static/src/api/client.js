@@ -60,6 +60,7 @@ export function createApiClient({
   const inflight = new Map();
   const cache = new Map();
   const keyedControllers = new Map();
+  let csrfToken = '';
 
   function timing(start, path, method, status, cached = false) {
     if (!devTiming) return;
@@ -127,13 +128,19 @@ export function createApiClient({
   }
 
   async function postJson(path, body) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
     const result = await api(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body || {}),
     });
     clearCache();
     return result;
+  }
+
+  function setCsrfToken(token) {
+    csrfToken = token || '';
   }
 
   function clearCache(predicate = null) {
@@ -146,5 +153,5 @@ export function createApiClient({
     }
   }
 
-  return { api, postJson, clearCache };
+  return { api, postJson, clearCache, setCsrfToken };
 }

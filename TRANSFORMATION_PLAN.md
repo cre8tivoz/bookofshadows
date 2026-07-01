@@ -393,10 +393,10 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 ### Tasks
 
-- [ ] Introduce a `MemoryQuery` dataclass or equivalent value object.
-- [ ] Replace the broad `list_memories()` parameter list with a smaller query interface.
-- [ ] Split query normalisation from SQL construction.
-- [ ] Add tests for each query mode:
+- [x] Introduce a `MemoryQuery` dataclass or equivalent value object.
+- [x] Replace the broad `list_memories()` parameter list with a smaller query interface.
+- [x] Split query normalisation from SQL construction.
+- [x] Add tests for each query mode:
   - status filtering
   - veracity filtering
   - degradation filtering
@@ -404,10 +404,10 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
   - source/scope/session filtering
   - q search
   - sort modes
-- [ ] Create a `MemoryMutationService` or equivalent for admin actions.
-- [ ] Keep backup/audit behaviour centralised.
-- [ ] Add explicit CSRF token validation for POST endpoints if auth is enabled.
-- [ ] Add login rate limiting.
+- [x] Create a `MemoryMutationService` or equivalent for admin actions.
+- [x] Keep backup/audit behaviour centralised.
+- [x] Add explicit CSRF token validation for POST endpoints if auth is enabled.
+- [x] Add login rate limiting.
 
 ### Acceptance criteria
 
@@ -415,6 +415,18 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - Backend tests cover the query object behaviour.
 - Admin mutation guarantees remain intact.
 - Security posture improves without making local use painful.
+
+### Phase 7 status update - 2026-07-01
+
+- Added `MemoryQuery` (a frozen dataclass) plus `MemoryQuery.from_raw(...)`, which now owns every bit of normalisation `list_memories()` used to do inline (limit/offset clamping, status/veracity/degradation-tier validation, truthy-string coercion for the three boolean filters, min-importance parsing). `DashboardStore.query_memories(query)` takes only a `MemoryQuery` and does nothing but build/run SQL from already-validated fields — normalisation and SQL construction are now in two different places for the first time.
+- `list_memories(**same wide parameter list as before)` still exists and is unchanged for every existing caller (the HTTP route in `server.py`, `stats()`, `review_queues()`, `lifecycle_dashboard()`, `today_digest()` via other paths, `inferred_profile()`, `pattern_insights()`, `constellation()`, `global_search()`, `recall_debug()`, `timeline()`, `session_detail()`); it is now a two-line wrapper that builds a `MemoryQuery` and delegates. New callers should build a `MemoryQuery` and call `query_memories()` directly — deliberately did not migrate the existing internal call sites, since that's mechanical churn across already-tested working code for no behavioural benefit (tracer-bullet scope discipline, same reasoning used in earlier phases for `app-main.js`).
+- Centralised the mutation backup/audit template as `DashboardStore._apply_memory_mutation(memory_id, action, backup, mutate, extra)`, used by `invalidate_memory`, `set_memory_importance`, `set_memory_veracity`, and `set_memory_expiry`. Each of those is now just: validate the new value, define a small `mutate(con)` closure with the actual SQL, and merge the mutation-specific field into the shared result shape. Response JSON shapes returned to the frontend are byte-for-byte identical to before.
+- `supersede_memory` does **not** route through the same closure signature as the other four — its importance-default/validation logic depends on the *existing* memory's current importance, and the original code deliberately validated that before creating a backup. Forcing it through a `mutate(con)`-only closure would mean either re-fetching `before` twice or silently reordering "validate" after "backup" (creating a wasted backup on a validation failure). Instead it does one extra `get_memory()` read up front to validate early, then still calls `_apply_memory_mutation()` for the shared backup+audit/before-after wrapping — so all five mutations share the backup/audit primitive, just not identical closure signatures. This was a deliberate choice, not an oversight; a fully uniform `MemoryMutationService` class was considered and skipped for the same reason — it would need to either duplicate `DashboardStore`'s connection/table helpers or take a `DashboardStore` reference, adding a layer without changing what's actually shared (the backup+audit sequence, which is now one method).
+- New tests in `tests/test_dashboard_core.py` cover status filtering (active/expired/superseded/all), source/scope/session filtering, due-for-degradation filtering (previously only exercised indirectly through `review_queues`/`lifecycle_dashboard`), the `oldest`/`recall` sort modes, and `MemoryQuery.from_raw()` normalisation edge cases (unparsable/out-of-range limit, invalid status/veracity/degradation_tier, truthy-string coercion). Full suite: 56 passed (was 45).
+- CSRF: `config.csrf_token_value(cfg)` derives a per-install token via HMAC over `cfg.auth_secret` (same secret as the auth cookie, different HMAC message, so the two derived values are independent). `/api/auth/status` includes `csrf_token` only when `auth_enabled` **and** the request is already authenticated — never exposed to an unauthenticated caller. Every mutating POST except `/api/auth/login` now requires a matching `X-CSRF-Token` header once auth is enabled (checked with `hmac.compare_digest`); when auth is disabled, the check is a no-op, matching the plan's "if auth is enabled" wording and keeping local single-user use frictionless. Verified live in a browser: a real admin mutation through the UI succeeds (token attached by `postJson`), while an identical raw `fetch()` without the header is rejected with 403.
+- Login rate limiting: a thread-safe in-memory sliding window (5 attempts / 5 minutes per client IP) in `server.py`, cleared on successful login. This is intentionally simple in-memory state (not persisted, not evicted for long-idle IPs) — proportionate for a local/LAN single-user dashboard, not a public-internet service.
+- Frontend: `api/client.js` gained `setCsrfToken()`/automatic `X-CSRF-Token` header attachment in `postJson()`; `app-main.js`'s `refreshAuthState()` captures the token from `/api/auth/status`, and logout clears it.
+- Incidental fix: `vitest.config.js` had no `exclude` list, so `npm run test:frontend` was also picking up and running test files from sibling git worktrees checked out under `.claude/worktrees/` (discovered because another agent had a worktree open during this phase). Added an explicit exclude so this repo's test run only ever covers this repo's tests.
 
 ## Phase 8 - Lazy Visualisers and Performance
 

@@ -73,7 +73,7 @@ function hideLogin(){
   loginFocusRelease?.();
   loginFocusRelease = null;
 }
-const { api, postJson } = createApiClient({
+const { api, postJson, setCsrfToken } = createApiClient({
   onUnauthorized: showLogin,
   devTiming: localStorage.getItem('mnemosyne-debug-api') === '1',
   onTiming: info => console.debug('[api]', info),
@@ -2058,6 +2058,7 @@ async function copyDiagnostics(){
 }
 async function refreshAuthState(){
   authState = await api('/api/auth/status');
+  setCsrfToken(authState.csrf_token || '');
   return authState;
 }
 async function loadAuthStatus(){
@@ -3807,6 +3808,7 @@ $('#retryBootstrap').onclick = () => bootstrapDashboard().catch(handleInitError)
 $('#copyBootError').onclick = copyBootErrorDetails;
 $('#logoutAuth').onclick = async () => {
   await runButtonAction($('#logoutAuth'), 'Logging out...', () => postJson('/api/auth/logout', {}), {tone:'success', title:'Logged out'});
+  setCsrfToken('');
   showLogin();
 };
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }

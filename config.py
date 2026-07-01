@@ -104,6 +104,19 @@ def auth_cookie_value(cfg: DashboardConfig) -> str:
     return hmac.new(secret.encode("utf-8"), b"mnemosyne-dashboard", hashlib.sha256).hexdigest()
 
 
+def csrf_token_value(cfg: DashboardConfig) -> str:
+    """Derive a stable per-install CSRF token from the same auth secret.
+
+    Uses a distinct HMAC message from `auth_cookie_value` so the two values
+    are independent even though they share a secret; a client that has the
+    auth cookie still has to separately be handed this token by the server
+    (over the authenticated `/api/auth/status` or `/api/auth/login`
+    response) before it can pass the CSRF check.
+    """
+    secret = cfg.auth_secret or "missing-secret"
+    return hmac.new(secret.encode("utf-8"), b"mnemosyne-dashboard-csrf", hashlib.sha256).hexdigest()
+
+
 def _defaults() -> dict[str, Any]:
     return {
         "host": DEFAULT_HOST,

@@ -261,6 +261,93 @@ def test_list_memories_filters_and_sorts_by_importance(tmp_path):
     assert rows[0]['importance'] == 0.9
 
 
+def test_list_memories_filters_by_status(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+    store.invalidate_memory('w2', backup=False)
+    store.supersede_memory('w3', 'YC knows Diana from university', backup=False)
+
+    active_ids = {r['id'] for r in store.list_memories(kind='all', status='active', limit=20)}
+    expired_ids = {r['id'] for r in store.list_memories(kind='all', status='expired', limit=20)}
+    superseded_ids = {r['id'] for r in store.list_memories(kind='all', status='superseded', limit=20)}
+    all_ids = {r['id'] for r in store.list_memories(kind='all', status='all', limit=20)}
+
+    assert 'w2' in expired_ids and 'w2' not in active_ids
+    assert 'w3' in superseded_ids and 'w3' not in active_ids
+    assert active_ids.isdisjoint(expired_ids) and active_ids.isdisjoint(superseded_ids)
+    assert all_ids == active_ids | expired_ids | superseded_ids
+
+
+def test_list_memories_filters_by_source_scope_and_session(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    assert [r['id'] for r in store.list_memories(kind='all', source='preference', limit=10)] == ['w3', 'w2', 'w1']
+    assert [r['id'] for r in store.list_memories(kind='all', scope='session', limit=10)] == ['e2', 'e1']
+    assert [r['id'] for r in store.list_memories(kind='all', session_id='s5', limit=10)] == ['e2', 'w4']
+
+
+def test_list_memories_filters_by_due_for_degradation(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    con = sqlite3.connect(db)
+    con.execute(
+        "INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,tier,created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        ('e3', 'Old hot memory overdue for compression', 'task', '2020-01-01T00:00:00', 's6', 0.5, 'session', 1, '2020-01-01T00:00:00'),
+    )
+    con.commit()
+    con.close()
+    store = DashboardStore(db)
+
+    due_ids = {r['id'] for r in store.list_memories(kind='episodic', status='active', due_for_degradation=True, limit=20)}
+    assert 'e3' in due_ids
+    assert 'e1' not in due_ids  # already tier 2, not old enough to be due for tier 3
+    assert 'e2' not in due_ids  # already tier 3, has no further tier to degrade into
+
+
+def test_list_memories_sort_modes_oldest_and_recall(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    assert [r['id'] for r in store.list_memories(kind='all', status='active', sort='oldest', limit=20)] == ['w1', 'e1', 'w2', 'w3', 'w4', 'e2']
+
+    con = sqlite3.connect(db)
+    con.execute("UPDATE working_memory SET recall_count = 25 WHERE id = 'w1'")
+    con.commit()
+    con.close()
+    recall_order = [r['id'] for r in store.list_memories(kind='all', status='active', sort='recall', limit=20)]
+    assert recall_order[0] == 'w1'
+
+
+def test_memory_query_from_raw_normalises_loose_input():
+    from dashboard_core import MemoryQuery
+
+    query = MemoryQuery.from_raw(
+        limit='0', offset='-5', status='bogus', veracity='not-a-real-veracity',
+        degradation_tier='9', contaminated_only='yes', degraded_only='1', due_for_degradation='true',
+        min_importance='not-a-float', q='  padded  ',
+    )
+    assert query.limit == 1  # clamped up to the minimum of 1
+    assert query.offset == 0  # clamped to a non-negative value
+    assert query.status == 'active'  # invalid status falls back to active
+    assert query.veracity == ''  # unknown veracity is dropped
+    assert query.degradation_tier is None  # tier 9 is not a valid degradation tier
+    assert query.contaminated_only is True
+    assert query.degraded_only is True
+    assert query.due_for_degradation is True
+    assert query.min_importance is None
+    assert query.q == 'padded'
+
+    assert MemoryQuery.from_raw(limit=999999).limit == 10000  # clamped to the maximum
+    assert MemoryQuery.from_raw(degradation_tier=2).degradation_tier == 2
+    assert MemoryQuery.from_raw(contaminated_only=False, degraded_only='0', due_for_degradation='').contaminated_only is False
+    assert MemoryQuery.from_raw(min_importance=0.5).min_importance == 0.5
+
+
 def test_graph_returns_nodes_edges_and_filterable_metadata(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)

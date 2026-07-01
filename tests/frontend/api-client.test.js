@@ -123,6 +123,34 @@ describe("api client", () => {
     expect(onTiming).toHaveBeenCalledWith({ method: "GET", path: "/api/stats", status: 200, durationMs: 32, cached: false });
   });
 
+  test("attaches the CSRF token header once set, and omits it otherwise", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const client = createApiClient({ fetchImpl });
+
+    await client.postJson("/api/config", { auth_enabled: true });
+    expect(fetchImpl).toHaveBeenLastCalledWith("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auth_enabled: true }),
+    });
+
+    client.setCsrfToken("token-abc");
+    await client.postJson("/api/config", { auth_enabled: true });
+    expect(fetchImpl).toHaveBeenLastCalledWith("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "token-abc" },
+      body: JSON.stringify({ auth_enabled: true }),
+    });
+
+    client.setCsrfToken("");
+    await client.postJson("/api/config", { auth_enabled: true });
+    expect(fetchImpl).toHaveBeenLastCalledWith("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auth_enabled: true }),
+    });
+  });
+
   test("clears cached GETs after JSON mutations", async () => {
     let counter = 0;
     const fetchImpl = vi.fn(async (path, options = {}) => {

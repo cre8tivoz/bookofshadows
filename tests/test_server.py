@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from test_dashboard_core import make_db  # noqa: E402
 
+import server as server_module  # noqa: E402
 from server import Handler, ThreadingHTTPServer  # noqa: E402
 
 
@@ -32,6 +33,7 @@ class ServerHarness:
         self.db = tmp_path / "mnemosyne.db"
         make_db(self.db)
         monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+        server_module._login_attempts.clear()  # module-level rate-limit state must not bleed across tests
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.httpd.db_path = self.db
         self.httpd.bind_host = "127.0.0.1"
@@ -205,5 +207,141 @@ def test_admin_memory_mutation_endpoints_allow_localhost_admin_without_auth_and_
         audit = json.loads(body)["items"]
         assert status == 200
         assert audit[0]["action"] == "supersede"
+    finally:
+        server.close()
+
+
+def _enable_auth(server: ServerHarness, password: str = "s3cret-pass") -> None:
+    status, _headers, body = _request(
+        f"{server.base}/api/config",
+        method="POST",
+        body={"auth_enabled": True, "password": password},
+    )
+    assert status == 200, body
+
+
+def _login(server: ServerHarness, password: str = "s3cret-pass") -> str:
+    status, headers, body = _request(
+        f"{server.base}/api/auth/login",
+        method="POST",
+        body={"password": password},
+    )
+    assert status == 200, body
+    return headers["Set-Cookie"].split(";")[0]
+
+
+def test_post_requires_csrf_token_once_auth_is_enabled(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        _enable_auth(server)
+        cookie = _login(server)
+
+        status, _headers, body = _request(
+            f"{server.base}/api/config",
+            method="POST",
+            body={"memory_admin_enabled": True},
+            headers={"Cookie": cookie},
+        )
+        assert status == 403
+        assert b"CSRF" in body
+
+        status, _headers, body = _request(f"{server.base}/api/auth/status", headers={"Cookie": cookie})
+        payload = json.loads(body)
+        assert payload["authenticated"] is True
+        csrf_token = payload["csrf_token"]
+        assert csrf_token
+
+        status, _headers, body = _request(
+            f"{server.base}/api/config",
+            method="POST",
+            body={"memory_admin_enabled": True},
+            headers={"Cookie": cookie, "X-CSRF-Token": csrf_token},
+        )
+        assert status == 200, body
+        assert json.loads(body)["config"]["memory_admin_enabled"] is True
+
+        status, _headers, body = _request(
+            f"{server.base}/api/config",
+            method="POST",
+            body={"memory_admin_enabled": False},
+            headers={"Cookie": cookie, "X-CSRF-Token": "wrong-token"},
+        )
+        assert status == 403
+    finally:
+        server.close()
+
+
+def test_csrf_token_not_required_when_auth_disabled(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        status, _headers, body = _request(
+            f"{server.base}/api/config",
+            method="POST",
+            body={"host": "0.0.0.0"},
+        )
+        assert status == 200, body
+    finally:
+        server.close()
+
+
+def test_login_is_rate_limited_after_repeated_failures(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        _enable_auth(server)
+
+        for _ in range(5):
+            status, _headers, body = _request(
+                f"{server.base}/api/auth/login",
+                method="POST",
+                body={"password": "wrong-password"},
+            )
+            assert status == 403
+
+        status, _headers, body = _request(
+            f"{server.base}/api/auth/login",
+            method="POST",
+            body={"password": "s3cret-pass"},
+        )
+        assert status == 429
+        assert b"too many login attempts" in body
+
+        status, _headers, body = _request(
+            f"{server.base}/api/auth/login",
+            method="POST",
+            body={"password": "wrong-password"},
+        )
+        assert status == 429
+    finally:
+        server.close()
+
+
+def test_login_rate_limit_resets_after_success(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        _enable_auth(server)
+
+        for _ in range(4):
+            status, _headers, _body = _request(
+                f"{server.base}/api/auth/login",
+                method="POST",
+                body={"password": "wrong-password"},
+            )
+            assert status == 403
+
+        status, headers, body = _request(
+            f"{server.base}/api/auth/login",
+            method="POST",
+            body={"password": "s3cret-pass"},
+        )
+        assert status == 200, body
+        assert "Set-Cookie" in headers
+
+        for _ in range(4):
+            status, _headers, _body = _request(
+                f"{server.base}/api/auth/login",
+                method="POST",
+                body={"password": "wrong-password"},
+            )
+            assert status == 403
     finally:
         server.close()
