@@ -272,14 +272,14 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 ### Tasks
 
-- [ ] Add toast notifications for save, backup, expire, trust update, auth changes, and errors.
-- [ ] Add disabled/loading states to every mutating button.
-- [ ] Add confirmation sheets for destructive or bulk actions.
-- [ ] Add undo affordance where feasible for safe reversible actions.
-- [ ] Add skeleton screens for major data panels.
-- [ ] Improve empty states with specific next steps.
-- [ ] Add a global command/search entry point.
-- [ ] Add keyboard shortcuts:
+- [x] Add toast notifications for save, backup, expire, trust update, auth changes, and errors.
+- [x] Add disabled/loading states to every mutating button.
+- [x] Add confirmation sheets for destructive or bulk actions.
+- [x] Add undo affordance where feasible for safe reversible actions.
+- [x] Add skeleton screens for major data panels.
+- [x] Improve empty states with specific next steps.
+- [x] Add a global command/search entry point.
+- [x] Add keyboard shortcuts:
   - `/` focus search
   - `?` shortcuts/help
   - `Esc` close drawer/modal
@@ -287,13 +287,22 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
   - `g m` memories
   - `g r` review
   - `g k` knowledge graph
-- [ ] Add action summary after bulk review actions.
+- [x] Add action summary after bulk review actions.
 
 ### Acceptance criteria
 
 - A user always knows whether an action is running, succeeded, failed, or needs retry.
 - Bulk actions feel safe and deliberate.
 - Common navigation can be done without the mouse.
+
+### Phase 4 status update - 2026-07-01
+
+- `ui/feedback.js` adds tested primitives for toast rendering, pending-button state, skeleton loading cards, keyboard shortcut mapping, and bulk-action summaries.
+- Core mutation flows now show pending labels, success/error toasts, and safer summaries: memory detail edits, memory bulk actions, review bulk actions, auth/config saves, backup creation, and logout.
+- Bulk memory/review mutations run per item, report successes/failures, and keep failed selections available for retry. Clear-selection actions include an undo toast.
+- Destructive flows remain confirmation-gated, including memory expiry, review expiry, and disabling password auth.
+- Major data panels now show skeleton states while loading: memories, global search, recall debug, timeline, review queues, and MEMORIA lists/KG.
+- Keyboard/product navigation now supports `/`, `?`, `Esc`, `g o`, `g m`, `g r`, `g k`, and command search with `Cmd/Ctrl+K`.
 
 ## Phase 5 - Accessibility and Interface Quality
 

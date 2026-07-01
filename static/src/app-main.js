@@ -2,6 +2,7 @@ import { cleanContent, esc, roleOf, shortId } from './utils/escape.js';
 import { fmtBytes, prettyTime } from './utils/format.js';
 import { $, $$, closeMobileMenu, closeMobileMenuForViewportChange, fillSelect, showPanel } from './ui/dom.js';
 import { breakdown, countLabel, optionsFrom, stateHtml } from './ui/render.js';
+import { actionSummary, keyboardActionForEvent, renderToast, setButtonPending, skeletonHtml } from './ui/feedback.js';
 import { createApiClient } from './api/client.js';
 import { endpoints } from './api/endpoints.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
@@ -31,6 +32,8 @@ let latestReviewData = null;
 const REVIEW_PAGE_SIZE = 100;
 let latestMemoryItems = [];
 let latestReviewItems = [];
+let goChordUntil = 0;
+let toastTimer = 0;
 const CONSTELLATION_MIN_ZOOM = .55;
 const CONSTELLATION_MAX_ZOOM = 6;
 const CONSTELLATION_DEFAULT_CAMERA = { rotation: 0.55, tilt: 0.78, zoom: 1, panX: 0, panY: 0 };
@@ -265,6 +268,99 @@ function openActionModal({title, description='', kicker='Memory maintenance', co
   });
 }
 function confirmAction(opts){ return openActionModal(opts); }
+function toastHost(){
+  let host = $('#toastHost');
+  if(host) return host;
+  document.body.insertAdjacentHTML('beforeend', '<div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="false"></div>');
+  return $('#toastHost');
+}
+function showToast(opts={}){
+  const host = toastHost();
+  host.innerHTML = renderToast(opts);
+  const action = host.querySelector('.toast-action');
+  if(action && typeof opts.action === 'function') action.onclick = opts.action;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => { host.innerHTML = ''; }, opts.timeout || 5200);
+}
+async function runButtonAction(button, pendingLabel, action, success){
+  setButtonPending(button, true, pendingLabel);
+  try {
+    const result = await action();
+    if(success) showToast(typeof success === 'function' ? success(result) : success);
+    return result;
+  } catch(e) {
+    showToast({tone:'error', title:'Action failed', body:e.message || 'Try again.'});
+    throw e;
+  } finally {
+    setButtonPending(button, false);
+  }
+}
+async function runBulkMutation(ids, mutate, verb){
+  let failed = 0;
+  for(const id of ids){
+    try { await mutate(id); }
+    catch(e){ failed += 1; console.warn('[bulk mutation]', id, e); }
+  }
+  const summary = actionSummary(verb, {count:ids.length, failed});
+  showToast({tone: failed ? 'warning' : 'success', title:summary, body: failed ? 'The failed items were left selected for retry.' : 'The list has been refreshed.'});
+  return {failed};
+}
+async function openCommandSearch(){
+  const query = await openActionModal({
+    title: 'Command search',
+    description: 'Search memories, facts, and consolidations from anywhere.',
+    kicker: 'Global command',
+    confirmText: 'Search',
+    bodyHtml: '<label class="modal-field"><span>Search query</span><input id="modalCommandSearch" type="search" placeholder="whoop, project, session, person..." /></label>',
+    readValue: () => $('#modalCommandSearch').value.trim(),
+    validate: (v) => v ? '' : 'Type a search query.'
+  });
+  if(query === null) return;
+  $('#globalSearchQuery').value = query;
+  switchTab('search');
+  await loadGlobalSearch();
+}
+function openShortcutHelp(){
+  openActionModal({
+    title: 'Keyboard shortcuts',
+    description: 'Fast paths for the dashboard.',
+    kicker: 'Command map',
+    confirmText: 'Done',
+    bodyHtml: `<div class="shortcut-grid">
+      <span>/</span><strong>Focus search</strong>
+      <span>⌘K / Ctrl K</span><strong>Open command search</strong>
+      <span>Esc</span><strong>Close drawer or dialog</strong>
+      <span>g o</span><strong>Go to Overview</strong>
+      <span>g m</span><strong>Go to Memories</strong>
+      <span>g r</span><strong>Go to Review</strong>
+      <span>g k</span><strong>Go to Knowledge Graph</strong>
+    </div>`
+  });
+}
+function focusPrimarySearch(){
+  const target = sectionFor(currentRoute.tab) === 'explore' ? $('#memoryQuery') : $('#menuSearchQuery') || $('#globalSearchQuery');
+  target?.focus();
+  target?.select?.();
+}
+function handleGlobalKeyboard(e){
+  const chord = performance.now() < goChordUntil ? 'g' : '';
+  const action = keyboardActionForEvent(e, chord);
+  if(!action) return;
+  if(action === 'start-go-chord'){
+    goChordUntil = performance.now() + 1100;
+    return;
+  }
+  goChordUntil = 0;
+  e.preventDefault();
+  if(action === 'focus-search') focusPrimarySearch();
+  else if(action === 'show-shortcuts') openShortcutHelp();
+  else if(action === 'close-overlay') closeDetail();
+  else if(action === 'open-command') openCommandSearch();
+  else if(action === 'go-overview') switchTab('overview');
+  else if(action === 'go-memories') switchTab('memories');
+  else if(action === 'go-review') switchTab('review');
+  else if(action === 'go-graph') switchTab('graph');
+}
 function askImportance(current){
   return openActionModal({
     title: 'Edit importance',
@@ -618,6 +714,7 @@ async function loadMemories(){
     status: $('#memoryStatus').value,
     sort: $('#memorySort').value
   });
+  $('#memoryList').innerHTML = skeletonHtml('Loading memories', 4);
   try {
     const data = await api(endpoints.memories(params), {requestKey:'memories'});
     latestMemoryItems = data.items || [];
@@ -650,37 +747,49 @@ function updateBulkBar(){
 function bindBulkMemoryControls(){
   $$('#memoryList .memory-check').forEach(chk => chk.onchange = e => { e.stopPropagation(); chk.checked ? bulkSelection.add(chk.dataset.id) : bulkSelection.delete(chk.dataset.id); updateBulkBar(); });
 }
-async function expireSelectedMemories(){
+async function expireSelectedMemories(button){
   const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
   if(!ids.length) return;
   const ok = await confirmAction({title:'Expire selected memories?', description:`Expire ${ids.length} selected active memories. Backups and audit entries will be created.`, confirmText:'Expire selected', tone:'warn'});
   if(!ok) return;
-  for(const id of ids) await postJson('/api/admin/memory/invalidate', {memory_id:id, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
-  bulkSelection.clear(); await loadStats(); await loadMemories();
+  await runButtonAction(button, 'Expiring...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/invalidate', {memory_id:id, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true}), 'Expired');
+    if(!result.failed) bulkSelection.clear();
+    await loadStats(); await loadMemories();
+  });
 }
-async function setSelectedImportance(){
+async function setSelectedImportance(button){
   const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
   if(!ids.length) return;
   const v = await askImportance(0.5);
   if(v === null) return;
-  for(const id of ids) await postJson('/api/admin/memory/importance', {memory_id:id, importance:Number(v), backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
-  bulkSelection.clear(); await loadStats(); await loadMemories();
+  await runButtonAction(button, 'Saving...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/importance', {memory_id:id, importance:Number(v), backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true}), 'Updated');
+    if(!result.failed) bulkSelection.clear();
+    await loadStats(); await loadMemories();
+  });
 }
-async function setSelectedVeracity(){
+async function setSelectedVeracity(button){
   const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
   if(!ids.length) return;
   const v = await askVeracity('stated');
   if(v === null) return;
-  for(const id of ids) await postJson('/api/admin/memory/veracity', {memory_id:id, veracity:v, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
-  bulkSelection.clear(); await loadStats(); await loadMemories();
+  await runButtonAction(button, 'Saving...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/veracity', {memory_id:id, veracity:v, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true}), 'Updated');
+    if(!result.failed) bulkSelection.clear();
+    await loadStats(); await loadMemories();
+  });
 }
-async function setSelectedExpiry(){
+async function setSelectedExpiry(button){
   const ids = selectedMutableIds(latestMemoryItems, bulkSelection);
   if(!ids.length) return;
   const v = await askExpiry('');
   if(v === null) return;
-  for(const id of ids) await postJson('/api/admin/memory/expiry', {memory_id:id, valid_until:v, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true});
-  bulkSelection.clear(); await loadStats(); await loadMemories();
+  await runButtonAction(button, 'Saving...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/expiry', {memory_id:id, valid_until:v, backup: $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true}), 'Updated');
+    if(!result.failed) bulkSelection.clear();
+    await loadStats(); await loadMemories();
+  });
 }
 function bindMemoryClicks(root){
   root.querySelectorAll('.session-link').forEach(btn => btn.onclick = (e) => { e.stopPropagation(); openSessionDetail(btn.dataset.session || ''); });
@@ -767,31 +876,31 @@ async function openMemoryDetail(memoryId, opts={}){
       tone: 'warn'
     });
     if(!ok) return;
-    try { const r = await postJson('/api/admin/memory/invalidate', {memory_id:item.id, backup: backup()}); $('#memoryActionStatus').textContent = `Expired. Backup: ${r.backup?.path || 'not created'}`; await loadMemories(); await openMemoryDetail(item.id); }
+    try { const r = await runButtonAction($('#expireMemory'), 'Expiring...', () => postJson('/api/admin/memory/invalidate', {memory_id:item.id, backup: backup()}), () => ({tone:'success', title:'Memory expired', body:'The original remains in history and audit.'})); $('#memoryActionStatus').textContent = `Expired. Backup: ${r.backup?.path || 'not created'}`; await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#editImportance').onclick = async () => {
     const v = await askImportance(item.importance ?? 0.5);
     if(v === null) return;
-    try { const r = await postJson('/api/admin/memory/importance', {memory_id:item.id, importance:Number(v), backup: backup()}); $('#memoryActionStatus').textContent = `Importance updated to ${r.importance}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    try { const r = await runButtonAction($('#editImportance'), 'Saving...', () => postJson('/api/admin/memory/importance', {memory_id:item.id, importance:Number(v), backup: backup()}), () => ({tone:'success', title:'Importance updated', body:`New value: ${Number(v).toFixed(2)}`})); $('#memoryActionStatus').textContent = `Importance updated to ${r.importance}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#editVeracity').onclick = async () => {
     const v = await askVeracity(item.veracity || 'unknown');
     if(v === null) return;
-    try { const r = await postJson('/api/admin/memory/veracity', {memory_id:item.id, veracity:v, backup: backup()}); $('#memoryActionStatus').textContent = `Trust updated to ${r.veracity}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    try { const r = await runButtonAction($('#editVeracity'), 'Saving...', () => postJson('/api/admin/memory/veracity', {memory_id:item.id, veracity:v, backup: backup()}), () => ({tone:'success', title:'Trust updated', body:`Trust is now ${v}.`})); $('#memoryActionStatus').textContent = `Trust updated to ${r.veracity}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#editExpiry').onclick = async () => {
     const v = await askExpiry(item.valid_until || '');
     if(v === null) return;
-    try { const r = await postJson('/api/admin/memory/expiry', {memory_id:item.id, valid_until:v, backup: backup()}); $('#memoryActionStatus').textContent = `Expiry ${r.valid_until ? `set to ${r.valid_until}` : 'cleared'}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
+    try { const r = await runButtonAction($('#editExpiry'), 'Saving...', () => postJson('/api/admin/memory/expiry', {memory_id:item.id, valid_until:v, backup: backup()}), () => ({tone:'success', title:'Expiry updated', body:v ? `Valid until ${v}` : 'Scheduled expiry cleared.'})); $('#memoryActionStatus').textContent = `Expiry ${r.valid_until ? `set to ${r.valid_until}` : 'cleared'}.`; await loadStats(); await loadMemories(); await openMemoryDetail(item.id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
   $('#supersedeMemory').onclick = async () => {
     const replacement = await askReplacement(item.content || '');
     if(replacement === null) return;
-    try { const r = await postJson('/api/admin/memory/supersede', {memory_id:item.id, content:replacement, importance:Number(item.importance ?? 0.5), backup: backup()}); $('#memoryActionStatus').textContent = `Superseded by ${r.replacement_id}.`; $('#memoryStatus').value = 'all'; await loadStats(); await loadMemories(); await openMemoryDetail(r.replacement_id); }
+    try { const r = await runButtonAction($('#supersedeMemory'), 'Creating...', () => postJson('/api/admin/memory/supersede', {memory_id:item.id, content:replacement, importance:Number(item.importance ?? 0.5), backup: backup()}), () => ({tone:'success', title:'Memory superseded', body:'Opened the replacement memory.'})); $('#memoryActionStatus').textContent = `Superseded by ${r.replacement_id}.`; $('#memoryStatus').value = 'all'; await loadStats(); await loadMemories(); await openMemoryDetail(r.replacement_id); }
     catch(e){ $('#memoryActionStatus').textContent = e.message; }
   };
 }
@@ -866,7 +975,7 @@ async function menuSearch(){ await runSearchFromInput('#menuSearchQuery'); }
 async function loadGlobalSearch(){
   const q = $('#globalSearchQuery')?.value.trim() || '';
   if(!q){ $('#globalSearchResults').innerHTML = stateHtml('empty', 'Search from the sidebar or type a query above.', 'Search looks across memories, facts, and consolidations.'); return; }
-  $('#globalSearchResults').innerHTML = stateHtml('loading', 'Searching memory…', q);
+  $('#globalSearchResults').innerHTML = skeletonHtml(`Searching for "${q}"`, 3);
   try{
     const data = await api(endpoints.search(q, 30), {requestKey:'global-search'});
     const memories = data.memories || [];
@@ -893,6 +1002,7 @@ function recallItem(x){
 async function loadRecallDebug(){
   const q = $('#recallQuery')?.value.trim() || '';
   if(!q){ $('#recallNote').textContent = 'Type a query to explain approximate recall ranking.'; $('#recallResults').innerHTML = ''; return; }
+  $('#recallResults').innerHTML = skeletonHtml('Explaining recall ranking', 3);
   try {
     const data = await api(`/api/recall-debug?q=${encodeURIComponent(q)}&limit=30`, {requestKey:'recall-debug'});
     $('#recallNote').textContent = data.note;
@@ -908,6 +1018,7 @@ function timelineEvent(e){ return `<div class="timeline-event item" data-json='$
 async function loadTimeline(){
   const q = $('#timelineQuery')?.value.trim() || '';
   const group = $('#timelineGroup')?.value || 'day';
+  $('#timelineResults').innerHTML = skeletonHtml('Loading timeline', 4);
   try {
     const data = await api(`/api/timeline?q=${encodeURIComponent(q)}&group=${encodeURIComponent(group)}&limit=300`, {requestKey:'timeline'});
     $('#timelineResults').innerHTML = data.groups.map(g => `<div class="timeline-group"><div class="section-head mini"><h2>${esc(g.key)}</h2><span>${g.count} events</span>${group === 'session' && g.key !== 'no session' ? `<button class="tiny open-session" data-session="${esc(g.key)}">Open session</button>` : ''}</div><div class="timeline">${g.events.map(timelineEvent).join('')}</div></div>`).join('') || '<p class="muted">No timeline events.</p>';
@@ -1102,6 +1213,7 @@ function renderSelectedReviewQueue(data, append=false){
   });
 }
 async function loadReviewPage(append=false){
+  if(!append) $('#reviewQueues').innerHTML = skeletonHtml('Loading review queue', 4);
   try {
     const data = await api(endpoints.review(reviewFilterParams({
       queue:selectedReviewQueue,
@@ -1116,41 +1228,53 @@ async function loadReviewPage(append=false){
     $('#reviewQueues').innerHTML = stateHtml('error', 'Could not load review queue.', e.message || 'Try again.');
   }
 }
-async function confirmSelectedReviewMemories(){
+async function confirmSelectedReviewMemories(button){
   const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const ok = await confirmAction({title:'Confirm selected memories?', description:`Mark ${ids.length} selected active memories as stated.`, confirmText:'Confirm selected'});
   if(!ok) return;
   const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  for(const id of ids) await postJson('/api/admin/memory/veracity', {memory_id:id, veracity:'stated', backup});
-  reviewSelection.clear(); await loadStats(); await loadReview();
+  await runButtonAction(button, 'Confirming...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/veracity', {memory_id:id, veracity:'stated', backup}), 'Confirmed');
+    if(!result.failed) reviewSelection.clear();
+    await loadStats(); await loadReview();
+  });
 }
-async function setSelectedReviewVeracity(){
+async function setSelectedReviewVeracity(button){
   const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const v = await askVeracity('stated');
   if(v === null) return;
   const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  for(const id of ids) await postJson('/api/admin/memory/veracity', {memory_id:id, veracity:v, backup});
-  reviewSelection.clear(); await loadStats(); await loadReview();
+  await runButtonAction(button, 'Saving...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/veracity', {memory_id:id, veracity:v, backup}), 'Updated');
+    if(!result.failed) reviewSelection.clear();
+    await loadStats(); await loadReview();
+  });
 }
-async function setSelectedReviewExpiry(){
+async function setSelectedReviewExpiry(button){
   const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const v = await askExpiry('');
   if(v === null) return;
   const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  for(const id of ids) await postJson('/api/admin/memory/expiry', {memory_id:id, valid_until:v, backup});
-  reviewSelection.clear(); await loadStats(); await loadReview();
+  await runButtonAction(button, 'Saving...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/expiry', {memory_id:id, valid_until:v, backup}), 'Updated');
+    if(!result.failed) reviewSelection.clear();
+    await loadStats(); await loadReview();
+  });
 }
-async function expireSelectedReviewMemories(){
+async function expireSelectedReviewMemories(button){
   const ids = reviewActionableIds(latestReviewItems, reviewSelection);
   if(!ids.length) return;
   const ok = await confirmAction({title:'Expire selected memories?', description:`Expire ${ids.length} selected active memories. Backups and audit entries will be created.`, confirmText:'Expire selected', tone:'warn'});
   if(!ok) return;
   const backup = $('#backupBeforeMutation') ? $('#backupBeforeMutation').checked : true;
-  for(const id of ids) await postJson('/api/admin/memory/invalidate', {memory_id:id, backup});
-  reviewSelection.clear(); await loadStats(); await loadReview();
+  await runButtonAction(button, 'Expiring...', async () => {
+    const result = await runBulkMutation(ids, id => postJson('/api/admin/memory/invalidate', {memory_id:id, backup}), 'Expired');
+    if(!result.failed) reviewSelection.clear();
+    await loadStats(); await loadReview();
+  });
 }
 async function loadReview(){
   reviewOffset = 0;
@@ -3342,6 +3466,7 @@ async function loadMemoriaTable(inputId, apiPath, listId, countId){
   const q = $(`#${inputId}Query`)?.value?.trim() || '';
   const list = $(`#${listId}`);
   if(!list) return;
+  list.innerHTML = skeletonHtml('Loading MEMORIA entries', 3);
   try {
     const r = await api(`${apiPath}?q=${encodeURIComponent(q)}&limit=200`, {requestKey:`memoria:${apiPath}`});
     const items = r.items || [];
@@ -3413,6 +3538,7 @@ async function loadMemoriaKg(){
   const tbody = $('#memoriaKgRows');
   if(!tbody) return;
   let items = [];
+  tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">Loading MEMORIA graph entries...</td></tr>';
   try {
     const r = await api(`/api/memoria/kg?q=${encodeURIComponent(q)}&limit=200`, {requestKey:'memoria:kg'});
     items = r.items || [];
@@ -3451,26 +3577,34 @@ window.addEventListener('orientationchange', closeMobileMenuForViewportChange, {
 document.addEventListener('fullscreenchange', updateVisualiserFullscreenButtons);
 $('#memorySearch').onclick = refreshMemoriesRouteAndLoad;
 $('#bulkSelectAll').onchange = () => { latestMemoryItems.forEach(x => $('#bulkSelectAll').checked ? bulkSelection.add(x.id) : bulkSelection.delete(x.id)); loadMemories(); };
-$('#bulkClear').onclick = () => { bulkSelection.clear(); loadMemories(); };
-$('#bulkExpire').onclick = expireSelectedMemories;
-$('#bulkVeracity').onclick = setSelectedVeracity;
-$('#bulkExpiry').onclick = setSelectedExpiry;
-$('#bulkImportance').onclick = setSelectedImportance; $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') refreshMemoriesRouteAndLoad(); };
+$('#bulkClear').onclick = () => {
+  const previous = new Set(bulkSelection);
+  bulkSelection.clear(); loadMemories();
+  showToast({tone:'info', title:'Selection cleared', body:`Cleared ${previous.size} selected memories.`, actionLabel:'Undo', action:() => { bulkSelection = previous; loadMemories(); }});
+};
+$('#bulkExpire').onclick = () => expireSelectedMemories($('#bulkExpire'));
+$('#bulkVeracity').onclick = () => setSelectedVeracity($('#bulkVeracity'));
+$('#bulkExpiry').onclick = () => setSelectedExpiry($('#bulkExpiry'));
+$('#bulkImportance').onclick = () => setSelectedImportance($('#bulkImportance')); $('#memoryQuery').onkeydown = e => { if(e.key==='Enter') refreshMemoriesRouteAndLoad(); };
 $('#reviewSelectAll').onchange = () => {
   const checked = $('#reviewSelectAll').checked;
   latestReviewItems.forEach(x => checked ? reviewSelection.add(x.id) : reviewSelection.delete(x.id));
   $$('#review .review-check').forEach(chk => { chk.checked = checked; });
   updateReviewBulkBar();
 };
-$('#reviewClear').onclick = () => { reviewSelection.clear(); loadReview(); };
-$('#reviewConfirm').onclick = confirmSelectedReviewMemories;
-$('#reviewVeracity').onclick = setSelectedReviewVeracity;
-$('#reviewExpiry').onclick = setSelectedReviewExpiry;
-$('#reviewExpire').onclick = expireSelectedReviewMemories;
-$('#globalSearchButton').onclick = loadGlobalSearch; $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') loadGlobalSearch(); };
-$('#menuSearchButton').onclick = menuSearch; $('#menuSearchQuery').onkeydown = e => { if(e.key==='Enter') menuSearch(); };
-$('#recallButton').onclick = loadRecallDebug; $('#recallQuery').onkeydown = e => { if(e.key==='Enter') loadRecallDebug(); };
-$('#timelineButton').onclick = loadTimeline; $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') loadTimeline(); }; $('#timelineGroup').onchange = loadTimeline;
+$('#reviewClear').onclick = () => {
+  const previous = new Set(reviewSelection);
+  reviewSelection.clear(); loadReview();
+  showToast({tone:'info', title:'Review selection cleared', body:`Cleared ${previous.size} selected memories.`, actionLabel:'Undo', action:() => { reviewSelection = previous; loadReviewPage(false); }});
+};
+$('#reviewConfirm').onclick = () => confirmSelectedReviewMemories($('#reviewConfirm'));
+$('#reviewVeracity').onclick = () => setSelectedReviewVeracity($('#reviewVeracity'));
+$('#reviewExpiry').onclick = () => setSelectedReviewExpiry($('#reviewExpiry'));
+$('#reviewExpire').onclick = () => expireSelectedReviewMemories($('#reviewExpire'));
+$('#globalSearchButton').onclick = () => runButtonAction($('#globalSearchButton'), 'Searching...', loadGlobalSearch); $('#globalSearchQuery').onkeydown = e => { if(e.key==='Enter') $('#globalSearchButton').click(); };
+$('#menuSearchButton').onclick = () => runButtonAction($('#menuSearchButton'), 'Searching...', menuSearch); $('#menuSearchQuery').onkeydown = e => { if(e.key==='Enter') $('#menuSearchButton').click(); };
+$('#recallButton').onclick = () => runButtonAction($('#recallButton'), 'Explaining...', loadRecallDebug); $('#recallQuery').onkeydown = e => { if(e.key==='Enter') $('#recallButton').click(); };
+$('#timelineButton').onclick = () => runButtonAction($('#timelineButton'), 'Loading...', loadTimeline); $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') $('#timelineButton').click(); }; $('#timelineGroup').onchange = loadTimeline;
 $('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; refreshMemoriesRouteAndLoad(); };
 ['memoryKind','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset','memoryStatus','memorySort'].forEach(id => $('#'+id).onchange = refreshMemoriesRouteAndLoad);
 $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { if(e.key==='Enter') loadTriples(); };
@@ -3515,7 +3649,7 @@ $('#memoriaPreferencesSearch').onclick = () => loadMemoriaTable('memoriaPreferen
 $('#memoriaPreferencesQuery').onkeydown = e => { if(e.key==='Enter') $('#memoriaPreferencesSearch').click(); };
 $('#closeDetail').onclick = () => closeDetail();
 $('#loginButton').onclick = async () => {
-  try { await postJson('/api/auth/login', {password: $('#loginPassword').value}); hideLogin(); $('#loginError').textContent=''; await refreshAuthState(); loadStats(); }
+  try { await runButtonAction($('#loginButton'), 'Signing in...', () => postJson('/api/auth/login', {password: $('#loginPassword').value}), {tone:'success', title:'Signed in'}); hideLogin(); $('#loginError').textContent=''; await refreshAuthState(); loadStats(); }
   catch(e){ $('#loginError').textContent = e.message; }
 };
 $('#loginPassword').onkeydown = e => { if(e.key==='Enter') $('#loginButton').click(); };
@@ -3524,7 +3658,7 @@ $('#copyDiagnostics').onclick = copyDiagnostics;
 $('#saveRuntimeConfig').onclick = async () => {
   try {
     const body = {host: $('#configHost').value.trim(), port: $('#configPort').value.trim(), db_path: $('#configDbPath').value.trim()};
-    const r = await postJson('/api/config', body);
+    const r = await runButtonAction($('#saveRuntimeConfig'), 'Saving...', () => postJson('/api/config', body), {tone:'success', title:'Server settings saved', body:'Restart the dashboard to apply host, port, or database changes.'});
     const cfg = r.config || {};
     $('#configHost').value = cfg.host || '';
     $('#configPort').value = cfg.port || '';
@@ -3535,12 +3669,14 @@ $('#saveRuntimeConfig').onclick = async () => {
   } catch(e) { $('#configStatus').textContent = e.message; }
 };
 $('#saveAuth').onclick = async () => {
-  try { const body = {auth_enabled: $('#authEnabled').checked}; if($('#authPassword').value) body.password = $('#authPassword').value; const r = await postJson('/api/config', body); $('#authPassword').value=''; $('#authStatus').textContent = r.message || 'Saved'; }
+  try { const body = {auth_enabled: $('#authEnabled').checked}; if($('#authPassword').value) body.password = $('#authPassword').value; const r = await runButtonAction($('#saveAuth'), 'Saving...', () => postJson('/api/config', body), {tone:'success', title:'Auth settings saved'}); $('#authPassword').value=''; $('#authStatus').textContent = r.message || 'Saved'; }
   catch(e){ $('#authStatus').textContent = e.message; }
 };
 $('#clearAuth').onclick = async () => {
   try {
-    const r = await postJson('/api/config', {clear_password:true});
+    const ok = await confirmAction({title:'Disable password auth?', description:'This clears the dashboard password and disables password auth.', confirmText:'Disable auth', tone:'warn'});
+    if(!ok) return;
+    const r = await runButtonAction($('#clearAuth'), 'Disabling...', () => postJson('/api/config', {clear_password:true}), {tone:'success', title:'Password auth disabled'});
     $('#authEnabled').checked=false;
     $('#authPassword').value='';
     $('#memoryAdminEnabled').checked=!!(r.config && r.config.memory_admin_enabled);
@@ -3551,11 +3687,11 @@ $('#clearAuth').onclick = async () => {
   }
 };
 $('#saveMemoryAdmin').onclick = async () => {
-  try { const r = await postJson('/api/config', {memory_admin_enabled: $('#memoryAdminEnabled').checked}); authState.config = r.config || {}; $('#memoryAdminStatus').textContent = r.message || 'Saved'; await loadAuthStatus(); }
+  try { const r = await runButtonAction($('#saveMemoryAdmin'), 'Saving...', () => postJson('/api/config', {memory_admin_enabled: $('#memoryAdminEnabled').checked}), {tone:'success', title:'Memory admin settings saved'}); authState.config = r.config || {}; $('#memoryAdminStatus').textContent = r.message || 'Saved'; await loadAuthStatus(); }
   catch(e){ $('#memoryAdminStatus').textContent = e.message; }
 };
 $('#createBackup').onclick = async () => {
-  try { const r = await postJson('/api/admin/backup', {}); $('#memoryAdminStatus').textContent = `Backup created: ${r.backup.path}`; }
+  try { const r = await runButtonAction($('#createBackup'), 'Creating...', () => postJson('/api/admin/backup', {}), result => ({tone:'success', title:'Backup created', body:result.backup?.path || ''})); $('#memoryAdminStatus').textContent = `Backup created: ${r.backup.path}`; }
   catch(e){ $('#memoryAdminStatus').textContent = e.message; }
 };
 $('#viewAuditLog').onclick = async () => {
@@ -3564,13 +3700,17 @@ $('#viewAuditLog').onclick = async () => {
 };
 $('#retryBootstrap').onclick = () => bootstrapDashboard().catch(handleInitError);
 $('#copyBootError').onclick = copyBootErrorDetails;
-$('#logoutAuth').onclick = async () => { await postJson('/api/auth/logout', {}); showLogin(); };
+$('#logoutAuth').onclick = async () => {
+  await runButtonAction($('#logoutAuth'), 'Logging out...', () => postJson('/api/auth/logout', {}), {tone:'success', title:'Logged out'});
+  showLogin();
+};
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
 initLiveMemoryInfiniteScroll();
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 window.addEventListener('hashchange', () => applyRoute(urlToRoute()));
+window.addEventListener('keydown', handleGlobalKeyboard);
 initTheme();
 const initialRoute = urlToRoute();
 pushRoute(initialRoute, true);

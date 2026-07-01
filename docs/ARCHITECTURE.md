@@ -37,6 +37,7 @@ npm run build:frontend
 - `api/client.js`: fetch wrapper, JSON POST helper, and unauthorized callback seam.
 - `api/endpoints.js`: endpoint builders and short TTL policy for low-volatility GETs.
 - `ui/dom.js`: selector helpers, select rendering, section panel switching, mobile menu helpers.
+- `ui/feedback.js`: toast HTML, pending-button state, skeleton loading cards, keyboard shortcut mapping, and bulk-action summaries.
 - `ui/render.js`: shared state-card, breakdown, select-option, and count-label rendering helpers.
 - `utils/escape.js`: HTML escaping, ID shortening, chat-role prefix helpers.
 - `utils/format.js`: time and byte formatting.
@@ -81,3 +82,13 @@ Phase 3 uses hash routes so the dashboard can be served by the existing Python s
 - Detail drawers use stable deep links: `#/memory/<id>` for memories and `#/session/<id>` for timeline sessions.
 - `popstate` and `hashchange` both re-apply route state, so browser back/forward and pasted hash links restore the correct tab, filters, and drawer.
 - Legacy query-string links such as `?tab=memories&memory=<id>` are still parsed, but new navigation serialises to hash routes.
+
+## Product UX Feedback
+
+Phase 4 keeps feedback primitives framework-free:
+
+- `showToast()` renders a transient `#toastHost` message for saves, auth changes, backups, mutation success, and errors.
+- `runButtonAction()` wraps async button actions with `disabled`, `aria-busy`, and a pending label.
+- Bulk memory and review mutations report action summaries and keep failed selections available for retry.
+- Skeleton cards are used while core list/search panels load.
+- Global shortcuts are mapped through `keyboardActionForEvent()`: `/` focuses search, `?` opens shortcut help, `Esc` closes overlays, `g o/m/r/k` navigates, and `Cmd/Ctrl+K` opens command search.
