@@ -20,7 +20,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from mock_data import make_mock_db
+from mock_data import make_mock_db, write_mock_audit_log
 
 try:
     import websocket
@@ -266,7 +266,9 @@ def run_chrome_back_forward(base_url: str) -> float:
 def run() -> None:
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     db_path = TMP_DIR / "mock-mnemosyne.db"
+    hermes_home = TMP_DIR / "hermes-home"
     make_mock_db(db_path)
+    write_mock_audit_log(hermes_home)
     port = free_port()
     base_url = f"http://127.0.0.1:{port}/"
     server = subprocess.Popen(
@@ -275,14 +277,14 @@ def run() -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        env={**os.environ, "MNEMOSYNE_DASHBOARD_CONFIG": str(TMP_DIR / "config.json")},
+        env={**os.environ, "HERMES_HOME": str(hermes_home), "MNEMOSYNE_DASHBOARD_CONFIG": str(TMP_DIR / "config.json")},
     )
     try:
         wait_for_server(f"{base_url}api/health")
         timings = check_http_baseline(base_url)
         route_timings = {
             tab: run_chrome_route(base_url, tab)
-            for tab in ("overview", "today", "memories", "graph", "settings")
+            for tab in ("overview", "today", "memories", "graph", "insights", "settings")
         }
         deep_link_ms = run_chrome_memory_deep_link(base_url, "wm-001")
         back_forward_ms = run_chrome_back_forward(base_url)

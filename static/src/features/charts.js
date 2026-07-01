@@ -5,8 +5,16 @@ import {
   AUDIT_ACTION_ORDER,
   buildAuditActivityChartData,
   buildGrowthChartData,
+  buildLifecycleTransitionChartData,
+  buildNamedSeriesChartData,
+  buildReviewBacklogChartData,
+  buildVeracityMixChartData,
+  heatmapCells,
   loadUplotModule,
+  rankedBars,
   recallDistributionBars,
+  VERACITY_LABELS,
+  VERACITY_ORDER,
 } from '../utils/charts.js';
 
 const CHART_HEIGHT_FALLBACK = 240;
@@ -73,12 +81,24 @@ function chartTooltipPlugin(labels, colors) {
 export function createChartsFeature({ $, api, switchTab, loadMemories }) {
   let growthChart = null;
   let auditChart = null;
+  let veracityChart = null;
+  let sourceChart = null;
+  let reviewBacklogChart = null;
+  let lifecycleChart = null;
 
   function disposeInsightsCharts() {
     growthChart?.destroy();
     auditChart?.destroy();
+    veracityChart?.destroy();
+    sourceChart?.destroy();
+    reviewBacklogChart?.destroy();
+    lifecycleChart?.destroy();
     growthChart = null;
     auditChart = null;
+    veracityChart = null;
+    sourceChart = null;
+    reviewBacklogChart = null;
+    lifecycleChart = null;
   }
 
   function baseChartOptions(viewport, series) {
@@ -146,6 +166,82 @@ export function createChartsFeature({ $, api, switchTab, loadMemories }) {
     );
   }
 
+  async function renderMultiSeriesChart({ viewportId, labels, data, colors, currentChart, assignChart }) {
+    const viewport = $(`#${viewportId}`);
+    if (!viewport) return;
+    const { default: uPlot } = await loadUplotModule();
+    const series = [
+      {},
+      ...labels.map((label, i) => ({
+        label,
+        stroke: colors[i % colors.length],
+        width: 2,
+        fill: labels.length <= 4 ? withAlpha(colors[i % colors.length], '1c') : undefined,
+      })),
+    ];
+    currentChart?.destroy();
+    viewport.innerHTML = '';
+    assignChart(new uPlot(
+      { ...baseChartOptions(viewport, series), plugins: [chartTooltipPlugin(labels, colors)] },
+      data,
+      viewport,
+    ));
+  }
+
+  function chartColors(count) {
+    const vars = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6'];
+    return Array.from({ length: count }, (_, i) => resolveCssVar(vars[i % vars.length]));
+  }
+
+  async function renderVeracityChart(seriesData) {
+    const data = buildVeracityMixChartData(seriesData);
+    const labels = VERACITY_ORDER.map((name) => VERACITY_LABELS[name]);
+    await renderMultiSeriesChart({
+      viewportId: 'veracityChartViewport',
+      labels,
+      data,
+      colors: chartColors(labels.length),
+      currentChart: veracityChart,
+      assignChart: (chart) => { veracityChart = chart; },
+    });
+  }
+
+  async function renderSourceChart(seriesData) {
+    const { names, data } = buildNamedSeriesChartData(seriesData, 'sources', 'by_source');
+    await renderMultiSeriesChart({
+      viewportId: 'sourceChartViewport',
+      labels: names,
+      data,
+      colors: chartColors(names.length),
+      currentChart: sourceChart,
+      assignChart: (chart) => { sourceChart = chart; },
+    });
+  }
+
+  async function renderReviewBacklogChart(seriesData) {
+    const { labels, data } = buildReviewBacklogChartData(seriesData);
+    await renderMultiSeriesChart({
+      viewportId: 'reviewBacklogChartViewport',
+      labels,
+      data,
+      colors: chartColors(labels.length),
+      currentChart: reviewBacklogChart,
+      assignChart: (chart) => { reviewBacklogChart = chart; },
+    });
+  }
+
+  async function renderLifecycleChart(seriesData) {
+    const { labels, data } = buildLifecycleTransitionChartData(seriesData);
+    await renderMultiSeriesChart({
+      viewportId: 'lifecycleChartViewport',
+      labels,
+      data,
+      colors: chartColors(labels.length),
+      currentChart: lifecycleChart,
+      assignChart: (chart) => { lifecycleChart = chart; },
+    });
+  }
+
   function renderRecallDistribution(items) {
     const el = $('#recallDistribution');
     if (!el) return;
@@ -171,26 +267,127 @@ export function createChartsFeature({ $, api, switchTab, loadMemories }) {
     });
   }
 
+  function renderBars(el, items, emptyText, onClick) {
+    if (!el) return;
+    const bars = rankedBars(items);
+    if (!bars.some((bar) => bar.count > 0)) {
+      el.innerHTML = `<span class="muted">${esc(emptyText)}</span>`;
+      return;
+    }
+    el.innerHTML = bars.map((bar) =>
+      `<button class="pattern-bar" data-query="${esc(bar.query)}"><span class="pattern-bar-fill" style="width:${bar.percent}%"></span><span class="pattern-bar-label">${esc(bar.label)}</span><strong>${bar.count.toLocaleString()}</strong></button>`,
+    ).join('');
+    el.querySelectorAll('.pattern-bar').forEach((btn) => {
+      btn.onclick = () => onClick(btn.dataset.query || '');
+    });
+  }
+
+  function renderClusters(payload) {
+    const jumpToMemories = (query) => {
+      switchTab('memories');
+      $('#memoryStatus').value = 'active';
+      $('#memoryQuery').value = query || '';
+      loadMemories();
+    };
+    renderBars($('#domainClusters'), payload?.domains || [], 'No domain clusters detected yet.', jumpToMemories);
+    renderBars($('#entityClusters'), payload?.entities || [], 'No entity clusters detected yet.', jumpToMemories);
+  }
+
+  function renderSessionHeatmap(payload) {
+    const el = $('#sessionHeatmap');
+    if (!el) return;
+    const rows = heatmapCells(payload);
+    if (!rows.length || !rows.some((row) => row.cells.some((cell) => cell.count > 0))) {
+      el.innerHTML = '<span class="muted">No recent session activity found.</span>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="heatmap-hours">${(payload.hours || []).map((hour) => `<span>${hour % 6 === 0 ? hour : ''}</span>`).join('')}</div>
+      ${rows.map((row) => `
+        <div class="heatmap-row">
+          <strong>${esc(row.day)}</strong>
+          <div class="heatmap-cells">${row.cells.map((cell) => `<span class="heat-cell" title="${esc(row.day)} ${cell.hour}:00 · ${cell.count} memories" style="--heat:${cell.intensity}"></span>`).join('')}</div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  function renderActionCards(payload) {
+    const el = $('#insightCards');
+    if (!el) return;
+    const cards = payload?.cards || [];
+    if (!cards.length) {
+      el.innerHTML = '<span class="muted">No insight cards available yet.</span>';
+      return;
+    }
+    el.innerHTML = cards.map((card) => `
+      <button class="insight-action-card" data-tab="${esc(card.action?.tab || '')}" data-queue="${esc(card.action?.queue || '')}" data-query="${esc(card.action?.q || '')}" data-session="${esc(card.action?.session_id || '')}">
+        <span>${esc(card.title || 'Insight')}</span>
+        <strong>${Number(card.value || 0).toLocaleString()}</strong>
+        <em>${esc(card.detail || '')}</em>
+      </button>
+    `).join('');
+    el.querySelectorAll('.insight-action-card').forEach((card) => {
+      card.onclick = () => {
+        if (card.dataset.tab === 'review') {
+          switchTab('review');
+          const select = $('#reviewQueueSelect');
+          if (select && card.dataset.queue) select.value = card.dataset.queue;
+          return;
+        }
+        switchTab('memories');
+        $('#memoryStatus').value = 'active';
+        if (card.dataset.query) $('#memoryQuery').value = card.dataset.query;
+        if (card.dataset.session) $('#memorySession').value = card.dataset.session;
+        loadMemories();
+      };
+    });
+  }
+
   async function loadInsights() {
     const days = Number($('#insightsDays')?.value || 30);
-    const growthViewport = $('#growthChartViewport');
-    const auditViewport = $('#auditChartViewport');
-    if (growthViewport) growthViewport.innerHTML = loadingCardHtml('Loading chart…', 'Fetching memory growth history.');
-    if (auditViewport) auditViewport.innerHTML = loadingCardHtml('Loading chart…', 'Fetching admin activity history.');
+    const loadingTargets = [
+      ['growthChartViewport', 'Fetching memory growth history.'],
+      ['auditChartViewport', 'Fetching admin activity history.'],
+      ['veracityChartViewport', 'Fetching trust mix history.'],
+      ['sourceChartViewport', 'Fetching source breakdown history.'],
+      ['reviewBacklogChartViewport', 'Fetching review backlog history.'],
+      ['lifecycleChartViewport', 'Fetching lifecycle events.'],
+    ];
+    loadingTargets.forEach(([id, detail]) => {
+      const el = $(`#${id}`);
+      if (el) el.innerHTML = loadingCardHtml('Loading chart…', detail);
+    });
     try {
-      const [growth, audit, recall] = await Promise.all([
+      const [growth, audit, recall, veracity, sources, reviewBacklog, lifecycle, clusters, heatmap, actionCards] = await Promise.all([
         api(endpoints.memoryGrowth(days), { requestKey: 'insights-growth' }),
         api(endpoints.auditActivity(days), { requestKey: 'insights-audit' }),
         api(endpoints.recallDistribution(), { requestKey: 'insights-recall' }),
+        api(endpoints.veracityMix(days), { requestKey: 'insights-veracity' }),
+        api(endpoints.sourceBreakdown(days), { requestKey: 'insights-sources' }),
+        api(endpoints.reviewBacklog(days), { requestKey: 'insights-review-backlog' }),
+        api(endpoints.lifecycleTransitions(days), { requestKey: 'insights-lifecycle' }),
+        api(endpoints.entityClusters(10), { requestKey: 'insights-clusters' }),
+        api(endpoints.sessionHeatmap(days), { requestKey: 'insights-heatmap' }),
+        api(endpoints.actionCards(), { requestKey: 'insights-cards' }),
       ]);
       await renderGrowthChart(growth);
       await renderAuditChart(audit);
+      await renderVeracityChart(veracity);
+      await renderSourceChart(sources);
+      await renderReviewBacklogChart(reviewBacklog);
+      await renderLifecycleChart(lifecycle);
       renderRecallDistribution(recall.items || []);
+      renderClusters(clusters);
+      renderSessionHeatmap(heatmap);
+      renderActionCards(actionCards);
     } catch (e) {
       if (isCancelledRequest(e)) return;
       const message = e?.message || 'Try again.';
-      if (growthViewport) growthViewport.innerHTML = fallbackCardHtml('Could not load chart', message);
-      if (auditViewport) auditViewport.innerHTML = fallbackCardHtml('Could not load chart', message);
+      loadingTargets.forEach(([id]) => {
+        const el = $(`#${id}`);
+        if (el) el.innerHTML = fallbackCardHtml('Could not load chart', message);
+      });
     }
   }
 
@@ -203,6 +400,14 @@ export function createChartsFeature({ $, api, switchTab, loadMemories }) {
     if (auditChart && auditViewport) {
       auditChart.setSize({ width: auditViewport.clientWidth || 600, height: auditViewport.clientHeight || CHART_HEIGHT_FALLBACK });
     }
+    [
+      [veracityChart, $('#veracityChartViewport')],
+      [sourceChart, $('#sourceChartViewport')],
+      [reviewBacklogChart, $('#reviewBacklogChartViewport')],
+      [lifecycleChart, $('#lifecycleChartViewport')],
+    ].forEach(([chart, viewport]) => {
+      if (chart && viewport) chart.setSize({ width: viewport.clientWidth || 600, height: viewport.clientHeight || CHART_HEIGHT_FALLBACK });
+    });
   }
   window.addEventListener('resize', resizeInsightsCharts, { passive: true });
 

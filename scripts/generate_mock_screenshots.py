@@ -19,7 +19,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from mock_data import make_mock_db
+from mock_data import make_mock_db, write_mock_audit_log
 
 try:
     import websocket
@@ -57,6 +57,10 @@ class ChromeSession:
                 str(CHROME),
                 "--headless=new",
                 "--disable-gpu",
+                "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-extensions",
+                "--no-first-run",
                 f"--remote-debugging-port={self.port}",
                 "--remote-allow-origins=*",
                 f"--window-size={self.width},{self.height}",
@@ -74,6 +78,10 @@ class ChromeSession:
                     break
             except Exception:
                 time.sleep(0.2)
+        if not tabs:
+            if self.proc is not None:
+                self.proc.terminate()
+            raise RuntimeError(f"Chrome did not expose a debugging tab on port {self.port}")
         tab = next(tab for tab in tabs if tab.get("type") == "page")
         self.ws = websocket.create_connection(tab["webSocketDebuggerUrl"], timeout=10)
         self.call("Page.enable")
@@ -131,7 +139,9 @@ def run() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     db_path = TMP_DIR / "mock-mnemosyne.db"
+    hermes_home = TMP_DIR / "hermes-home"
     make_mock_db(db_path)
+    write_mock_audit_log(hermes_home)
     port = free_port()
     base_url = f"http://127.0.0.1:{port}/"
     server = subprocess.Popen(
@@ -140,7 +150,11 @@ def run() -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        env={**os.environ, "MNEMOSYNE_DASHBOARD_CONFIG": str(TMP_DIR / "config.json")},
+        env={
+            **os.environ,
+            "HERMES_HOME": str(hermes_home),
+            "MNEMOSYNE_DASHBOARD_CONFIG": str(TMP_DIR / "config.json"),
+        },
     )
     try:
         wait_for_server(f"{base_url}api/health")
@@ -155,6 +169,7 @@ def run() -> None:
             ("desktop-dark-review.png", 1440, 1000, False, "dark", "review"),
             ("desktop-dark-memories.png", 1440, 1000, False, "dark", "memories"),
             ("desktop-dark-lifecycle.png", 1440, 1000, False, "dark", "lifecycle"),
+            ("desktop-dark-insights.png", 1440, 1000, False, "dark", "insights"),
             ("desktop-light-graph.png", 1440, 1000, False, "light", "graph"),
             ("desktop-dark-memoria.png", 1440, 1000, False, "dark", "memoria"),
             ("desktop-dark-timeline.png", 1440, 1000, False, "dark", "timelineView"),
@@ -165,13 +180,14 @@ def run() -> None:
             ("mobile-light-constellation.png", 390, 844, True, "light", "constellation"),
             ("mobile-dark-neural.png", 390, 844, True, "dark", "neural"),
             ("mobile-light-search.png", 390, 844, True, "light", "search"),
+            ("mobile-dark-insights.png", 390, 844, True, "dark", "insights"),
             ("mobile-dark-timeline.png", 390, 844, True, "dark", "timelineView"),
             ("mobile-light-graph.png", 390, 844, True, "light", "graph"),
             ("mobile-dark-settings.png", 390, 844, True, "dark", "settings"),
         ]
         manifest: list[dict[str, Any]] = []
-        for idx, (name, width, height, mobile, theme, tab) in enumerate(shots):
-            with ChromeSession(9330 + idx, base_url, width, height, mobile) as chrome:
+        for name, width, height, mobile, theme, tab in shots:
+            with ChromeSession(free_port(), base_url, width, height, mobile) as chrome:
                 # Navigate to the correct URL with tab parameter
                 url_tab = 'visualiserlegacy' if tab == 'constellation' else ('visualiser3d' if tab == 'neural' else tab)
                 chrome.navigate_and_wait(f"{base_url}?tab={url_tab}&theme={theme}", 5000)

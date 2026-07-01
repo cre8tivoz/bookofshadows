@@ -421,7 +421,7 @@
         </section>
 
         <section id="insights" class="tab">
-          <div class="section-head"><h2>Insights</h2><span>trends across memory growth, admin activity, and recall</span></div>
+          <div class="section-head"><h2>Insights</h2><span>trends, review pressure, clusters, and session activity</span></div>
           <div class="toolbar glass">
             <label for="insightsDays" class="muted">Window</label>
             <select id="insightsDays">
@@ -440,6 +440,44 @@
               <div class="section-head mini"><h2>Admin activity</h2><span>audit-logged mutations per day</span></div>
               <div id="auditChartViewport" class="chart-viewport"></div>
             </div>
+          </div>
+          <div class="insights-grid">
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Trust mix</h2><span>new memories by current veracity</span></div>
+              <div id="veracityChartViewport" class="chart-viewport"></div>
+            </div>
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Source mix</h2><span>top sources over the selected window</span></div>
+              <div id="sourceChartViewport" class="chart-viewport"></div>
+            </div>
+          </div>
+          <div class="insights-grid">
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Review backlog</h2><span>current review pressure accumulated by day</span></div>
+              <div id="reviewBacklogChartViewport" class="chart-viewport"></div>
+            </div>
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Lifecycle events</h2><span>episodic memories entering hot, warm, or cold tiers</span></div>
+              <div id="lifecycleChartViewport" class="chart-viewport"></div>
+            </div>
+          </div>
+          <div class="insights-card glass">
+            <div class="section-head mini"><h2>Action cards</h2><span>decision-ready memory signals</span></div>
+            <div id="insightCards" class="insight-card-grid"></div>
+          </div>
+          <div class="insights-grid">
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Domain clusters</h2><span>click a domain to browse related memories</span></div>
+              <div id="domainClusters" class="pattern-bars"></div>
+            </div>
+            <div class="insights-card glass">
+              <div class="section-head mini"><h2>Entity clusters</h2><span>top entities from graph facts</span></div>
+              <div id="entityClusters" class="pattern-bars"></div>
+            </div>
+          </div>
+          <div class="insights-card glass">
+            <div class="section-head mini"><h2>Session activity heatmap</h2><span>memory activity by weekday and hour</span></div>
+            <div id="sessionHeatmap" class="session-heatmap"></div>
           </div>
           <div class="insights-card glass">
             <div class="section-head mini"><h2>Recall frequency</h2><span>how often active memories have been recalled — click a bucket to browse it</span></div>

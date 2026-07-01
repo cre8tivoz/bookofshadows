@@ -18,6 +18,13 @@ export const endpoints = {
   memoryGrowth: (days = 30) => `/api/insights/memory-growth?${query({ days: String(days) })}`,
   auditActivity: (days = 30) => `/api/insights/audit-activity?${query({ days: String(days) })}`,
   recallDistribution: () => "/api/insights/recall-distribution",
+  veracityMix: (days = 30) => `/api/insights/veracity-mix?${query({ days: String(days) })}`,
+  sourceBreakdown: (days = 30, limit = 6) => `/api/insights/source-breakdown?${query({ days: String(days), limit: String(limit) })}`,
+  reviewBacklog: (days = 30) => `/api/insights/review-backlog?${query({ days: String(days) })}`,
+  lifecycleTransitions: (days = 30) => `/api/insights/lifecycle-transitions?${query({ days: String(days) })}`,
+  entityClusters: (limit = 10) => `/api/insights/entity-clusters?${query({ limit: String(limit) })}`,
+  sessionHeatmap: (days = 30) => `/api/insights/session-heatmap?${query({ days: String(days) })}`,
+  actionCards: () => "/api/insights/action-cards",
 };
 
 export const lowVolatilityTtlMs = {

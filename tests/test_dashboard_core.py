@@ -690,6 +690,48 @@ def test_recall_distribution_buckets_by_recall_count(tmp_path):
     assert dist == {'0': 1, '1-2': 2, '3-5': 1, '6-10': 1, '10+': 1}
 
 
+def test_release_11a_insight_aggregations_return_bounded_shapes(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    veracity = store.veracity_mix_series(days=7)
+    assert veracity['read_only'] is True
+    assert len(veracity['days']) == 7
+    assert set(veracity['by_veracity']) == {'stated', 'unknown', 'inferred', 'imported', 'tool'}
+    assert all(len(values) == 7 for values in veracity['by_veracity'].values())
+
+    sources = store.source_breakdown_series(days=30, limit=4)
+    assert sources['read_only'] is True
+    assert len(sources['days']) == 30
+    assert sources['sources']
+    assert set(sources['sources']) <= set(sources['by_source'])
+
+    backlog = store.review_backlog_series(days=10)
+    assert backlog['read_only'] is True
+    assert set(backlog['by_queue']) == {'needs_review', 'high_value', 'degraded'}
+    assert all(len(values) == 10 for values in backlog['by_queue'].values())
+
+    lifecycle = store.lifecycle_transition_series(days=30)
+    assert lifecycle['read_only'] is True
+    assert set(lifecycle['by_tier']) == {'hot', 'warm', 'cold'}
+    assert all(len(values) == 30 for values in lifecycle['by_tier'].values())
+
+    clusters = store.entity_domain_clusters(limit=5)
+    assert clusters['read_only'] is True
+    assert {'domains', 'entities', 'sources'} <= set(clusters)
+
+    heatmap = store.session_activity_heatmap(days=30)
+    assert heatmap['read_only'] is True
+    assert heatmap['weekdays'] == ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    assert len(heatmap['matrix']) == 7
+    assert all(len(row) == 24 for row in heatmap['matrix'])
+
+    cards = store.actionable_insight_cards()
+    assert cards['read_only'] is True
+    assert {card['key'] for card in cards['cards']} >= {'needs_review', 'high_value_at_risk', 'top_domain'}
+
+
 def test_realtime_event_snapshot_orders_newest_first(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)

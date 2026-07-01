@@ -148,6 +148,22 @@ def test_insights_endpoints_return_series_and_distribution(tmp_path, monkeypatch
         payload = json.loads(body)
         assert status == 200
         assert {row["bucket"] for row in payload["items"]} == {"0", "1-2", "3-5", "6-10", "10+"}
+
+        expected_paths = {
+            "/api/insights/veracity-mix?days=14": "by_veracity",
+            "/api/insights/source-breakdown?days=14&limit=4": "by_source",
+            "/api/insights/review-backlog?days=14": "by_queue",
+            "/api/insights/lifecycle-transitions?days=14": "by_tier",
+            "/api/insights/entity-clusters?limit=5": "domains",
+            "/api/insights/session-heatmap?days=14": "matrix",
+            "/api/insights/action-cards": "cards",
+        }
+        for path, key in expected_paths.items():
+            status, _headers, body = _request(f"{server.base}{path}")
+            payload = json.loads(body)
+            assert status == 200
+            assert payload["read_only"] is True
+            assert key in payload
     finally:
         server.close()
 

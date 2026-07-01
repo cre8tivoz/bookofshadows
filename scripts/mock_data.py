@@ -8,8 +8,42 @@ mock records. They never read the user's real Mnemosyne database.
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+
+def _recent_iso(days_ago: int, hour: int = 9, minute: int = 0) -> str:
+    day = datetime.now(UTC).replace(hour=hour, minute=minute, second=0, microsecond=0) - timedelta(days=days_ago)
+    return day.replace(tzinfo=None).isoformat()
+
+
+def _recent_day(days_ago: int) -> str:
+    return _recent_iso(days_ago)[:10]
+
+
+def write_mock_audit_log(hermes_home: Path) -> Path:
+    """Write fictional admin audit activity for demo screenshots."""
+    audit_dir = hermes_home / "plugin-data" / "mnemosyne-dashboard"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    path = audit_dir / "audit.jsonl"
+    actions = ["importance", "veracity", "expiry", "supersede", "invalidate"]
+    entries = []
+    for i in range(42):
+        action = actions[i % len(actions)]
+        entries.append(
+            {
+                "timestamp": _recent_iso(i % 28, 10 + (i % 8), (i * 7) % 60),
+                "action": action,
+                "memory_id": f"demo-{i:03d}",
+                "backup": {"ok": True, "path": "mock-backup.json"},
+                "before": {"importance": round(0.4 + (i % 5) * 0.1, 2)},
+                "after": {"importance": round(0.5 + (i % 4) * 0.1, 2)},
+            }
+        )
+    path.write_text("\n".join(json.dumps(entry, sort_keys=True) for entry in entries) + "\n", encoding="utf-8")
+    return path
 
 
 def make_mock_db(path: Path) -> None:
@@ -53,7 +87,7 @@ def make_mock_db(path: Path) -> None:
             "wm-001",
             "User prefers local-first memory tools with clear provenance, fast search, and no cloud calls for private chat data.",
             "preference",
-            "2026-05-04T08:15:00",
+            _recent_iso(2, 8, 15),
             "product_strategy_20260504",
             0.92,
             "global",
@@ -63,7 +97,7 @@ def make_mock_db(path: Path) -> None:
             "wm-002",
             "The Mnemosyne dashboard should feel premium on mobile, with compact controls, readable cards, and zero horizontal overflow.",
             "insight",
-            "2026-05-04T09:30:00",
+            _recent_iso(5, 9, 30),
             "design_review_20260504",
             0.86,
             "session",
@@ -73,7 +107,7 @@ def make_mock_db(path: Path) -> None:
             "wm-003",
             "Use token-prefix search: 'Dian' should match Diana but not the middle of Obsidian.",
             "debugging",
-            "2026-05-04T10:05:00",
+            _recent_iso(9, 10, 5),
             "search_quality_20260504",
             0.81,
             "global",
@@ -83,7 +117,7 @@ def make_mock_db(path: Path) -> None:
             "wm-004",
             "Graph view should make relationships explorable without exposing write actions in the browser.",
             "security",
-            "2026-05-04T10:45:00",
+            _recent_iso(14, 10, 45),
             "graph_review_20260504",
             0.74,
             "global",
@@ -93,7 +127,7 @@ def make_mock_db(path: Path) -> None:
             "wm-005",
             "Short phone-landscape screens should keep the compact top bar and avoid desktop sidebar takeover.",
             "ux",
-            "2026-05-04T11:20:00",
+            _recent_iso(20, 11, 20),
             "mobile_layout_20260504",
             0.79,
             "session",
@@ -103,7 +137,7 @@ def make_mock_db(path: Path) -> None:
             "wm-006",
             "Settings should keep authentication optional and transparent: disabled by default, password stored as salt/hash only.",
             "security",
-            "2026-05-04T12:00:00",
+            _recent_iso(27, 12, 0),
             "auth_review_20260504",
             0.69,
             "global",
@@ -119,7 +153,7 @@ def make_mock_db(path: Path) -> None:
             "em-001",
             "Published the dashboard as a GitHub-ready Hermes plugin with README, CI, license, security notes, and read-only SQLite access.",
             "task",
-            "2026-05-03T17:25:34",
+            _recent_iso(1, 17, 25),
             "release_hardening_20260503",
             0.77,
             "session",
@@ -130,7 +164,7 @@ def make_mock_db(path: Path) -> None:
             "em-002",
             "Refined the mobile overview so stat cards, memory pills, and long session identifiers fit within the viewport.",
             "task",
-            "2026-05-04T09:45:00",
+            _recent_iso(7, 9, 45),
             "mobile_layout_20260504",
             0.72,
             "session",
@@ -141,7 +175,7 @@ def make_mock_db(path: Path) -> None:
             "em-003",
             "Tightened search behavior across Memories, Global Search, Recall Debugger, Timeline, Graph, Triples, and Consolidations.",
             "debugging",
-            "2026-05-04T10:50:00",
+            _recent_iso(16, 10, 50),
             "search_quality_20260504",
             0.83,
             "global",
@@ -152,7 +186,7 @@ def make_mock_db(path: Path) -> None:
             "em-004",
             "Added a visible mobile top-bar theme toggle while keeping the desktop sidebar theme switch in sync.",
             "ux",
-            "2026-05-04T12:06:00",
+            _recent_iso(24, 12, 6),
             "design_review_20260504",
             0.68,
             "session",
@@ -165,16 +199,16 @@ def make_mock_db(path: Path) -> None:
         episodic,
     )
     triples = [
-        ("Mnemosyne Dashboard", "reads", "SQLite memory store", "2026-05-03", "architecture", 0.98),
-        ("Mnemosyne Dashboard", "serves", "local web UI", "2026-05-03", "architecture", 0.96),
-        ("Local web UI", "supports", "dark theme", "2026-05-04", "design", 0.94),
-        ("Local web UI", "supports", "light theme", "2026-05-04", "design", 0.94),
-        ("Search", "uses", "token-prefix matching", "2026-05-04", "debugging", 0.91),
-        ("Graph", "visualizes", "triples", "2026-05-04", "feature", 0.89),
-        ("Timeline", "groups by", "session", "2026-05-04", "feature", 0.88),
-        ("Settings", "controls", "optional password auth", "2026-05-04", "security", 0.87),
-        ("Mobile header", "contains", "theme toggle", "2026-05-04", "ux", 0.85),
-        ("Dashboard", "avoids", "external JavaScript dependencies", "2026-05-03", "security", 0.93),
+        ("Mnemosyne Dashboard", "reads", "SQLite memory store", _recent_day(2), "architecture", 0.98),
+        ("Mnemosyne Dashboard", "serves", "local web UI", _recent_day(4), "architecture", 0.96),
+        ("Local web UI", "supports", "dark theme", _recent_day(5), "design", 0.94),
+        ("Local web UI", "supports", "light theme", _recent_day(6), "design", 0.94),
+        ("Search", "uses", "token-prefix matching", _recent_day(9), "debugging", 0.91),
+        ("Graph", "visualizes", "triples", _recent_day(12), "feature", 0.89),
+        ("Timeline", "groups by", "session", _recent_day(15), "feature", 0.88),
+        ("Settings", "controls", "optional password auth", _recent_day(18), "security", 0.87),
+        ("Mobile header", "contains", "theme toggle", _recent_day(21), "ux", 0.85),
+        ("Dashboard", "avoids", "external JavaScript dependencies", _recent_day(26), "security", 0.93),
     ]
     con.executemany(
         "INSERT INTO triples(subject,predicate,object,valid_from,source,confidence) VALUES (?,?,?,?,?,?)",
