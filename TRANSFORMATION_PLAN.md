@@ -100,20 +100,20 @@ Loading states, disabled states, keyboard navigation, focus management, empty st
 
 ### Tasks
 
-- [ ] Confirm repo remote is clean and disconnected from original fork lineage.
-- [ ] Run and record backend tests: `python -m pytest tests/ -v`.
-- [ ] Add a lightweight frontend smoke test if none exists.
-- [ ] Capture baseline screenshots for every major tab: Overview, Today, Visualiser, Review, Memories, Context Bank, Lifecycle, Knowledge Graph, MEMORIA, History, Settings.
-- [ ] Record baseline frontend payload sizes:
+- [x] Confirm repo remote is clean and disconnected from original fork lineage.
+- [x] Run and record backend tests: `python -m pytest tests/ -v`.
+- [x] Add a lightweight frontend smoke test if none exists.
+- [x] Capture baseline screenshots for every major tab: Overview, Today, Visualiser, Review, Memories, Context Bank, Lifecycle, Knowledge Graph, MEMORIA, History, Settings.
+- [x] Record baseline frontend payload sizes:
   - `static/app.js`
   - `static/style.css`
   - `static/vendor/three.module.min.js`
-- [ ] Record baseline performance in browser:
+- [x] Record baseline performance in browser:
   - first load
   - tab switch latency
   - memory search latency
   - visualiser open time
-- [ ] Add a local `docs/` folder if needed for screenshots and architecture docs.
+- [x] Add a local `docs/` folder if needed for screenshots and architecture docs.
 
 ### Acceptance criteria
 
@@ -121,6 +121,16 @@ Loading states, disabled states, keyboard navigation, focus management, empty st
 - Backend tests are green.
 - There is at least one repeatable browser smoke check.
 - No feature work begins without a known baseline.
+
+### Phase 0 status update - 2026-07-01
+
+- Baseline details live in `docs/PHASE_0_BASELINE.md`.
+- Remote state was recorded as `https://github.com/cre8tivoz/bookofshadows.git` on `main`, with the original review baseline taken from `codex/phase-0-baseline`.
+- Backend baseline was recorded as `45 passed`; the current post-Phase-4 suite also reports `45 passed`.
+- Screenshot coverage is generated from fictional mock data via `scripts/generate_mock_screenshots.py`; the manifest covers desktop and mobile baseline views under `docs/screenshots/`.
+- Payload sizes for `static/app.js`, `static/style.css`, and `static/vendor/three.module.min.js` are recorded in `docs/PHASE_0_BASELINE.md`.
+- Browser timing is a coarse repeatable smoke baseline from `scripts/frontend_smoke.py`. It records HTTP checks and representative Chrome route timings; it does not yet isolate lab-grade memory-search latency or visualiser-open latency.
+- Architecture and testing docs now live under `docs/ARCHITECTURE.md` and `docs/FRONTEND_TESTING.md`.
 
 ## Phase 1 - Frontend Architecture Extraction
 
@@ -310,15 +320,15 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 ### Tasks
 
-- [ ] Add `:focus-visible` styles for all interactive elements.
-- [ ] Add `prefers-reduced-motion` handling for animations and visualisers.
-- [ ] Add `font-variant-numeric: tabular-nums` for counters, tables, diagnostics, and chart labels.
-- [ ] Add consistent pointer affordance for buttons and clickable rows.
-- [ ] Add modal/drawer focus trapping.
-- [ ] Add ARIA labels and roles for drawers, modals, tabs, and graph controls.
-- [ ] Ensure Escape closes overlays safely.
-- [ ] Audit colour contrast in dark and light themes.
-- [ ] Remove emoji-as-icon reliance where it hurts product polish.
+- [x] Add `:focus-visible` styles for all interactive elements.
+- [x] Add `prefers-reduced-motion` handling for animations and visualisers.
+- [x] Add `font-variant-numeric: tabular-nums` for counters, tables, diagnostics, and chart labels.
+- [x] Add consistent pointer affordance for buttons and clickable rows.
+- [x] Add modal/drawer focus trapping.
+- [x] Add ARIA labels and roles for drawers, modals, tabs, and graph controls.
+- [x] Ensure Escape closes overlays safely.
+- [x] Audit colour contrast in dark and light themes.
+- [x] Remove emoji-as-icon reliance where it hurts product polish.
 
 ### Acceptance criteria
 
@@ -326,6 +336,19 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 - Screen reader landmarks are sensible.
 - Motion can be reduced without breaking layout.
 - Data feels visually aligned and professional.
+
+### Phase 5 status update - 2026-07-01
+
+- `ui/dom.js` gained `bindActivatable()`, which makes previously mouse-only clickable rows (memory cards, breakdown filter rows, profile items, triple rows, session events, consolidation cards, realtime events) keyboard-operable via `tabindex`/`role="button"` plus Enter/Space, without swallowing keys meant for nested real buttons/checkboxes.
+- New `utils/a11y.js` provides `trapFocus()`, wired into `#detail` (the drawer), `#actionModal`, and the login overlay; each now moves focus in on open, traps Tab/Shift+Tab, and restores focus to the triggering element on close. Verified live in a browser: opening a memory card, tabbing to the last drawer control, and pressing Escape correctly wraps focus and returns it to the originating card.
+- `<nav>` and every `.section-tabs` group are `role="tablist"`/`role="tab"` with `aria-selected` kept in sync in `switchTab()`, `showPanel()`, and the visualiser mode switchers (this also fixed a pre-existing bug where switching the Legacy Visualiser's tab was incorrectly clearing the 3D Visualiser tab's active state). `#detail`, `#actionModal`, and the login overlay are `role="dialog" aria-modal="true"` with labelling. `#graphSvg` has a descriptive `aria-label` and points to the Facts table as a keyboard-accessible alternative.
+- `static/style.css` adds a global `:focus-visible` ring, a `prefers-reduced-motion` block covering transitions/animations/hover transforms, and `font-variant-numeric: tabular-nums` on counters/tables/diagnostics. Canvas/Three.js render loops already respected `prefers-reduced-motion` from earlier phases.
+- Contrast audit (WCAG relative-luminance calculation across every text/surface pairing in both themes) found `--text-subtle` failing badly in both themes (~2.7-3.1:1, need 4.5:1) and light-mode `--text-muted` narrowly failing (~4.07-4.29:1). Both were retuned to ~4.0-4.5:1. `--text-subtle` should still be treated as decorative/redundant-label text, not the sole carrier of information, since it does not clear 4.5:1 on every surface.
+- Emoji audit found no problematic emoji-as-primary-icon usage: the existing glyphs (☰ hamburger, ☾/☀ theme, × close) are conventional UI symbols already paired with text labels or `aria-label`s, and the two hidden legacy nav entries using pictographic icons are `aria-hidden` and visually hidden. No changes were needed here beyond confirming this.
+- Fixed an unrelated-but-adjacent visual bug found during the pointer-affordance pass: the overview/MEMORIA breakdown rows render with a `.break-row` class, but the only matching CSS rule was a dead `.breakdown-row` selector, so these rows had no layout, borders, or hover feedback at all. Renamed the CSS to `.break-row` and added interactive-row affordance (`cursor:pointer`, hover, focus) gated on `role="button"` so only the actually-clickable breakdown rows get it.
+- Added base styling for `.profile-item` (Context Bank) and `.session-event` (session drawer timeline), which previously rendered as unstyled plain text with no clickable affordance.
+- New frontend tests: `tests/frontend/a11y.test.js` (focusable-element filtering, Tab/Shift+Tab wrap, focus restore, opt-out of focus restore) and `bindActivatable` coverage in `tests/frontend/dom.test.js`. Full suite: 70 passed.
+- Known remaining gap: the 3D/canvas visualisers (constellation, neural map, memory palace) are still mouse-only; keyboard equivalents are out of scope for this phase and remain for the Phase 8 visualiser work.
 
 ## Phase 6 - Memory Browser Scalability
 

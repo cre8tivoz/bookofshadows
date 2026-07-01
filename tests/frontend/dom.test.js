@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { $, $$, closeMobileMenu, fillSelect, showPanel } from "../../static/src/ui/dom.js";
+import { $, $$, bindActivatable, closeMobileMenu, fillSelect, showPanel } from "../../static/src/ui/dom.js";
 
 describe("DOM helpers", () => {
   beforeEach(() => {
@@ -62,6 +62,8 @@ describe("DOM helpers", () => {
     expect($("#todayRecalled").classList.contains("active")).toBe(true);
     expect($('[data-panel="todayAdded"]').classList.contains("active")).toBe(false);
     expect($('[data-panel="todayRecalled"]').classList.contains("active")).toBe(true);
+    expect($('[data-panel="todayAdded"]').getAttribute("aria-selected")).toBe("false");
+    expect($('[data-panel="todayRecalled"]').getAttribute("aria-selected")).toBe("true");
   });
 
   test("closes the mobile menu and updates the toggle", () => {
@@ -73,5 +75,48 @@ describe("DOM helpers", () => {
     expect(document.body.classList.contains("mobile-menu-open")).toBe(false);
     expect($("#mobileMenuToggle").getAttribute("aria-expanded")).toBe("false");
     expect($("#mobileMenuToggle").textContent).toBe("☰");
+  });
+
+  test("makes a non-native clickable row keyboard operable", () => {
+    document.body.innerHTML = "<div id='row'></div>";
+    const row = $("#row");
+    let calls = 0;
+
+    bindActivatable(row, () => { calls += 1; });
+
+    expect(row.getAttribute("tabindex")).toBe("0");
+    expect(row.getAttribute("role")).toBe("button");
+
+    row.onclick();
+    expect(calls).toBe(1);
+
+    row.onkeydown({ target: row, key: "Enter", preventDefault: () => {} });
+    row.onkeydown({ target: row, key: " ", preventDefault: () => {} });
+    expect(calls).toBe(3);
+
+    row.onkeydown({ target: row, key: "a", preventDefault: () => {} });
+    expect(calls).toBe(3);
+  });
+
+  test("ignores keydown bubbling up from a nested interactive child", () => {
+    document.body.innerHTML = "<div id='row'><button id='nested'>Nested</button></div>";
+    const row = $("#row");
+    const nested = $("#nested");
+    let calls = 0;
+
+    bindActivatable(row, () => { calls += 1; });
+    row.onkeydown({ target: nested, key: "Enter", preventDefault: () => {} });
+
+    expect(calls).toBe(0);
+  });
+
+  test("does not override an existing tabindex or role", () => {
+    document.body.innerHTML = "<div id='row' tabindex='-1' role='listitem'></div>";
+    const row = $("#row");
+
+    bindActivatable(row, () => {});
+
+    expect(row.getAttribute("tabindex")).toBe("-1");
+    expect(row.getAttribute("role")).toBe("listitem");
   });
 });

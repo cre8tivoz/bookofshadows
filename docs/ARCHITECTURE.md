@@ -22,6 +22,7 @@ static/src/
   utils/
     escape.js
     format.js
+    a11y.js
 ```
 
 `static/app.js` is generated. Edit `static/src/app.js` and modules under `static/src/`, then run:
@@ -41,6 +42,7 @@ npm run build:frontend
 - `ui/render.js`: shared state-card, breakdown, select-option, and count-label rendering helpers.
 - `utils/escape.js`: HTML escaping, ID shortening, chat-role prefix helpers.
 - `utils/format.js`: time and byte formatting.
+- `utils/a11y.js`: focus-trap utility (`trapFocus()`/`focusableElements()`) used by the drawer, action modal, and login overlay.
 - `state/routing.js`: pure route parse/serialize helpers and legacy tab aliases.
 - `features/memories.js`: pure memory card/meta rendering and mutability helper.
 - `features/review.js`: review queue rendering, lifecycle queue wrapper, review query params, and selected-action helpers.
@@ -92,3 +94,14 @@ Phase 4 keeps feedback primitives framework-free:
 - Bulk memory and review mutations report action summaries and keep failed selections available for retry.
 - Skeleton cards are used while core list/search panels load.
 - Global shortcuts are mapped through `keyboardActionForEvent()`: `/` focuses search, `?` opens shortcut help, `Esc` closes overlays, `g o/m/r/k` navigates, and `Cmd/Ctrl+K` opens command search.
+
+## Accessibility and Interface Quality
+
+Phase 5 raises interactive elements and overlays to a consistent baseline:
+
+- `ui/dom.js` exports `bindActivatable(el, handler)`, which makes a non-native clickable row (memory cards, breakdown filter rows, profile items, triple rows, session events, consolidation cards) keyboard-operable: it adds `tabindex="0"`/`role="button"` when not already present and wires Enter/Space alongside the existing click handler, without intercepting keys meant for nested real buttons/inputs.
+- `utils/a11y.js` exports `trapFocus(container)`, used by `#detail` (the drawer), `#actionModal`, and the login overlay. It traps Tab/Shift+Tab inside the open surface and restores focus to whatever triggered it once released.
+- `#detail` and `#actionModal` are `role="dialog" aria-modal="true"` with `aria-labelledby`/`aria-describedby`; the login overlay is a `role="dialog"` too. `<nav>` and every `.section-tabs` group are `role="tablist"`/`role="tab"` with `aria-selected` kept in sync in `switchTab()`/`showPanel()`/the visualiser mode switchers. `#graphSvg` carries a descriptive `aria-label` and points to the Facts table as a keyboard-accessible alternative to the graph canvas.
+- `static/style.css` adds a global `:focus-visible` ring (mouse-driven `:focus` stays ring-free), a `prefers-reduced-motion` block that collapses transition/animation durations and disables hover transforms, and `font-variant-numeric: tabular-nums` on counters, tables, and diagnostics.
+- `--text-subtle` (both themes) and light-mode `--text-muted` were adjusted after a contrast audit found them below WCAG AA (~2.7-3.1:1) against the surfaces they render on; they now land at ~4.0-4.5:1. `--text-subtle` is still not guaranteed to clear 4.5:1 on every surface — treat it as decorative/redundant-label text only, not the sole carrier of information.
+- The 3D/canvas visualisers remain mouse-driven; keyboard equivalents are out of scope for this phase (see `docs/PHASE_0_BASELINE.md`/Phase 8 notes on visualiser work).

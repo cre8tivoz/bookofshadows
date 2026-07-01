@@ -97,6 +97,19 @@
     if (activeElement && activeElement.closest(".menu-search")) return;
     closeMobileMenu();
   }
+  function bindActivatable(el, handler) {
+    if (!el) return;
+    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+    if (!el.hasAttribute("role")) el.setAttribute("role", "button");
+    el.onclick = handler;
+    el.onkeydown = (event) => {
+      if (event.target !== el) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        handler(event);
+      }
+    };
+  }
   function showPanel(sectionId, panelId) {
     const section = $(`#${sectionId}`);
     if (!section || !panelId) return;
@@ -104,7 +117,9 @@
       panel.classList.toggle("active", panel.id === panelId);
     });
     section.querySelectorAll(".section-tabs button").forEach((button) => {
-      button.classList.toggle("active", button.dataset.panel === panelId);
+      const active = button.dataset.panel === panelId;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
     });
   }
 
@@ -760,6 +775,53 @@
     return { drawGraph, loadGraph: loadGraph2, resetGraphView: resetGraphView2, inspectNode, inspectEdge };
   }
 
+  // static/src/utils/a11y.js
+  var FOCUSABLE_SELECTOR = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(",");
+  function focusableElements(container) {
+    if (!container) return [];
+    return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+      (el) => !el.hasAttribute("hidden") && !el.closest(".hidden")
+    );
+  }
+  function trapFocus(container) {
+    const trigger = document.activeElement;
+    const onKeydown = (event) => {
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements(container);
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && current === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && current === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!container.contains(current)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    container.addEventListener("keydown", onKeydown);
+    return function releaseFocusTrap({ restoreFocus = true } = {}) {
+      container.removeEventListener("keydown", onKeydown);
+      if (restoreFocus && trigger && document.contains(trigger) && typeof trigger.focus === "function") {
+        trigger.focus();
+      }
+    };
+  }
+
   // static/src/app-main.js
   var THEME_KEY = "mnemosyne-dashboard-theme";
   var VISUALISER_MODE_KEY = "mnemosyne-dashboard-visualiser-mode";
@@ -775,6 +837,7 @@
   var currentRoute = { tab: "overview" };
   var applyingHistory = false;
   var lastBootError = null;
+  var drawerFocusRelease = null;
   var bulkSelection = /* @__PURE__ */ new Set();
   var reviewSelection = /* @__PURE__ */ new Set();
   var selectedReviewQueue = "contaminated";
@@ -804,11 +867,23 @@
     const preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
     setTheme(saved || preferred);
   }
+  var loginFocusRelease = null;
   function showLogin() {
-    $("#loginOverlay")?.classList.remove("hidden");
+    const overlay = $("#loginOverlay");
+    if (!overlay) return;
+    const wasHidden = overlay.classList.contains("hidden");
+    overlay.classList.remove("hidden");
+    if (wasHidden) {
+      loginFocusRelease = trapFocus(overlay);
+      $("#loginPassword")?.focus();
+    }
   }
   function hideLogin() {
-    $("#loginOverlay")?.classList.add("hidden");
+    const overlay = $("#loginOverlay");
+    if (!overlay) return;
+    overlay.classList.add("hidden");
+    loginFocusRelease?.();
+    loginFocusRelease = null;
   }
   var { api, postJson } = createApiClient({
     onUnauthorized: showLogin,
@@ -936,7 +1011,18 @@
   }
   function closeDetail(opts = {}) {
     $("#detail").classList.add("hidden");
+    drawerFocusRelease?.();
+    drawerFocusRelease = null;
     if (opts.push !== false) pushRoute(currentRoute?.tab === "memories" ? memoryRouteState() : routeTabState(currentRoute?.tab || "overview"));
+  }
+  function activateDrawerFocusTrap() {
+    const drawer = $("#detail");
+    const wasHidden = drawer.classList.contains("hidden");
+    drawer.classList.remove("hidden");
+    if (wasHidden) {
+      drawerFocusRelease = trapFocus(drawer);
+      ($("#closeDetail") || drawer).focus();
+    }
   }
   async function applyRoute(state) {
     applyingHistory = true;
@@ -974,7 +1060,7 @@
     if (titleEl) titleEl.textContent = title;
     $("#detailBody").classList.remove("html-detail");
     $("#detailBody").textContent = JSON.stringify(obj, null, 2);
-    $("#detail").classList.remove("hidden");
+    activateDrawerFocusTrap();
     if (opts.push !== false) pushRoute(currentRoute || routeTabState());
   }
   function showHtmlDetail(html, title = "Detail") {
@@ -982,13 +1068,13 @@
     if (titleEl) titleEl.textContent = title;
     $("#detailBody").classList.add("html-detail");
     $("#detailBody").innerHTML = html;
-    $("#detail").classList.remove("hidden");
+    activateDrawerFocusTrap();
   }
   function modalTemplate() {
     let modal = $("#actionModal");
     if (modal) return modal;
     document.body.insertAdjacentHTML("beforeend", `
-    <div id="actionModal" class="action-modal hidden" role="dialog" aria-modal="true">
+    <div id="actionModal" class="action-modal hidden" role="dialog" aria-modal="true" aria-labelledby="actionModalTitle" aria-describedby="actionModalDescription">
       <div class="action-modal-card glass">
         <button id="actionModalClose" class="modal-close" aria-label="Close dialog">×</button>
         <div id="actionModalKicker" class="modal-kicker">Memory maintenance</div>
@@ -1014,9 +1100,12 @@
       $("#actionModalConfirm").textContent = confirmText;
       $("#actionModalConfirm").className = `primary ${tone}`.trim();
       $("#actionModalError").textContent = "";
+      let releaseFocusTrap = () => {
+      };
       const close = (value) => {
         modal.classList.add("hidden");
         document.removeEventListener("keydown", onKey);
+        releaseFocusTrap();
         resolve(value);
       };
       const onKey = (e) => {
@@ -1039,6 +1128,7 @@
       };
       modal.classList.remove("hidden");
       document.addEventListener("keydown", onKey);
+      releaseFocusTrap = trapFocus(modal);
       const first = modal.querySelector("textarea,input,button.primary");
       setTimeout(() => first?.focus(), 30);
     });
@@ -1252,10 +1342,17 @@
     if (section !== "visualiser3d" && threeVis?.renderer) clearThreeScene();
     if (section !== "memoryPalace" && memoryPalace?.renderer) clearPalaceScene();
     document.body.classList.toggle("compact-page", section !== "overview");
-    $$(".tab, nav button").forEach((x) => x.classList.remove("active"));
+    $$(".tab").forEach((x) => x.classList.remove("active"));
+    $$("nav button").forEach((x) => {
+      x.classList.remove("active");
+      x.setAttribute("aria-selected", "false");
+    });
     $(`#${section}`).classList.add("active");
     const nav = document.querySelector(`nav button[data-tab="${canonicalTab(name)}"]`) || document.querySelector(`nav button[data-tab="${section}"]`);
-    if (nav) nav.classList.add("active");
+    if (nav) {
+      nav.classList.add("active");
+      nav.setAttribute("aria-selected", "true");
+    }
     showPanel(section, panelFor(name));
     closeDetail({ push: false });
     closeMobileMenu();
@@ -1399,16 +1496,11 @@
       const label = ev.event_type || "MEMORY_EVENT";
       const when = ev.timestamp ? prettyTime(ev.timestamp) : "just now";
       const source = ev.source ? `<span class="badge">${esc(ev.source)}</span>` : "";
-      return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || "")}" tabindex="0" role="button"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || "unknown"))}</span><span class="badge trust-${esc(ev.veracity || "unknown")}">${esc(ev.veracity || "unknown")}</span>${source}<span class="meta-time">${esc(when)}</span></div><div class="content realtime-content">${esc(ev.content || "")}</div></div>`;
+      return `<div class="realtime-event" data-memory-id="${esc(ev.memory_id || "")}"><div><strong>${esc(label)}</strong> <span class="muted">${esc(kind)}</span></div><div class="meta"><span class="badge">${esc(shortId(ev.memory_id || "unknown"))}</span><span class="badge trust-${esc(ev.veracity || "unknown")}">${esc(ev.veracity || "unknown")}</span>${source}<span class="meta-time">${esc(when)}</span></div><div class="content realtime-content">${esc(ev.content || "")}</div></div>`;
     }).join("") : '<div class="state-empty">Waiting for memory events…</div>';
     feeds.forEach((feed) => {
       feed.innerHTML = html;
-      feed.querySelectorAll(".realtime-event").forEach((row) => {
-        row.onclick = () => openMemoryDetail(row.dataset.memoryId || "");
-        row.onkeydown = (e) => {
-          if (e.key === "Enter" || e.key === " ") openMemoryDetail(row.dataset.memoryId || "");
-        };
-      });
+      feed.querySelectorAll(".realtime-event").forEach((row) => bindActivatable(row, () => openMemoryDetail(row.dataset.memoryId || "")));
     });
   }
   function renderRealtimePanel() {
@@ -1492,24 +1584,24 @@
     source.addEventListener("memory", (e) => addRealtimeEvent(JSON.parse(e.data)));
   }
   function bindBreakdownClicks() {
-    $$("#sourceBreakdown .break-row").forEach((row) => row.onclick = () => {
+    $$("#sourceBreakdown .break-row").forEach((row) => bindActivatable(row, () => {
       $("#memorySource").value = row.dataset.filter || "";
       switchTab("memories");
-    });
-    $$("#scopeBreakdown .break-row").forEach((row) => row.onclick = () => {
+    }));
+    $$("#scopeBreakdown .break-row").forEach((row) => bindActivatable(row, () => {
       $("#memoryScope").value = row.dataset.filter || "";
       switchTab("memories");
-    });
-    $$("#veracityBreakdown .break-row").forEach((row) => row.onclick = () => {
+    }));
+    $$("#veracityBreakdown .break-row").forEach((row) => bindActivatable(row, () => {
       $("#memoryVeracity").value = row.dataset.filter || "";
       switchTab("memories");
-    });
-    $$("#degradationBreakdown .break-row").forEach((row) => row.onclick = () => {
+    }));
+    $$("#degradationBreakdown .break-row").forEach((row) => bindActivatable(row, () => {
       const map = { hot: "1", warm: "2", cold: "3" };
       $("#memoryDegradation").value = map[row.dataset.filter] || "";
       switchTab("memories");
-    });
-    $$("#sessionBreakdown .break-row").forEach((row) => row.onclick = () => openSessionDetail(row.dataset.filter || ""));
+    }));
+    $$("#sessionBreakdown .break-row").forEach((row) => bindActivatable(row, () => openSessionDetail(row.dataset.filter || "")));
   }
   async function loadMemories() {
     const params = memoryFilterParams({
@@ -1614,10 +1706,10 @@
       e.stopPropagation();
       openSessionDetail(btn.dataset.session || "");
     });
-    root.querySelectorAll(".item[data-id]").forEach((el) => el.onclick = (e) => {
+    root.querySelectorAll(".item[data-id]").forEach((el) => bindActivatable(el, (e) => {
       if (e.target.closest(".session-link,button,a,label,input")) return;
       openMemoryDetail(el.dataset.id);
-    });
+    }));
   }
   function canAdmin() {
     const cfg = authState.config || {};
@@ -1798,14 +1890,14 @@
       closeDetail({ push: false });
     };
     $("#sessionCopy").onclick = () => showSelectableCopy("Session ID", sessionId);
-    $$("#detailBody .session-event").forEach((el) => el.onclick = () => showDetail(JSON.parse(el.dataset.json), "Session event detail"));
+    $$("#detailBody .session-event").forEach((el) => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), "Session event detail")));
   }
   async function loadTriples() {
     const q = $("#tripleQuery").value.trim();
     try {
       const data = await api(`/api/triples?q=${encodeURIComponent(q)}&limit=300`, { requestKey: "triples" });
       $("#tripleRows").innerHTML = data.items.map((t) => `<tr class="triple-row" data-triple='${esc(JSON.stringify(t))}'><td>${esc(t.subject)}</td><td>${esc(t.predicate)}</td><td>${esc(t.object)}</td><td>${esc(t.confidence ?? "")}</td></tr>`).join("") || '<tr><td colspan="4" class="empty-cell">No triples found.</td></tr>';
-      $$("#tripleRows .triple-row").forEach((row) => row.onclick = () => showDetail(JSON.parse(row.dataset.triple), "Triple detail"));
+      $$("#tripleRows .triple-row").forEach((row) => bindActivatable(row, () => showDetail(JSON.parse(row.dataset.triple), "Triple detail")));
     } catch (e) {
       if (isCancelledRequest(e)) return;
       $("#tripleRows").innerHTML = `<tr><td colspan="4" class="empty-cell">Could not load triples: ${esc(e.message || "Try again.")}</td></tr>`;
@@ -1824,10 +1916,10 @@
     $("#consolidationList").innerHTML = rows.map(consolidationItem).join("") || '<p class="muted">No consolidations found.</p>';
     $$("#consolidationList .consolidation-item").forEach((el) => {
       const data = JSON.parse(el.dataset.consolidation);
-      el.onclick = (e) => {
+      bindActivatable(el, (e) => {
         if (e.target.closest("button")) return;
         showDetail(data, "Consolidation detail");
-      };
+      });
       el.querySelector(".inspect-consolidation").onclick = () => showDetail(data, "Consolidation detail");
       el.querySelector(".view-session").onclick = () => openSessionDetail(data.session_id || "");
     });
@@ -1847,7 +1939,7 @@
     return `<div class="item" data-json='${esc(JSON.stringify(c))}'><div class="meta"><span class="badge">consolidation</span><span class="badge">${esc(c.items_consolidated)} items</span><span>${esc(c.created_at)}</span></div><div class="content">${esc(c.session_id || "")}: ${esc(c.summary_preview || "")}</div></div>`;
   }
   function bindJsonCards(root, title) {
-    root.querySelectorAll("[data-json]").forEach((el) => el.onclick = () => showDetail(JSON.parse(el.dataset.json), title));
+    root.querySelectorAll("[data-json]").forEach((el) => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), title)));
   }
   async function runSearchFromInput(inputId) {
     const q = $(inputId)?.value.trim() || "";
@@ -2029,8 +2121,8 @@
   async function loadProfile() {
     const [data] = await Promise.all([api(endpoints.profile(10)), loadPatternInsights()]);
     $("#profileGrid").innerHTML = `${contextSummary(data)}${(data.sections || []).map((s) => `<section class="profile-section glass"><div class="section-head mini"><h2>${esc(contextLabel(s.name))}</h2><span>${esc(s.count)} active item${Number(s.count) === 1 ? "" : "s"}</span></div>${(s.items || []).map(profileItem).join("")}</section>`).join("") || '<p class="muted">No inferred profile data found.</p>'}`;
-    $$("#profileGrid .profile-item[data-id]").forEach((el) => el.onclick = () => openMemoryDetail(el.dataset.id));
-    $$("#profileGrid .profile-item[data-json]").forEach((el) => el.onclick = () => showDetail(JSON.parse(el.dataset.json), "Profile source detail"));
+    $$("#profileGrid .profile-item[data-id]").forEach((el) => bindActivatable(el, () => openMemoryDetail(el.dataset.id)));
+    $$("#profileGrid .profile-item[data-json]").forEach((el) => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), "Profile source detail")));
   }
   function applyReviewFilter(filter = {}) {
     $("#memoryKind").value = filter.kind || "all";
@@ -2640,7 +2732,11 @@
   }
   function updateVisualiserModeUI() {
     const mode = constellationScene.visualiserMode === "neural" ? "neural" : "constellation";
-    $$(".visualiser-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.visualiser === mode));
+    $$(".visualiser-tabs button[data-visualiser]").forEach((b) => {
+      const active = b.dataset.visualiser === mode;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", String(active));
+    });
     const wrap = $("#constellationCanvas")?.parentElement;
     if (wrap) wrap.dataset.visualiser = mode;
     const legend = $(".constellation-legend");
@@ -3089,7 +3185,11 @@
     };
   }
   function updateThreeUI() {
-    $$(".visualiser-tabs button[data-three-mode]").forEach((b) => b.classList.toggle("active", b.dataset.threeMode === threeVis.mode));
+    $$(".visualiser-tabs button[data-three-mode]").forEach((b) => {
+      const active = b.dataset.threeMode === threeVis.mode;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", String(active));
+    });
     const viewport = $("#threeViewport");
     if (viewport) viewport.dataset.threeMode = threeVis.mode;
     const legend = $("#threeLegend");
