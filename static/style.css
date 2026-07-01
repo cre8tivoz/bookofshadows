@@ -731,6 +731,28 @@ tr:hover td{background:var(--card-bg-hov)}
 .legend-dot.entity{background:var(--chart-3);box-shadow:0 0 5px var(--chart-3)}
 .legend-line{width:14px;height:0;border-top:1px dashed var(--chart-2);display:inline-block}
 [data-theme="light"] .constellation-legend span{background:rgba(255,255,255,.75);border-color:var(--stroke);color:var(--text-sec)}
+.three-labels{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none}
+.three-label{
+  position:absolute;
+  transform:translate(-50%,-50%);
+  white-space:nowrap;
+  font-size:10px;font-weight:600;
+  color:var(--text);
+  text-shadow:0 1px 3px rgba(0,0,0,.65),0 0 8px rgba(0,0,0,.35);
+}
+.three-label.memory{color:var(--chart-4)}
+.three-loading-card,.three-fallback-card{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  max-width:280px;text-align:center;
+  padding:16px 20px;
+  border:1px solid var(--stroke);
+  border-radius:var(--r-md);
+  background:var(--card-bg);
+  box-shadow:var(--shadow-pop);
+}
+.three-loading-card h3,.three-fallback-card h3{margin:0 0 6px;font-size:15px}
+.three-loading-card p,.three-fallback-card p{margin:0;color:var(--text-muted);font-size:var(--fs-sm)}
 
 /* === DRAWER ================================================== */
 .drawer{

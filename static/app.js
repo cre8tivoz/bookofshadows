@@ -848,6 +848,11 @@
     };
   }
 
+  // static/src/utils/motion.js
+  function prefersReducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
   // static/src/app-main.js
   var THEME_KEY = "mnemosyne-dashboard-theme";
   var VISUALISER_MODE_KEY = "mnemosyne-dashboard-visualiser-mode";
@@ -2711,7 +2716,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const c = neuralColors();
     const fast = false;
-    if (!constellationScene.paused && !constellationScene.drag && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!constellationScene.paused && !constellationScene.drag && !prefersReducedMotion()) {
       const delta = constellationScene.lastFrameTime ? Math.min(48, t - constellationScene.lastFrameTime) : 16;
       constellationScene.rotation += delta * 32e-6;
     }
@@ -2824,7 +2829,7 @@
       hits.push({ x: p.x, y: p.y, r: Math.max(15, drawn.halo * 0.75), node: n });
     });
     constellationScene.hits = hits;
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && isCanvasVisualiserActive()) constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
+    if (!prefersReducedMotion() && !document.hidden && isCanvasVisualiserActive()) constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
   }
   function neuralColors() {
     const light = document.documentElement.dataset.theme === "light";
@@ -2868,7 +2873,7 @@
     const mode = constellationScene.visualiserMode === "neural" ? "neural" : "constellation";
     const interval = 16;
     if (t && constellationScene.renderLastTime && t - constellationScene.renderLastTime < interval) {
-      constellationScene.frame = isCanvasVisualiserActive() ? requestAnimationFrame(drawVisualiserFrame) : 0;
+      constellationScene.frame = isCanvasVisualiserActive() && !document.hidden ? requestAnimationFrame(drawVisualiserFrame) : 0;
       return;
     }
     constellationScene.renderLastTime = t || 0;
@@ -3057,7 +3062,7 @@
       hits.push({ x: p.x, y: p.y, r: Math.max(14, flare + 8), node: n });
     });
     constellationScene.hits = hits;
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches && isCanvasVisualiserActive()) constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
+    if (!prefersReducedMotion() && !document.hidden && isCanvasVisualiserActive()) constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
   }
   function clampConstellationCamera(w, h) {
     constellationScene.zoom = Math.max(CONSTELLATION_MIN_ZOOM, Math.min(CONSTELLATION_MAX_ZOOM, Number.isFinite(constellationScene.zoom) ? constellationScene.zoom : 1));
@@ -3817,11 +3822,12 @@
     group.add(pulsePoints);
     const labelNodes = nodes.filter((n) => !/^[a-f0-9]{10,}$/i.test(String(n.label || ""))).sort((a, b) => b._degree + b._weight - (a._degree + a._weight)).slice(0, threeVis.mode === "neural" ? 72 : 56);
     $("#threeLabels").innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n, i) => `<span class="three-label ${n.kind === "memory" ? "memory" : ""}" data-i="${i}">${esc(String(n.label || "").replace(/^memory:/, "mem ").slice(0, 24))}</span>`).join("");
-    Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs: edges, labels: labelNodes, pulses: pulseEdges, pulsePoints });
+    Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs: edges, labels: labelNodes, pulses: pulseEdges, pulsePoints, paused: prefersReducedMotion() });
     $("#threeClusters").innerHTML = (data.clusters || []).map((c) => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join("");
     resetThreeCamera();
     bindThreeControls();
     resizeThree();
+    updateThreeUI();
     animateThree(0);
   }
   function resizeThree() {
@@ -3915,7 +3921,7 @@
     const effectiveCameraZ = threeEffectiveCameraZ(rect);
     threeVis.camera.position.set(threeVis.panX, threeVis.panY, effectiveCameraZ);
     threeVis.camera.lookAt(threeVis.panX, threeVis.panY, 0);
-    if (threeVis.pulsePoints) {
+    if (threeVis.pulsePoints && !threeVis.paused) {
       const attr = threeVis.pulsePoints.geometry.attributes.position;
       const arr = attr.array;
       threeVis.pulses.forEach((e, i) => {
@@ -3933,7 +3939,7 @@
       });
       attr.needsUpdate = true;
     }
-    threeVis.scene.traverse((obj) => {
+    if (!threeVis.paused) threeVis.scene.traverse((obj) => {
       if (obj.isPoints && obj.material?.uniforms?.uTime) {
         obj.material.uniforms.uTime.value = t;
         obj.material.uniforms.uScale.value = Math.max(360, Math.min(820, threeVis.renderer.domElement.clientHeight || 420));
@@ -3941,10 +3947,17 @@
     });
     threeVis.renderer.render(threeVis.scene, threeVis.camera);
     updateThreeLabels();
-    threeVis.frame = requestAnimationFrame(animateThree);
+    threeVis.frame = document.hidden ? 0 : requestAnimationFrame(animateThree);
   }
   async function loadThreeVisualiser() {
-    renderThreeVisualiser(await api("/api/constellation?limit=320"));
+    const labels = $("#threeLabels");
+    if (labels) labels.innerHTML = '<div class="three-loading-card"><h3>Loading 3D visualiser…</h3><p>Fetching the render engine and memory graph.</p></div>';
+    try {
+      renderThreeVisualiser(await api("/api/constellation?limit=320"));
+    } catch (e) {
+      if (isCancelledRequest(e)) return;
+      if (labels) labels.innerHTML = `<div class="three-fallback-card"><h3>Could not load the 3D visualiser</h3><p>${esc(e.message || "Try again.")}</p></div>`;
+    }
   }
   function switchThreeMode(mode) {
     threeVis.mode = mode === "neural" ? "neural" : "constellation";
@@ -4092,7 +4105,8 @@
     lastObjectCount: 0,
     streamedChunks: null,
     streamTick: 0,
-    colors: null
+    colors: null,
+    paused: false
   };
   function palaceInspectorDefault() {
     $("#palaceInspector").innerHTML = `<div class="inspector-kicker">Mnemosyne Labyrinth</div><h3>The Archive Gate</h3><p class="muted">Move between artifact rooms, scan relics on pedestals, and use search to summon a golden thread.</p><div class="trust-strip"><span class="trust-chip">WASD / joystick</span><span class="trust-chip">Drag to look</span><span class="trust-chip">Tap relic</span></div>`;
@@ -4230,7 +4244,14 @@
     badge.textContent = best?.label || "The Archive Gate";
   }
   async function loadMemoryPalace() {
-    renderMemoryPalace(await api("/api/constellation?limit=360"));
+    const labels = $("#palaceLabels");
+    if (labels) labels.innerHTML = '<div class="three-loading-card"><h3>Loading the labyrinth…</h3><p>Fetching the render engine and memory graph.</p></div>';
+    try {
+      renderMemoryPalace(await api("/api/constellation?limit=360"));
+    } catch (e) {
+      if (isCancelledRequest(e)) return;
+      if (labels) labels.innerHTML = `<div class="three-fallback-card"><h3>Could not load the labyrinth</h3><p>${esc(e.message || "Try again.")}</p></div>`;
+    }
   }
   function pickPalaceNode(e) {
     if (!memoryPalace.raycaster) return;
@@ -4703,7 +4724,7 @@
     const drone = palaceCreateHammyDrone(THREE);
     scene.add(drone);
     const mobilePalace = window.matchMedia("(max-width:760px), (max-width:940px) and (max-height:520px)").matches;
-    Object.assign(memoryPalace, { renderer, scene, camera, group: scene, nodes, rooms, pathSections, colors, streamedChunks: /* @__PURE__ */ new Map(), labels: pathSections.map((s) => ({ label: `${s.label} (${s.count})`, x: s.x, y: s.y, z: s.z, kind: "section" })).concat(nodes.filter((n) => n.featuredPath || n.contaminated || n.kind === "memory").filter((n) => !/^[a-f0-9]{10,}$/i.test(String(n.label || ""))).slice(0, 18)), raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(), avatar: null, drone, pos: new THREE.Vector3(0, mobilePalace ? 82 : 78, mobilePalace ? 430 : 360), velocity: new THREE.Vector3(), yaw: 0, pitch: mobilePalace ? -0.14 : -0.1, iso: false });
+    Object.assign(memoryPalace, { renderer, scene, camera, group: scene, nodes, rooms, pathSections, colors, streamedChunks: /* @__PURE__ */ new Map(), labels: pathSections.map((s) => ({ label: `${s.label} (${s.count})`, x: s.x, y: s.y, z: s.z, kind: "section" })).concat(nodes.filter((n) => n.featuredPath || n.contaminated || n.kind === "memory").filter((n) => !/^[a-f0-9]{10,}$/i.test(String(n.label || ""))).slice(0, 18)), raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(), avatar: null, drone, pos: new THREE.Vector3(0, mobilePalace ? 82 : 78, mobilePalace ? 430 : 360), velocity: new THREE.Vector3(), yaw: 0, pitch: mobilePalace ? -0.14 : -0.1, iso: false, paused: prefersReducedMotion() });
     palaceStreamRelicChunks(true);
     $("#palaceLabels").innerHTML = memoryPalace.labels.map((n, i) => `<span class="three-label ${n.kind === "memory" ? "memory" : ""}" data-i="${i}">${esc(String(n.label || "").replace(/^memory:/, "mem ").slice(0, 24))}</span>`).join("");
     $("#palaceHudStatus").textContent = "walk forward — memories are grouped by domain";
@@ -4743,13 +4764,13 @@
     memoryPalace.camera.rotation.y = memoryPalace.yaw;
     memoryPalace.camera.rotation.x = memoryPalace.pitch;
     if (memoryPalace.drone) {
-      const bob = Math.sin(t * 3e-3) * 5;
+      const bob = memoryPalace.paused ? 0 : Math.sin(t * 3e-3) * 5;
       const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0, 14 + bob, 0));
       memoryPalace.drone.position.lerp(dronePos, 0.16);
     }
     palaceStreamRelicChunks();
-    if (memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
-    memoryPalace.nodes.forEach((n, i) => {
+    if (memoryPalace.beacon && !memoryPalace.paused) memoryPalace.beacon.rotation.y += delta * 1.4;
+    if (!memoryPalace.paused) memoryPalace.nodes.forEach((n, i) => {
       if (n.mesh && n.mesh.visible && (n.featuredPath || i < 18)) {
         n.mesh.rotation.y += delta * (0.14 + i % 5 * 0.02);
       }
@@ -4759,7 +4780,7 @@
     updatePalaceNearbyPrompt();
     updatePalaceLabels();
     updatePalaceZoneBadge();
-    memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+    memoryPalace.frame = document.hidden ? 0 : requestAnimationFrame(animateMemoryPalace);
   }
   async function loadMemoria() {
     const nameMap = { facts: "Facts", timelines: "Timelines", instructions: "Instructions", kg: "KG", preferences: "Preferences" };
@@ -5127,6 +5148,12 @@
   window.addEventListener("popstate", (e) => applyRoute(e.state || urlToRoute()));
   window.addEventListener("hashchange", () => applyRoute(urlToRoute()));
   window.addEventListener("keydown", handleGlobalKeyboard);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (threeVis.renderer && !threeVis.frame) threeVis.frame = requestAnimationFrame(animateThree);
+    if (memoryPalace.renderer && !memoryPalace.frame) memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+    if (isCanvasVisualiserActive() && !prefersReducedMotion() && !constellationScene.frame) constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
+  });
   initTheme();
   var initialRoute = urlToRoute();
   pushRoute(initialRoute, true);

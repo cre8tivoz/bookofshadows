@@ -432,11 +432,24 @@ This can still ship as plain JavaScript initially. The first goal is boundaries,
 
 **Outcome:** visualisers become premium without taxing the whole app.
 
-- [ ] Lazy-load Three.js.
-- [ ] Add visualiser loading/error states.
-- [ ] Stop render loops when visualisers are hidden.
-- [ ] Add WebGL fallback.
-- [ ] Add reduced-motion visualiser mode.
+- [x] Lazy-load Three.js.
+- [x] Add visualiser loading/error states.
+- [x] Stop render loops when visualisers are hidden.
+- [x] Add WebGL fallback.
+- [x] Add reduced-motion visualiser mode.
+
+### Phase 8 status update - 2026-07-01
+
+- Three of the five tasks were already done before this phase and are only documented here, not re-implemented: Three.js is lazy-loaded via `import()` in `loadThreeModule()`; every `new THREE.WebGLRenderer(...)` call site (3D Visualiser and Memory Palace) already has a try/catch showing a "browser could not start WebGL" fallback card; and `switchTab()` already fully disposes the canvas/Three.js/Memory Palace scenes (`stopCanvasVisualiserLoop()`/`clearThreeScene()`/`clearPalaceScene()`) whenever the user navigates to a different dashboard tab.
+- Added a real loading state: `loadThreeVisualiser()`/`loadMemoryPalace()` now show a loading card immediately (covering both the API data fetch and the Three.js module fetch) and a distinct error card if either fails, instead of leaving the previous/blank viewport with a silently-swallowed rejection.
+- Added a `prefers-reduced-motion` mode for the 3D Visualiser and Memory Palace (the canvas constellation already had this from Phase 5). New shared `utils/motion.js` (`prefersReducedMotion()`) is used to default `threeVis.paused`/`memoryPalace.paused` to `true` on scene load, which disables auto-rotation, the neural-mode edge-pulse travel animation, drone bobbing, beacon spin, and relic self-rotation — while leaving the render loop itself, and all drag/WASD/pan/zoom interaction, fully functional. Reduced motion means removing *automatic* decorative motion, not disabling interactivity.
+- Added `visibilitychange` handling: the canvas/Three.js/Memory Palace render loops now stop rescheduling `requestAnimationFrame` while the browser tab itself is hidden (not just when switching dashboard tabs, which was already handled), and resume automatically when the tab becomes visible again, without disposing/rebuilding the scene.
+- Found and fixed two real, unrelated bugs while working in this area:
+  - `.three-label`/`.three-labels` (the floating node-name overlays on both the 3D Visualiser and the Memory Palace) had **no CSS at all** (`position: static`), so every label rendered as plain stacked text at the top of the viewport instead of floating over its node — despite the JS correctly computing per-label `left`/`top` coordinates every frame. Added the missing `position:absolute` overlay styling; verified live in a browser that labels now correctly float over their nodes in both visualisers.
+  - `renderMemoryPalaceDungeon`/`animateMemoryPalaceDungeon` and `renderMemoryPalaceIso`/`animateMemoryPalaceIso` (plus ~10 helper functions used only by them) were entirely dead code from earlier Memory Palace design iterations — never called from the live `loadMemoryPalace() → renderMemoryPalace() → animateMemoryPalace()` path. Verified via a full call-graph trace (every helper's call sites checked individually, not just the four named functions) before deleting 368 lines. Confirmed via `git show HEAD:static/app.js` that esbuild's bundler was already tree-shaking these unreferenced declarations out of the shipped bundle — so this was a source-readability/maintainability fix (three near-identical "which one is real?" implementations down to one), not a bundle-size fix. Verified both visualisers still render and interact correctly afterward in a live browser.
+- A pytest assertion (`test_static_ui_exposes_v23_trust_and_lifecycle_controls`) was literally checking for the dead function names' presence in the built bundle; updated it to only assert on the functions that are actually live.
+- New/updated frontend tests: `tests/frontend/motion.test.js` for the extracted `prefersReducedMotion()` helper. Full suite: 80 passed (was 78); backend suite: 56 passed.
+- Noticed but out of scope: this document has a full duplicate "Sprint 1"–"Sprint 10" roadmap appended after "Phase 10", mirroring the Phase 0-10 structure with its own unchecked boxes. It looks like a stale earlier draft that was never removed when the document was reorganised into "Phase N" sections — the "Phase N" sections are what every completed phase through Phase 8 has actually tracked and checked off. Flagged separately rather than fixed here since it's unrelated to visualiser work.
 
 ## Phase 9 - Charts and Insights Layer
 

@@ -10,6 +10,7 @@ import { bulkSelectionState, isMutableMemory, liveEventMeta, MEMORY_FILTER_PRESE
 import { lifecycleQueueHtml, reviewActionableIds, reviewFilterParams, reviewQueueHtml } from './features/review.js';
 import { createGraphFeature } from './features/graph.js';
 import { trapFocus } from './utils/a11y.js';
+import { prefersReducedMotion } from './utils/motion.js';
 
 const THEME_KEY = 'mnemosyne-dashboard-theme';
 const VISUALISER_MODE_KEY = 'mnemosyne-dashboard-visualiser-mode';
@@ -1643,7 +1644,7 @@ function drawNeuralFrame(t=0){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const c = neuralColors();
   const fast = false;
-  if(!constellationScene.paused && !constellationScene.drag && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  if(!constellationScene.paused && !constellationScene.drag && !prefersReducedMotion()){
     const delta = constellationScene.lastFrameTime ? Math.min(48, t - constellationScene.lastFrameTime) : 16;
     constellationScene.rotation += delta * 0.000032;
   }
@@ -1732,7 +1733,7 @@ function drawNeuralFrame(t=0){
     hits.push({x:p.x,y:p.y,r:Math.max(15,drawn.halo*.75),node:n});
   });
   constellationScene.hits=hits;
-  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches && isCanvasVisualiserActive()) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
+  if(!prefersReducedMotion() && !document.hidden && isCanvasVisualiserActive()) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
 }
 function neuralColors(){
   const light = document.documentElement.dataset.theme === 'light';
@@ -1768,7 +1769,7 @@ function drawVisualiserFrame(t=0){
   const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
   const interval = 16;
   if(t && constellationScene.renderLastTime && t - constellationScene.renderLastTime < interval){
-    constellationScene.frame = isCanvasVisualiserActive() ? requestAnimationFrame(drawVisualiserFrame) : 0;
+    constellationScene.frame = isCanvasVisualiserActive() && !document.hidden ? requestAnimationFrame(drawVisualiserFrame) : 0;
     return;
   }
   constellationScene.renderLastTime = t || 0;
@@ -1909,7 +1910,7 @@ function drawConstellationFrame(t=0){
     hits.push({x:p.x,y:p.y,r:Math.max(14,flare+8),node:n});
   });
   constellationScene.hits=hits;
-  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches && isCanvasVisualiserActive()) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
+  if(!prefersReducedMotion() && !document.hidden && isCanvasVisualiserActive()) constellationScene.frame=requestAnimationFrame(drawVisualiserFrame);
 }
 function clampConstellationCamera(w, h){
   constellationScene.zoom = Math.max(CONSTELLATION_MIN_ZOOM, Math.min(CONSTELLATION_MAX_ZOOM, Number.isFinite(constellationScene.zoom) ? constellationScene.zoom : 1));
@@ -2555,9 +2556,9 @@ async function renderThreeVisualiser(data){
   const pulsePoints = new THREE.Points(pulseGeom, new THREE.PointsMaterial({ color:colors.pulse, map:makePointTexture(THREE, 'star'), alphaTest:.03, size:threeVis.mode === 'neural' ? 10.5 : 5.2, transparent:true, opacity:threeVis.mode === 'neural' ? (colors.light ? .54 : .98) : .85, depthWrite:false, depthTest:false, blending:colors.light ? THREE.NormalBlending : THREE.AdditiveBlending })); group.add(pulsePoints);
   const labelNodes = nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label||''))).sort((a,b)=>(b._degree+b._weight)-(a._degree+a._weight)).slice(0, threeVis.mode === 'neural' ? 72 : 56);
   $('#threeLabels').innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
-  Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints });
+  Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints, paused:prefersReducedMotion() });
   $('#threeClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
-  resetThreeCamera(); bindThreeControls(); resizeThree(); animateThree(0);
+  resetThreeCamera(); bindThreeControls(); resizeThree(); updateThreeUI(); animateThree(0);
 }
 function resizeThree(){
   if(!threeVis.renderer) return;
@@ -2631,21 +2632,30 @@ function animateThree(t=0){
   const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
   const effectiveCameraZ = threeEffectiveCameraZ(rect);
   threeVis.camera.position.set(threeVis.panX, threeVis.panY, effectiveCameraZ); threeVis.camera.lookAt(threeVis.panX, threeVis.panY, 0);
-  if(threeVis.pulsePoints){
+  if(threeVis.pulsePoints && !threeVis.paused){
     const attr = threeVis.pulsePoints.geometry.attributes.position; const arr = attr.array;
     threeVis.pulses.forEach((e,i)=>{ const phase=(t*.00030 + (i%17)/17)%1; const inv=1-phase; if(e._curve){ arr[i*3]=inv*inv*e.a.x+2*inv*phase*e._curve.cx+phase*phase*e.b.x; arr[i*3+1]=inv*inv*e.a.y+2*inv*phase*e._curve.cy+phase*phase*e.b.y; arr[i*3+2]=inv*inv*e.a.z+2*inv*phase*e._curve.cz+phase*phase*e.b.z; } else { arr[i*3]=e.a.x+(e.b.x-e.a.x)*phase; arr[i*3+1]=e.a.y+(e.b.y-e.a.y)*phase; arr[i*3+2]=e.a.z+(e.b.z-e.a.z)*phase; } });
     attr.needsUpdate = true;
   }
-  threeVis.scene.traverse(obj => {
+  if(!threeVis.paused) threeVis.scene.traverse(obj => {
     if(obj.isPoints && obj.material?.uniforms?.uTime){
       obj.material.uniforms.uTime.value = t;
       obj.material.uniforms.uScale.value = Math.max(360, Math.min(820, threeVis.renderer.domElement.clientHeight || 420));
     }
   });
   threeVis.renderer.render(threeVis.scene, threeVis.camera); updateThreeLabels();
-  threeVis.frame = requestAnimationFrame(animateThree);
+  threeVis.frame = document.hidden ? 0 : requestAnimationFrame(animateThree);
 }
-async function loadThreeVisualiser(){ renderThreeVisualiser(await api('/api/constellation?limit=320')); }
+async function loadThreeVisualiser(){
+  const labels = $('#threeLabels');
+  if(labels) labels.innerHTML = '<div class="three-loading-card"><h3>Loading 3D visualiser…</h3><p>Fetching the render engine and memory graph.</p></div>';
+  try {
+    renderThreeVisualiser(await api('/api/constellation?limit=320'));
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    if(labels) labels.innerHTML = `<div class="three-fallback-card"><h3>Could not load the 3D visualiser</h3><p>${esc(e.message || 'Try again.')}</p></div>`;
+  }
+}
 function switchThreeMode(mode){ threeVis.mode = mode === 'neural' ? 'neural' : 'constellation'; if(threeVis.data) renderThreeVisualiser(threeVis.data); else loadThreeVisualiser(); }
 function clampThreeCamera(){
   const viewport = $('#threeViewport'); const rect = viewport?.getBoundingClientRect?.() || {width:650,height:650};
@@ -2722,7 +2732,7 @@ let memoryPalace = {
   data:null, renderer:null, scene:null, camera:null, group:null, nodes:[], labels:[], frame:0,
   yaw:0, pitch:-.05, pos:null, velocity:null, raycaster:null, mouse:null, avatar:null, drone:null,
   beacon:null, beaconNode:null, joystick:{x:0,y:0}, lastT:0, pointer:null,
-  cullTick:0, lastObjectCount:0, streamedChunks:null, streamTick:0, colors:null
+  cullTick:0, lastObjectCount:0, streamedChunks:null, streamTick:0, colors:null, paused:false
 };
 function palaceInspectorDefault(){
   $('#palaceInspector').innerHTML = `<div class="inspector-kicker">Mnemosyne Labyrinth</div><h3>The Archive Gate</h3><p class="muted">Move between artifact rooms, scan relics on pedestals, and use search to summon a golden thread.</p><div class="trust-strip"><span class="trust-chip">WASD / joystick</span><span class="trust-chip">Drag to look</span><span class="trust-chip">Tap relic</span></div>`;
@@ -2740,137 +2750,6 @@ function resetMemoryPalaceDiver(){
   memoryPalace.velocity = new memoryPalace.THREE.Vector3();
   memoryPalace.yaw = 0; memoryPalace.pitch = -.24;
   $('#palaceHudStatus').textContent = 'drifting at palace gate';
-}
-function palaceRoomsForCategories(categories){
-  const base = [
-    { label:'The Archive Gate', x:0, y:0, z:620, color:0xffe08a },
-    { label:'Episodic Vault', x:-360, y:0, z:120, color:0x65d6ff },
-    { label:'Working Memory Stream', x:360, y:0, z:80, color:0x52d6b5 },
-    { label:'Entity Gardens', x:-520, y:0, z:-520, color:0xb9a6ff },
-    { label:'Cold Storage', x:520, y:0, z:-560, color:0x8aa0c9 },
-    { label:'Review Wing', x:0, y:0, z:-980, color:0xff5f87 }
-  ];
-  categories.slice(0, Math.max(0, base.length - 1)).forEach((cat,i) => { base[i + 1].category = cat; });
-  return base;
-}
-function palacePositions(data){
-  const nodes = (data.nodes || []).slice(0,190).map(n => ({...n}));
-  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
-  const rooms = palaceRoomsForCategories(categories);
-  nodes.forEach((n,i)=>{
-    const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
-    const room = contaminated ? rooms.find(r => r.label === 'Review Wing') : (n.kind === 'memory' ? rooms[1 + (i % Math.max(1, rooms.length - 2))] : rooms[1 + ((i + 2) % Math.max(1, rooms.length - 2))]);
-    const weight = Math.max(1, Number(n.weight || n.count || 1));
-    const slot = i % 28;
-    const ring = Math.floor(slot / 7) + 1;
-    const angle = (slot % 7) / 7 * Math.PI * 2 + ring * .27;
-    const radius = 54 + ring * 34 + Math.sqrt(weight) * 5;
-    n.x = room.x + Math.cos(angle) * radius;
-    n.y = 18 + (slot % 3) * 8 + (n.kind === 'memory' ? 0 : 18);
-    n.z = room.z + Math.sin(angle) * radius;
-    n.size = Math.min(30, 8 + Math.sqrt(weight) * (n.kind === 'memory' ? 4.8 : 5.8));
-    n._weight = weight; n.room = room.label; n.contaminated = contaminated;
-  });
-  nodes.rooms = rooms;
-  return nodes;
-}
-function palaceCreateArtifactMaterial(THREE, node, colors){
-  if(node.contaminated){
-    node.scanLabel = 'Needs-review memory';
-    return new THREE.MeshStandardMaterial({ color:0xff4f87, emissive:0x8d0035, emissiveIntensity:.72, roughness:.28, metalness:.12 });
-  }
-  const color = node.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star);
-  return new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:node.kind === 'memory' ? .34 : .42, roughness:.33, metalness:.08 });
-}
-function palaceCreatePedestal(THREE, node){
-  const group = new THREE.Group();
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(18, 24, 8, 6), new THREE.MeshStandardMaterial({ color:0x2a2235, emissive:0x0b0712, roughness:.72 }));
-  base.position.set(node.x, 3, node.z);
-  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(12, 16, 10, 8), new THREE.MeshStandardMaterial({ color:node.contaminated ? 0x4b1630 : 0x3a3042, roughness:.62 }));
-  plinth.position.set(node.x, 12, node.z);
-  group.add(base, plinth);
-  return group;
-}
-function palaceCreatePortal(THREE, room, target, color=0xffe08a){
-  const group = new THREE.Group();
-  const dx = target.x - room.x, dz = target.z - room.z;
-  const angle = Math.atan2(dx, dz);
-  const arch = new THREE.Mesh(new THREE.TorusGeometry(18, 1.6, 8, 32, Math.PI), new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.46 }));
-  arch.rotation.z = Math.PI;
-  arch.position.y = 34;
-  const light = new THREE.PointLight(color, .58, 125); light.position.y = 32;
-  group.add(arch, light);
-  group.position.set(room.x + Math.sin(angle) * 142, 0, room.z + Math.cos(angle) * 142);
-  group.rotation.y = angle;
-  return group;
-}
-function palaceCreateRoomEdges(THREE, scene, mesh, color=0xffe08a, opacity=.18){
-  const edges = new THREE.EdgesGeometry(mesh.geometry);
-  const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, transparent:true, opacity }));
-  lines.position.copy(mesh.position);
-  lines.rotation.copy(mesh.rotation);
-  lines.scale.copy(mesh.scale);
-  scene.add(lines);
-  return lines;
-}
-function palaceCreateRoomWalls(THREE, scene, room, index, floorMat, wallMat){
-  const size = index === 0 ? 330 : 260;
-  room.floor = new THREE.Mesh(new THREE.BoxGeometry(size, 10, size), floorMat);
-  room.floor.position.set(room.x, -6, room.z);
-  scene.add(room.floor);
-  palaceCreateRoomEdges(THREE, scene, room.floor, 0xffe08a, .20);
-  const wallHeight = index === 0 ? 74 : 58;
-  const wallThickness = 12;
-  const wallLength = size * .92;
-  const openings = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
-  openings.forEach((angle, side) => {
-    const horizontal = side % 2 === 0;
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? wallLength : wallThickness, wallHeight, horizontal ? wallThickness : wallLength), wallMat);
-    const offset = size / 2;
-    wall.position.set(room.x + (horizontal ? 0 : (side === 1 ? offset : -offset)), wallHeight / 2 - 2, room.z + (horizontal ? (side === 0 ? offset : -offset) : 0));
-    room.wall = wall;
-    scene.add(wall);
-    palaceCreateRoomEdges(THREE, scene, wall, 0x8a76a4, .16);
-  });
-  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(size * .74, 3, size * .74), new THREE.MeshBasicMaterial({ color:room.color, transparent:true, opacity:.045 }));
-  ceiling.position.set(room.x, wallHeight + 10, room.z); scene.add(ceiling);
-}
-function palaceCreateDungeonRooms(THREE, scene, rooms){
-  const floorMat = new THREE.MeshStandardMaterial({ color:0x3b3048, roughness:.82, metalness:.03 });
-  const wallMat = new THREE.MeshStandardMaterial({ color:0x4d3d5d, emissive:0x160d20, roughness:.78 });
-  const corridorMat = new THREE.MeshStandardMaterial({ color:0x3b3048, emissive:0x150c1d, roughness:.82 });
-  const lineMat = new THREE.LineBasicMaterial({ color:0xffe08a, transparent:true, opacity:.22 });
-  const corridorPoints = [];
-  const gate = rooms[0];
-  rooms.forEach((room,i)=>{
-    palaceCreateRoomWalls(THREE, scene, room, i, floorMat, wallMat);
-    const obelisk = new THREE.Mesh(new THREE.ConeGeometry(15, i === 0 ? 92 : 64, 5), new THREE.MeshStandardMaterial({ color:room.color, emissive:room.color, emissiveIntensity:.34, roughness:.40 }));
-    obelisk.position.set(room.x, i === 0 ? 48 : 34, room.z); scene.add(obelisk);
-    const roomLight = new THREE.PointLight(room.color, i === 0 ? 1.0 : .72, i === 0 ? 420 : 320); roomLight.position.set(room.x, 88, room.z); scene.add(roomLight);
-    if(i > 0){
-      const dx = room.x - gate.x, dz = room.z - gate.z;
-      const len = Math.max(1, Math.hypot(dx, dz));
-      const midX = (room.x + gate.x) / 2, midZ = (room.z + gate.z) / 2;
-      const corridor = new THREE.Mesh(new THREE.BoxGeometry(76, 6, len), corridorMat);
-      corridor.position.set(midX, -8, midZ);
-      corridor.rotation.y = Math.atan2(dx, dz);
-      scene.add(corridor);
-      palaceCreateRoomEdges(THREE, scene, corridor, 0xffe08a, .14);
-      corridorPoints.push(gate.x, 6, gate.z, room.x, 6, room.z);
-      scene.add(palaceCreatePortal(THREE, gate, room, room.color));
-    }
-  });
-  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(corridorPoints), 3));
-  scene.add(new THREE.LineSegments(geometry, lineMat));
-}
-function palaceCreateAvatar(THREE){
-  const avatar = new THREE.Group();
-  const suit = new THREE.Mesh(new THREE.CylinderGeometry(6, 8, 24, 16), new THREE.MeshStandardMaterial({ color:0xd8e8ff, emissive:0x102040, roughness:.35 }));
-  const visor = new THREE.Mesh(new THREE.SphereGeometry(7.8, 18, 12), new THREE.MeshStandardMaterial({ color:0x101b2e, emissive:0x65d6ff, emissiveIntensity:.38, metalness:.2, roughness:.18 }));
-  visor.position.y = 16;
-  const lantern = new THREE.PointLight(0xffe08a, 1.4, 160); lantern.position.set(10, 8, -8);
-  avatar.add(suit, visor, lantern);
-  return avatar;
 }
 function palaceCreateHammyDrone(THREE){
   const drone = new THREE.Group();
@@ -2903,48 +2782,6 @@ function palaceSearchBeacon(){
   if(node){ palaceSetBeacon(node); inspectPalaceNode(node); }
   else $('#palaceHudStatus').textContent = `no artifact found for “${q.slice(0,32)}”`;
 }
-async function renderMemoryPalaceDungeon(data){
-  const THREE = await loadThreeModule();
-  clearPalaceScene(); memoryPalace.data = data; memoryPalace.THREE = THREE; palaceInspectorDefault();
-  const viewport = $('#palaceViewport'); if(!viewport) return;
-  const colors = constellationColors();
-  let renderer;
-  try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' }); }
-  catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Mnemosyne Labyrinth unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setClearColor(cssHexToInt(colors.bg), 0);
-  viewport.prepend(renderer.domElement);
-  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x0b0712, .00092);
-  const camera = new THREE.PerspectiveCamera(62, 1, 1, 7000);
-  const group = new THREE.Group(); scene.add(group);
-  scene.add(new THREE.AmbientLight(0xd8c7ff, .42));
-  const torch = new THREE.PointLight(0xffe08a, 1.4, 900); torch.position.set(0, 220, 520); scene.add(torch);
-  const nodes = palacePositions(data); const byId = new Map(nodes.map(n => [n.id, n]));
-  palaceCreateDungeonRooms(THREE, scene, nodes.rooms || []);
-  nodes.forEach((n,i)=>{
-    group.add(palaceCreatePedestal(THREE, n));
-    const geo = n.contaminated ? new THREE.IcosahedronGeometry(n.size || 12, 1) : (n.kind === 'memory' ? new THREE.OctahedronGeometry(n.size || 12, 1) : new THREE.ConeGeometry((n.size || 12) * .75, (n.size || 12) * 2.9, 5));
-    const mesh = new THREE.Mesh(geo, palaceCreateArtifactMaterial(THREE, n, colors));
-    mesh.position.set(n.x,n.y + 16,n.z); mesh.userData.node = n; n.mesh = mesh; group.add(mesh);
-    if(i % 3 === 0 || n.contaminated){ const halo = new THREE.PointLight(n.contaminated ? 0xff4f87 : (n.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star)), n.contaminated ? .62 : .32, n.contaminated ? 190 : 130); halo.position.copy(mesh.position); group.add(halo); }
-  });
-  const lines=[];
-  (data.edges || []).slice(0,150).forEach(e=>{ const a=byId.get(e.source), b=byId.get(e.target); if(a && b) lines.push(a.x,a.y,a.z,b.x,b.y,b.z); });
-  const lineGeom = new THREE.BufferGeometry(); lineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lines), 3));
-  group.add(new THREE.LineSegments(lineGeom, new THREE.LineBasicMaterial({ color:0xffe08a, transparent:true, opacity:.15 })));
-  const stars = new Float32Array(650*3); for(let i=0;i<650;i++){ stars.set([((i*97)%2000)-1000, ((i*53)%900)-450, -((i*131)%2400)-150], i*3); }
-  const starGeom = new THREE.BufferGeometry(); starGeom.setAttribute('position', new THREE.BufferAttribute(stars, 3));
-  scene.add(new THREE.Points(starGeom, new THREE.PointsMaterial({ color:0xffffff, size:1.2, transparent:true, opacity:.42, depthWrite:false })));
-  const avatar = palaceCreateAvatar(THREE); const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
-  Object.assign(memoryPalace, { renderer, scene, camera, group, nodes, rooms:nodes.rooms || [], labels:nodes.filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,54), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar, drone });
-  $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,26))}</span>`).join('');
-  resetMemoryPalaceDiver(); bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
-}
-function resizeMemoryPalaceDungeon(){
-  if(!memoryPalace.renderer) return;
-  const rect = $('#palaceViewport').getBoundingClientRect();
-  const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
-  memoryPalace.renderer.setSize(w,h,false); memoryPalace.camera.aspect = w/h; memoryPalace.camera.updateProjectionMatrix();
-}
 function palaceForwardRight(){
   const THREE = memoryPalace.THREE;
   return { forward:new THREE.Vector3(Math.sin(memoryPalace.yaw), 0, -Math.cos(memoryPalace.yaw)), right:new THREE.Vector3(Math.cos(memoryPalace.yaw), 0, Math.sin(memoryPalace.yaw)) };
@@ -2960,19 +2797,6 @@ function palaceClampFpsPosition(){
   memoryPalace.pos.x = Math.max(-xLimit, Math.min(xLimit, memoryPalace.pos.x));
   memoryPalace.pos.y = Math.max(46, Math.min(150, memoryPalace.pos.y));
   memoryPalace.pos.z = Math.max(-1500, Math.min(720, memoryPalace.pos.z));
-}
-function updatePalaceLabelsDungeon(){
-  if(!memoryPalace.camera) return;
-  const rect = $('#palaceViewport').getBoundingClientRect(); const v = new memoryPalace.THREE.Vector3(); let shown=0;
-  $$('#palaceLabels .three-label').forEach((el,i)=>{
-    const n = memoryPalace.labels[i]; if(!n) return;
-    v.set(n.x,n.y,n.z).project(memoryPalace.camera);
-    const sx=(v.x*.5+.5)*rect.width, sy=(-v.y*.5+.5)*rect.height;
-    const close = memoryPalace.pos ? memoryPalace.pos.distanceTo(n.mesh.position) < 420 : false;
-    const visible = close && v.z > -1 && v.z < 1 && sx > 14 && sx < rect.width-14 && sy > 14 && sy < rect.height-14 && shown < 18;
-    el.style.display = visible ? '' : 'none';
-    if(visible){ shown++; el.style.left = `${sx}px`; el.style.top = `${sy}px`; el.style.opacity = String(Math.max(.34, 1 - Math.abs(v.z)*.42)); }
-  });
 }
 function palaceNearestMemory(maxDist=170){
   if(!memoryPalace.pos) return null;
@@ -3017,29 +2841,16 @@ function updatePalaceZoneBadge(){
   zones.forEach(r => { const d = Math.hypot(memoryPalace.pos.x - r.x, memoryPalace.pos.z - r.z); if(d < bestD){ bestD = d; best = r; } });
   badge.textContent = best?.label || 'The Archive Gate';
 }
-function animateMemoryPalaceDungeon(t=0){
-  if(!memoryPalace.renderer) return;
-  resizeMemoryPalace();
-  const delta = memoryPalace.lastT ? Math.min(48, t - memoryPalace.lastT) / 1000 : .016; memoryPalace.lastT = t;
-  const {forward,right} = palaceForwardRight(); const move = new memoryPalace.THREE.Vector3();
-  if(palaceKeys.w || palaceKeys.ArrowUp) move.add(forward);
-  if(palaceKeys.s || palaceKeys.ArrowDown) move.sub(forward);
-  if(palaceKeys.d || palaceKeys.ArrowRight) move.add(right);
-  if(palaceKeys.a || palaceKeys.ArrowLeft) move.sub(right);
-  if(palaceKeys.q) move.y -= 1; if(palaceKeys.e || palaceKeys[' ']) move.y += 1;
-  if(memoryPalace.joystick.x || memoryPalace.joystick.y){ move.addScaledVector(right, memoryPalace.joystick.x); move.addScaledVector(forward, -memoryPalace.joystick.y); }
-  if(move.lengthSq() > 0) move.normalize().multiplyScalar((palaceKeys.Shift ? 380 : 210) * delta);
-  memoryPalace.pos.add(move);
-  memoryPalace.pos.x = Math.max(-1050, Math.min(1050, memoryPalace.pos.x)); memoryPalace.pos.y = Math.max(-260, Math.min(360, memoryPalace.pos.y)); memoryPalace.pos.z = Math.max(-2800, Math.min(860, memoryPalace.pos.z));
-  memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
-  if(memoryPalace.avatar){ const avatarPos = memoryPalace.pos.clone().add(forward.clone().multiplyScalar(58)).add(new memoryPalace.THREE.Vector3(0,-34,0)); memoryPalace.avatar.position.lerp(avatarPos, .18); memoryPalace.avatar.rotation.y = memoryPalace.yaw; }
-  if(memoryPalace.drone){ const bob = Math.sin(t*.002)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(42)).add(new memoryPalace.THREE.Vector3(0,18+bob,-30)); memoryPalace.drone.position.lerp(dronePos, .12); }
-  if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
-  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh){ n.mesh.rotation.y += delta * (.18 + (i%5)*.03); n.mesh.rotation.x += delta * .05; }});
-  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels(); updatePalaceZoneBadge();
-  memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+async function loadMemoryPalace(){
+  const labels = $('#palaceLabels');
+  if(labels) labels.innerHTML = '<div class="three-loading-card"><h3>Loading the labyrinth…</h3><p>Fetching the render engine and memory graph.</p></div>';
+  try {
+    renderMemoryPalace(await api('/api/constellation?limit=360'));
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    if(labels) labels.innerHTML = `<div class="three-fallback-card"><h3>Could not load the labyrinth</h3><p>${esc(e.message || 'Try again.')}</p></div>`;
+  }
 }
-async function loadMemoryPalace(){ renderMemoryPalace(await api('/api/constellation?limit=360')); }
 function pickPalaceNode(e){
   if(!memoryPalace.raycaster) return;
   const rect = $('#palaceViewport').getBoundingClientRect();
@@ -3081,145 +2892,6 @@ function bindPalaceControls(){
 }
 
 
-// V4: game-first isometric dungeon view. Keep the older first-person prototype above as
-// reusable primitives, but render the Labyrinth as a readable game board by default.
-function palaceIsoRoomLayout(data){
-  const nodes = (data.nodes || []).slice(0,150).map(n => ({...n}));
-  const categories = [...new Set(nodes.map(n => n.category || 'Other'))];
-  const rooms = [
-    { label:'Archive Gate', x:0, z:420, w:320, d:250, color:0xffd166 },
-    { label:'Episodic Vault', x:-520, z:40, w:300, d:240, color:0x65d6ff },
-    { label:'Working Stream', x:520, z:20, w:300, d:240, color:0x52d6b5 },
-    { label:'Entity Gardens', x:-560, z:-420, w:300, d:240, color:0xb9a6ff },
-    { label:'Cold Storage', x:520, z:-450, w:300, d:240, color:0x8aa0c9 },
-    { label:'Review Wing', x:0, z:-760, w:340, d:260, color:0xff5f87 }
-  ];
-  categories.slice(0,4).forEach((cat,i)=>{ rooms[i+1].category = cat; rooms[i+1].label = String(cat).slice(0,18); });
-  nodes.forEach((n,i)=>{
-    const contaminated = ['unknown','inferred','imported'].includes(String(n.veracity || '').toLowerCase()) || /contaminat|unknown|untrusted/i.test(String(n.reason || n.preview || ''));
-    const room = contaminated ? rooms[5] : rooms[1 + (i % 4)];
-    const col = i % 5, row = Math.floor((i % 25) / 5);
-    n.x = room.x - room.w*.34 + col * (room.w*.17);
-    n.z = room.z - room.d*.28 + row * (room.d*.14);
-    n.y = 34;
-    n.room = room.label; n.contaminated = contaminated;
-    n.size = Math.min(22, 9 + Math.sqrt(Math.max(1, Number(n.weight || n.count || 1))) * 3.5);
-  });
-  nodes.rooms = rooms;
-  return nodes;
-}
-function palaceIsoMaterial(THREE, color, opts={}){
-  return new THREE.MeshStandardMaterial({
-    color,
-    emissive:opts.emissive || 0x07040d,
-    emissiveIntensity:opts.emissiveIntensity ?? .18,
-    roughness:opts.roughness ?? .72,
-    metalness:opts.metalness ?? .04
-  });
-}
-function palaceAddIsoRoom(THREE, scene, room, i){
-  const floorMat = palaceIsoMaterial(THREE, i === 0 ? 0x44344f : 0x342945, { emissive:room.color, emissiveIntensity:.035 });
-  const edgeMat = new THREE.LineBasicMaterial({ color:room.color, transparent:true, opacity:.46 });
-  const wallMat = palaceIsoMaterial(THREE, 0x5b4967, { emissive:room.color, emissiveIntensity:.055, roughness:.80 });
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(room.w, 14, room.d), floorMat);
-  floor.position.set(room.x, 0, room.z); floor.receiveShadow = true; scene.add(floor);
-  const floorEdges = new THREE.LineSegments(new THREE.EdgesGeometry(floor.geometry), edgeMat);
-  floorEdges.position.copy(floor.position); scene.add(floorEdges);
-  const wallH = i === 0 ? 56 : 48, t = 18;
-  [
-    [0, room.d/2, room.w, t], [0, -room.d/2, room.w, t],
-    [room.w/2, 0, t, room.d], [-room.w/2, 0, t, room.d]
-  ].forEach(([ox,oz,w,d],side)=>{
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wallMat);
-    wall.position.set(room.x + ox, wallH/2 + 7, room.z + oz); wall.castShadow = true; wall.receiveShadow = true; scene.add(wall);
-    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(wall.geometry), new THREE.LineBasicMaterial({ color:0xd8c7ff, transparent:true, opacity:.20 }));
-    lines.position.copy(wall.position); scene.add(lines);
-    if(side < 2){
-      for(let k=-2;k<=2;k++){
-        const crenel = new THREE.Mesh(new THREE.BoxGeometry(26, 18, t+4), wallMat);
-        crenel.position.set(room.x + k*44, wallH + 22, room.z + oz); crenel.castShadow = true; scene.add(crenel);
-      }
-    }
-  });
-  const gridPts = [];
-  for(let gx=-Math.floor(room.w/2)+44; gx<room.w/2; gx+=44){ gridPts.push(room.x+gx,8,room.z-room.d/2+18, room.x+gx,8,room.z+room.d/2-18); }
-  for(let gz=-Math.floor(room.d/2)+44; gz<room.d/2; gz+=44){ gridPts.push(room.x-room.w/2+18,8,room.z+gz, room.x+room.w/2-18,8,room.z+gz); }
-  const tileGeom = new THREE.BufferGeometry(); tileGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(gridPts), 3));
-  scene.add(new THREE.LineSegments(tileGeom, new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:.075 })));
-  const banner = new THREE.Mesh(new THREE.CylinderGeometry(7,7,70,6), palaceIsoMaterial(THREE, room.color, { emissive:room.color, emissiveIntensity:.62, roughness:.35 }));
-  banner.position.set(room.x, 52, room.z); banner.castShadow = true; scene.add(banner);
-  if(i === 0){
-    const gateMat = palaceIsoMaterial(THREE, 0xffd166, { emissive:0xffb84d, emissiveIntensity:.42, roughness:.42, metalness:.08 });
-    const left = new THREE.Mesh(new THREE.BoxGeometry(24,92,24), gateMat); left.position.set(room.x-58,66,room.z+46);
-    const right = left.clone(); right.position.x = room.x+58;
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(140,24,28), gateMat); lintel.position.set(room.x,116,room.z+46);
-    const portal = new THREE.Mesh(new THREE.TorusGeometry(47,3.2,8,48), new THREE.MeshBasicMaterial({ color:0xffe6a3, transparent:true, opacity:.74 }));
-    portal.rotation.y = Math.PI/2; portal.position.set(room.x,70,room.z+49);
-    left.castShadow = right.castShadow = lintel.castShadow = true; scene.add(left,right,lintel,portal);
-    const gateLight = new THREE.PointLight(0xffd166, 1.25, 430); gateLight.position.set(room.x,110,room.z+70); scene.add(gateLight);
-  }
-  const light = new THREE.PointLight(room.color, .72, 360); light.position.set(room.x, 120, room.z); scene.add(light);
-}
-function palaceAddIsoCorridor(THREE, scene, a, b){
-  const dx=b.x-a.x, dz=b.z-a.z, len=Math.hypot(dx,dz), midX=(a.x+b.x)/2, midZ=(a.z+b.z)/2;
-  const mat = palaceIsoMaterial(THREE, 0x3f344d, { emissive:0xffd166, emissiveIntensity:.04 });
-  const road = new THREE.Mesh(new THREE.BoxGeometry(82, 10, len), mat);
-  road.position.set(midX, -5, midZ); road.rotation.y = Math.atan2(dx,dz); road.receiveShadow = true; scene.add(road);
-  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(road.geometry), new THREE.LineBasicMaterial({ color:0xffd166, transparent:true, opacity:.28 }));
-  edge.position.copy(road.position); edge.rotation.copy(road.rotation); scene.add(edge);
-}
-function palaceAddIsoRelic(THREE, scene, node, colors){
-  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(15, 20, 12, 6), palaceIsoMaterial(THREE, 0x20182b));
-  plinth.position.set(node.x, 17, node.z); plinth.castShadow = true; plinth.receiveShadow = true; scene.add(plinth);
-  const color = node.contaminated ? 0xff4f87 : (node.kind === 'memory' ? cssHexToInt(colors.memory) : cssHexToInt(colors.star));
-  const geo = node.contaminated ? new THREE.IcosahedronGeometry(node.size,1) : (node.kind === 'memory' ? new THREE.OctahedronGeometry(node.size,1) : new THREE.BoxGeometry(node.size*1.1,node.size*2.0,node.size*1.1));
-  const relic = new THREE.Mesh(geo, palaceIsoMaterial(THREE, color, { emissive:color, emissiveIntensity: node.contaminated ? .55 : .34, roughness:.34, metalness:.08 }));
-  relic.position.set(node.x, 40 + node.size*.25, node.z); relic.castShadow = true; relic.userData.node = node; node.mesh = relic; scene.add(relic);
-  if(node.contaminated) node.scanLabel = 'Needs-review memory';
-  const glow = new THREE.PointLight(color, node.contaminated ? .55 : .22, 110); glow.position.copy(relic.position); scene.add(glow);
-}
-async function renderMemoryPalaceIso(data){
-  const THREE = await loadThreeModule();
-  clearPalaceScene(); memoryPalace.data = data; memoryPalace.THREE = THREE; palaceInspectorDefault();
-  const viewport = $('#palaceViewport'); if(!viewport) return;
-  const colors = constellationColors();
-  let renderer;
-  try { renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' }); }
-  catch(err){ $('#palaceLabels').innerHTML = `<div class="three-fallback-card"><h3>Mnemosyne Labyrinth unavailable</h3><p>This browser could not start WebGL.</p></div>`; return; }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setClearColor(cssHexToInt(colors.bg), 0);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  viewport.prepend(renderer.domElement);
-  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x08050e, .00052);
-  const camera = new THREE.OrthographicCamera(-700,700,420,-420,1,5000);
-  const nodes = palaceIsoRoomLayout(data); const rooms = nodes.rooms || [];
-  scene.add(new THREE.HemisphereLight(0xb9a6ff, 0x08050e, .82));
-  const sun = new THREE.DirectionalLight(0xffe7c0, 1.35); sun.position.set(620,980,720); sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); scene.add(sun);
-  const underlay = new THREE.Mesh(new THREE.PlaneGeometry(1900,1900), new THREE.MeshBasicMaterial({ color:0x0a0711, transparent:true, opacity:.62 }));
-  underlay.rotation.x = -Math.PI/2; underlay.position.y = -16; scene.add(underlay);
-  rooms.slice(1).forEach(room => palaceAddIsoCorridor(THREE, scene, rooms[0], room));
-  rooms.forEach((room,i)=>palaceAddIsoRoom(THREE, scene, room, i));
-  nodes.forEach(n => palaceAddIsoRelic(THREE, scene, n, colors));
-  const player = palaceCreateAvatar(THREE); player.scale.setScalar(1.35); player.position.set(rooms[0]?.x || 0, 52, (rooms[0]?.z || 0) - 38); scene.add(player);
-  const drone = palaceCreateHammyDrone(THREE); drone.scale.setScalar(1.35); scene.add(drone);
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, labels:rooms.map((r,i)=>({ label:r.label, x:r.x, y:110, z:r.z, kind:i===0?'memory':'room' })).concat(nodes.filter(n => n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,8)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:player, drone, pos:new THREE.Vector3(0,0,-170), velocity:new THREE.Vector3(), yaw:0, pitch:0, iso:true });
-  $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
-  $('#palaceHudStatus').textContent = 'isometric dungeon map online';
-  bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
-}
-function resizeMemoryPalaceIso(){
-  if(!memoryPalace.renderer) return;
-  const rect = $('#palaceViewport').getBoundingClientRect();
-  const w = Math.max(320, rect.width), h = Math.max(320, rect.height);
-  memoryPalace.renderer.setSize(w,h,false);
-  if(memoryPalace.camera?.isOrthographicCamera){
-    const view = Math.max(980, Math.min(1480, 1260 * Math.max(.82, Math.min(1.12, w / Math.max(h,1)))));
-    memoryPalace.camera.left = -view * w / h / 2; memoryPalace.camera.right = view * w / h / 2;
-    memoryPalace.camera.top = view / 2; memoryPalace.camera.bottom = -view / 2;
-  } else if(memoryPalace.camera){ memoryPalace.camera.aspect = w/h; }
-  memoryPalace.camera?.updateProjectionMatrix();
-}
 function updatePalaceLabels(){
   if(!memoryPalace.camera) return;
   const rect = $('#palaceViewport').getBoundingClientRect(); const v = new memoryPalace.THREE.Vector3(); let shown=0;
@@ -3231,27 +2903,6 @@ function updatePalaceLabels(){
     el.style.display = visible ? '' : 'none';
     if(visible){ shown++; el.style.left = `${sx}px`; el.style.top = `${sy}px`; el.style.opacity = String(n.room ? .78 : .96); }
   });
-}
-function animateMemoryPalaceIso(t=0){
-  if(!memoryPalace.renderer) return;
-  resizeMemoryPalace();
-  const THREE = memoryPalace.THREE;
-  const delta = memoryPalace.lastT ? Math.min(48, t - memoryPalace.lastT) / 1000 : .016; memoryPalace.lastT = t;
-  const speed = (palaceKeys.Shift ? 520 : 300) * delta;
-  if(palaceKeys.w || palaceKeys.ArrowUp) memoryPalace.pos.z -= speed;
-  if(palaceKeys.s || palaceKeys.ArrowDown) memoryPalace.pos.z += speed;
-  if(palaceKeys.a || palaceKeys.ArrowLeft) memoryPalace.pos.x -= speed;
-  if(palaceKeys.d || palaceKeys.ArrowRight) memoryPalace.pos.x += speed;
-  if(memoryPalace.joystick.x || memoryPalace.joystick.y){ memoryPalace.pos.x += memoryPalace.joystick.x * speed; memoryPalace.pos.z += memoryPalace.joystick.y * speed; }
-  memoryPalace.pos.x = Math.max(-760, Math.min(760, memoryPalace.pos.x)); memoryPalace.pos.z = Math.max(-980, Math.min(560, memoryPalace.pos.z));
-  memoryPalace.camera.position.set(memoryPalace.pos.x + 760, 980, memoryPalace.pos.z + 860);
-  memoryPalace.camera.lookAt(new THREE.Vector3(memoryPalace.pos.x, 0, memoryPalace.pos.z));
-  if(memoryPalace.avatar){ memoryPalace.avatar.position.x += (memoryPalace.pos.x - memoryPalace.avatar.position.x) * .16; memoryPalace.avatar.position.z += (memoryPalace.pos.z + 360 - memoryPalace.avatar.position.z) * .16; memoryPalace.avatar.rotation.y = Math.PI * .75; }
-  if(memoryPalace.drone && memoryPalace.avatar){ const bob = Math.sin(t*.004)*8; memoryPalace.drone.position.set(memoryPalace.avatar.position.x + 42, memoryPalace.avatar.position.y + 38 + bob, memoryPalace.avatar.position.z - 34); }
-  if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
-  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh){ n.mesh.rotation.y += delta * (.25 + (i%5)*.035); }});
-  memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceLabels(); updatePalaceZoneBadge();
-  memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
 }
 
 
@@ -3508,7 +3159,7 @@ async function renderMemoryPalace(data){
   palaceFpsAddPathSections(THREE, scene, pathSections);
   const drone = palaceCreateHammyDrone(THREE); scene.add(drone);
   const mobilePalace = window.matchMedia('(max-width:760px), (max-width:940px) and (max-height:520px)').matches;
-  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, pathSections, colors, streamedChunks:new Map(), labels:pathSections.map(s=>({ label:`${s.label} (${s.count})`, x:s.x, y:s.y, z:s.z, kind:'section' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,18)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false });
+  Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, pathSections, colors, streamedChunks:new Map(), labels:pathSections.map(s=>({ label:`${s.label} (${s.count})`, x:s.x, y:s.y, z:s.z, kind:'section' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,18)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false, paused:prefersReducedMotion() });
   palaceStreamRelicChunks(true);
   $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
   $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by domain';
@@ -3534,13 +3185,13 @@ function animateMemoryPalace(t=0){
   memoryPalace.pos.add(move);
   palaceClampFpsPosition();
   memoryPalace.camera.rotation.order = 'YXZ'; memoryPalace.camera.position.copy(memoryPalace.pos); memoryPalace.camera.rotation.y = memoryPalace.yaw; memoryPalace.camera.rotation.x = memoryPalace.pitch;
-  if(memoryPalace.drone){ const bob = Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
+  if(memoryPalace.drone){ const bob = memoryPalace.paused ? 0 : Math.sin(t*.003)*5; const dronePos = memoryPalace.pos.clone().add(right.clone().multiplyScalar(38)).add(forward.clone().multiplyScalar(-46)).add(new memoryPalace.THREE.Vector3(0,14+bob,0)); memoryPalace.drone.position.lerp(dronePos, .16); }
   palaceStreamRelicChunks();
-  if(memoryPalace.beacon) memoryPalace.beacon.rotation.y += delta * 1.4;
-  memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh && n.mesh.visible && (n.featuredPath || i < 18)){ n.mesh.rotation.y += delta * (.14 + (i%5)*.02); }});
+  if(memoryPalace.beacon && !memoryPalace.paused) memoryPalace.beacon.rotation.y += delta * 1.4;
+  if(!memoryPalace.paused) memoryPalace.nodes.forEach((n,i)=>{ if(n.mesh && n.mesh.visible && (n.featuredPath || i < 18)){ n.mesh.rotation.y += delta * (.14 + (i%5)*.02); }});
   palaceApplyVisibilityCulling();
   memoryPalace.renderer.render(memoryPalace.scene, memoryPalace.camera); updatePalaceNearbyPrompt(); updatePalaceLabels(); updatePalaceZoneBadge();
-  memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+  memoryPalace.frame = document.hidden ? 0 : requestAnimationFrame(animateMemoryPalace);
 }
 
 // ── Memoria Tab ──────────────────────────────────────────────────────
@@ -3818,6 +3469,12 @@ initLiveMemoryInfiniteScroll();
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 window.addEventListener('hashchange', () => applyRoute(urlToRoute()));
 window.addEventListener('keydown', handleGlobalKeyboard);
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden) return;
+  if(threeVis.renderer && !threeVis.frame) threeVis.frame = requestAnimationFrame(animateThree);
+  if(memoryPalace.renderer && !memoryPalace.frame) memoryPalace.frame = requestAnimationFrame(animateMemoryPalace);
+  if(isCanvasVisualiserActive() && !prefersReducedMotion() && !constellationScene.frame) constellationScene.frame = requestAnimationFrame(drawVisualiserFrame);
+});
 initTheme();
 const initialRoute = urlToRoute();
 pushRoute(initialRoute, true);

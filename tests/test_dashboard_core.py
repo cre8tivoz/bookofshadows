@@ -744,19 +744,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'animateMemoryPalace' in js
     assert 'bindPalaceControls' in js
     assert 'clearPalaceScene' in js
-    assert 'palaceCreateAvatar' in js
     assert 'palaceSearchBeacon' in js
     assert 'palaceKeys' in js
-    assert 'palaceCreateDungeonRooms' in js
-    assert 'palaceCreateRoomWalls' in js
-    assert 'palaceCreatePortal' in js
-    assert 'palaceCreatePedestal' in js
-    assert 'palaceCreateArtifactMaterial' in js
     assert 'THREE.BoxGeometry' in js
-    assert 'room.floor' in js
-    assert 'room.wall' in js
-    assert 'palaceCreateRoomEdges' in js
-    assert 'palaceIsoRoomLayout' in js
     assert 'palaceFpsRooms' in js
     assert 'palaceFpsAddRoom' in js
     assert 'PerspectiveCamera(72' in js

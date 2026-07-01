@@ -23,6 +23,7 @@ static/src/
     escape.js
     format.js
     a11y.js
+    motion.js
 ```
 
 `static/app.js` is generated. Edit `static/src/app.js` and modules under `static/src/`, then run:
@@ -43,6 +44,7 @@ npm run build:frontend
 - `utils/escape.js`: HTML escaping, ID shortening, chat-role prefix helpers.
 - `utils/format.js`: time and byte formatting.
 - `utils/a11y.js`: focus-trap utility (`trapFocus()`/`focusableElements()`) used by the drawer, action modal, and login overlay.
+- `utils/motion.js`: `prefersReducedMotion()`, shared by the canvas constellation, 3D visualiser, and Memory Palace render loops.
 - `state/routing.js`: pure route parse/serialize helpers and legacy tab aliases.
 - `features/memories.js`: pure memory card/meta rendering, mutability helper, paginated query params (`memoryFilterParams` with limit/offset), page merge/dedup (`mergeMemoryPage`), and saved filter presets (`MEMORY_FILTER_PRESETS`, `memoryPresetByKey`, `sortByExpiringSoon`).
 - `features/review.js`: review queue rendering, lifecycle queue wrapper, review query params, and selected-action helpers.
@@ -124,3 +126,13 @@ Phase 7 introduces a value object for memory queries and centralises mutation bo
 - `DashboardStore._apply_memory_mutation(memory_id, action, backup, mutate, extra)` is the shared backup+audit template: fetch `before`, back up if requested, run `mutate(con)` inside a `connect_rw()` transaction, fetch `after`, write one audit entry, return `{ok, memory_id, backup, item}`. `invalidate_memory`, `set_memory_importance`, `set_memory_veracity`, and `set_memory_expiry` are each just a `mutate(con)` closure plus a small merge of their own extra field on top of that shared shape. `supersede_memory` also calls `_apply_memory_mutation()` for the same backup/audit wrapping, but validates its importance default against the *existing* memory before calling it (deliberately not squeezed into the exact same closure signature — see the Phase 7 status update in `TRANSFORMATION_PLAN.md` for why).
 - `config.csrf_token_value(cfg)` derives a per-install CSRF token via HMAC over the same `auth_secret` used for the auth cookie (different HMAC message, independent value). `/api/auth/status` includes `csrf_token` only when the caller is authenticated and `auth_enabled` is true. `server.py`'s `_require_csrf()` requires a matching `X-CSRF-Token` header on every mutating POST except `/api/auth/login`, and is a no-op when auth is disabled. Frontend: `api/client.js`'s `postJson()` attaches the token automatically once `setCsrfToken()` has been called (wired from `refreshAuthState()`).
 - Login attempts are rate-limited: a thread-safe in-memory sliding window (5 attempts / 5 minutes per client IP, `server.py`), cleared on success. Simple by design — this is a local/LAN single-user dashboard, not a public service that needs persistent or distributed rate-limit storage.
+
+## Lazy Visualisers and Performance
+
+Phase 8 rounds out the visualiser lifecycle (lazy-load/WebGL-fallback/tab-switch disposal already existed) with loading states, reduced motion, and background-tab pausing, plus a source cleanup:
+
+- `loadThreeVisualiser()`/`loadMemoryPalace()` show a `.three-loading-card` immediately (covering both the API fetch and the `import()` of `static/vendor/three.module.min.js`) and a `.three-fallback-card` error card if either fails, instead of leaving a blank/stale viewport on a silently-rejected promise.
+- `utils/motion.js` (`prefersReducedMotion()`) defaults `threeVis.paused`/`memoryPalace.paused` to `true` on scene load, disabling auto-rotation, edge-pulse travel animation, drone bobbing, beacon spin, and relic self-rotation, while leaving the render loop and all drag/WASD/pan/zoom interaction intact. The canvas constellation's own reduced-motion handling (Phase 5) now shares this same helper.
+- A `visibilitychange` listener stops the canvas/Three.js/Memory Palace render loops from rescheduling `requestAnimationFrame` while the browser tab is hidden, and resumes them (without disposing the scene) when it becomes visible again — separate from `switchTab()`'s existing full-disposal behaviour when navigating between dashboard tabs.
+- `.three-label`/`.three-labels` had no CSS at all before this phase (`position: static`), so the floating node-name overlays on both the 3D Visualiser and Memory Palace rendered as plain stacked text instead of floating over their nodes; fixed with the missing overlay positioning.
+- Removed ~368 lines of dead code: `renderMemoryPalaceDungeon`/`animateMemoryPalaceDungeon` and `renderMemoryPalaceIso`/`animateMemoryPalaceIso` (plus helpers used only by them) were earlier Memory Palace prototypes never reachable from the live `loadMemoryPalace()` entry point. esbuild's bundler was already tree-shaking them out of `static/app.js`, so this was a source-readability fix, not a shipped-bundle-size fix.
