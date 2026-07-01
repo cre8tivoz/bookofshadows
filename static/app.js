@@ -877,6 +877,327 @@
     };
   }
 
+  // static/src/utils/a11y.js
+  var FOCUSABLE_SELECTOR = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(",");
+  function focusableElements(container) {
+    if (!container) return [];
+    return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+      (el) => !el.hasAttribute("hidden") && !el.closest(".hidden")
+    );
+  }
+  function trapFocus(container) {
+    const trigger = document.activeElement;
+    const onKeydown = (event) => {
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements(container);
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && current === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && current === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!container.contains(current)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    container.addEventListener("keydown", onKeydown);
+    return function releaseFocusTrap({ restoreFocus = true } = {}) {
+      container.removeEventListener("keydown", onKeydown);
+      if (restoreFocus && trigger && document.contains(trigger) && typeof trigger.focus === "function") {
+        trigger.focus();
+      }
+    };
+  }
+
+  // static/src/features/detail-drawer.js
+  function createDetailDrawerController({
+    $: $2,
+    $$: $$2,
+    api: api2,
+    postJson: postJson2,
+    bindActivatable: bindActivatable2,
+    canAdmin: canAdmin2,
+    confirmAction: confirmAction2,
+    askImportance: askImportance2,
+    askReplacement: askReplacement2,
+    askVeracity: askVeracity2,
+    askExpiry: askExpiry2,
+    runButtonAction: runButtonAction2,
+    refreshAuthState: refreshAuthState2,
+    loadStats: loadStats2,
+    loadMemories: loadMemories2,
+    openActionModal: openActionModal2,
+    pushRoute: pushRoute2,
+    getCurrentRoute,
+    memoryRouteState: memoryRouteState2,
+    switchTab: switchTab2
+  }) {
+    let focusRelease = null;
+    function closeDetail2(opts = {}) {
+      $2("#detail").classList.add("hidden");
+      focusRelease?.();
+      focusRelease = null;
+      if (opts.push !== false) {
+        const currentRoute2 = getCurrentRoute();
+        pushRoute2(currentRoute2?.tab === "memories" ? memoryRouteState2() : routeTabState(currentRoute2?.tab || "overview"));
+      }
+    }
+    function activateDrawerFocusTrap() {
+      const drawer = $2("#detail");
+      const wasHidden = drawer.classList.contains("hidden");
+      drawer.classList.remove("hidden");
+      if (wasHidden) {
+        focusRelease = trapFocus(drawer);
+        ($2("#closeDetail") || drawer).focus();
+      }
+    }
+    function showSelectableCopy2(label, value) {
+      openActionModal2({
+        title: label,
+        description: "Select the text below and press Cmd/Ctrl+C to copy. This works on non-HTTPS local dashboards.",
+        kicker: "Copy",
+        confirmText: "Done",
+        bodyHtml: `<label class="modal-field"><span>${esc(label)}</span><textarea id="manualCopyValue" class="copy-value" rows="4" readonly>${esc(value || "")}</textarea></label>`,
+        readValue: () => true
+      });
+      setTimeout(() => {
+        const el = $2("#manualCopyValue");
+        el?.focus();
+        el?.select();
+      }, 60);
+    }
+    function showDetail2(obj, title = "Detail", opts = {}) {
+      const titleEl = document.querySelector(".drawer-title");
+      if (titleEl) titleEl.textContent = title;
+      $2("#detailBody").classList.remove("html-detail");
+      $2("#detailBody").textContent = JSON.stringify(obj, null, 2);
+      activateDrawerFocusTrap();
+      if (opts.push !== false) pushRoute2(getCurrentRoute() || routeTabState());
+    }
+    function showHtmlDetail(html, title = "Detail") {
+      const titleEl = document.querySelector(".drawer-title");
+      if (titleEl) titleEl.textContent = title;
+      $2("#detailBody").classList.add("html-detail");
+      $2("#detailBody").innerHTML = html;
+      activateDrawerFocusTrap();
+    }
+    function whyMemoryHtml(item) {
+      const reasons = [];
+      const q = $2("#memoryQuery")?.value.trim();
+      const source = $2("#memorySource")?.value;
+      const scope = $2("#memoryScope")?.value;
+      const session = $2("#memorySession")?.value;
+      const veracity = $2("#memoryVeracity")?.value;
+      const degradation = $2("#memoryDegradation")?.value;
+      const trustPreset = $2("#memoryTrustPreset")?.value;
+      const sort = $2("#memorySort")?.value;
+      if (q) reasons.push(`matches browser query "${q}" across content, id, session, source, or scope`);
+      if (source && item.source === source) reasons.push(`source filter matched ${source}`);
+      if (scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
+      if (session && item.session_id === session) reasons.push(`session filter matched ${session}`);
+      if (veracity && item.veracity === veracity) reasons.push(`trust filter matched ${veracity}`);
+      if (degradation && String(item.degradation_tier || "") === String(degradation)) reasons.push(`lifecycle filter matched tier ${degradation}`);
+      if (trustPreset === "contaminated" && item.contaminated) reasons.push("needs-review filter matched");
+      if (trustPreset === "degraded" && item.degraded_at) reasons.push("degraded-only filter matched");
+      if (!reasons.length) reasons.push("shown from the current list/search context");
+      return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || "active")}</span></h3><div class="diag-grid compact">
+    <div class="diag-row"><span>Reason</span><strong>${esc(reasons.join(" · "))}</strong></div>
+    <div class="diag-row"><span>Ranking</span><strong>${esc(sort || "recent")} · importance ${Number(item.importance ?? 0).toFixed(2)} · recalled ${Number(item.recall_count || 0).toLocaleString()}×</strong></div>
+    <div class="diag-row"><span>Freshness</span><strong>created ${esc(prettyTime(item.created_at) || item.created_at || "unknown")} · last recalled ${esc(prettyTime(item.last_recalled) || item.last_recalled || "never")}</strong></div>
+    <div class="diag-row"><span>Origin</span><strong>${esc(item.memory_kind || item.tier || "memory")} · ${esc(item.source || "unknown source")} · ${esc(item.scope || "unknown scope")}</strong></div>
+  </div></div>`;
+    }
+    function memoryDetailHtml(item) {
+      const admin = canAdmin2();
+      const mutable = isMutableMemory(item);
+      const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editVeracity" class="drawer-action">Set trust</button><button id="editExpiry" class="drawer-action">Set expiry</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : "";
+      const actionNote = admin ? mutable ? "" : `<span class="muted">This memory is ${esc(item.status || "not active")}; mutation actions are disabled.</span>` : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>';
+      const trust = String(item.veracity || "unknown").toLowerCase();
+      const lifecycle = item.degradation_label ? `${item.degradation_label} · tier ${item.degradation_tier}` : "not degraded";
+      return `
+    <div class="memory-detail">
+      ${meta(item, { sessionLink: false })}
+      <div class="content detail-content">${esc(item.content)}</div>
+      <div class="trust-strip">
+        <span class="trust-chip trust-${esc(trust)}">${esc(trust)} trust · ×${Number(item.trust_weight ?? 0).toFixed(2)}</span>
+        <span class="trust-chip lifecycle-${esc(item.degradation_label || "none")}">${esc(lifecycle)}${item.degradation_weight != null ? ` · ×${Number(item.degradation_weight).toFixed(2)}` : ""}</span>
+        <span class="trust-chip">effective ×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</span>
+        ${item.contaminated ? '<span class="trust-chip review">needs review</span>' : ""}
+      </div>
+      ${whyMemoryHtml(item)}
+      <div class="diag-grid compact">
+        <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
+        <div class="diag-row"><span>Session</span>${item.session_id && item.session_id !== "default" ? `<button id="memorySessionLink" class="diag-link" title="Open session: ${esc(item.session_id)}">${esc(item.session_id)}</button>` : `<strong>${esc(item.session_id || "default")}</strong>`}</div>
+        <div class="diag-row"><span>Source</span><strong>${esc(item.source || "unknown")}</strong></div>
+        <div class="diag-row"><span>Trust</span><strong>${esc(trust)} · recall weight ×${Number(item.trust_weight ?? 0).toFixed(2)}${item.contaminated ? " · review recommended" : ""}</strong></div>
+        <div class="diag-row"><span>Lifecycle</span><strong>${esc(lifecycle)} · degraded ${esc(item.degraded_at || "never")} · recall weight ×${Number(item.degradation_weight ?? 1).toFixed(2)}</strong></div>
+        <div class="diag-row"><span>Effective weight</span><strong>×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</strong></div>
+        <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || "none")}</strong></div>
+        <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || "none")}</strong></div>
+      </div>
+      <div class="drawer-actions memory-actions">
+        <button id="copyMemoryId" class="drawer-action">Copy ID</button>
+        ${adminActions}${actionNote}
+      </div>
+      <p id="memoryActionStatus" class="muted"></p>
+    </div>`;
+    }
+    async function openMemoryDetail2(memoryId, opts = {}) {
+      await refreshAuthState2();
+      const item = (await api2("/api/memory?id=" + encodeURIComponent(memoryId))).item;
+      showHtmlDetail(memoryDetailHtml(item), "Memory detail");
+      if (opts.push !== false) pushRoute2({ tab: "memories", drawer: { type: "memory", id: memoryId } });
+      const sessionLink = $2("#memorySessionLink");
+      if (sessionLink) sessionLink.onclick = () => openSessionDetail2(item.session_id || "");
+      $2("#copyMemoryId").onclick = () => showSelectableCopy2("Memory ID", item.id);
+      if (!canAdmin2() || !isMutableMemory(item)) return;
+      const backup = () => $2("#backupBeforeMutation") ? $2("#backupBeforeMutation").checked : true;
+      $2("#expireMemory").onclick = async () => {
+        const ok = await confirmAction2({
+          title: "Expire this memory?",
+          description: "It will disappear from active recall, but the original record stays available for history and audit.",
+          confirmText: "Expire memory",
+          tone: "warn"
+        });
+        if (!ok) return;
+        try {
+          const result = await runButtonAction2($2("#expireMemory"), "Expiring...", () => postJson2("/api/admin/memory/invalidate", { memory_id: item.id, backup: backup() }), () => ({ tone: "success", title: "Memory expired", body: "The original remains in history and audit." }));
+          $2("#memoryActionStatus").textContent = `Expired. Backup: ${result.backup?.path || "not created"}`;
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#editImportance").onclick = async () => {
+        const importance = await askImportance2(item.importance ?? 0.5);
+        if (importance === null) return;
+        try {
+          const result = await runButtonAction2($2("#editImportance"), "Saving...", () => postJson2("/api/admin/memory/importance", { memory_id: item.id, importance: Number(importance), backup: backup() }), () => ({ tone: "success", title: "Importance updated", body: `New value: ${Number(importance).toFixed(2)}` }));
+          $2("#memoryActionStatus").textContent = `Importance updated to ${result.importance}.`;
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#editVeracity").onclick = async () => {
+        const veracity = await askVeracity2(item.veracity || "unknown");
+        if (veracity === null) return;
+        try {
+          const result = await runButtonAction2($2("#editVeracity"), "Saving...", () => postJson2("/api/admin/memory/veracity", { memory_id: item.id, veracity, backup: backup() }), () => ({ tone: "success", title: "Trust updated", body: `Trust is now ${veracity}.` }));
+          $2("#memoryActionStatus").textContent = `Trust updated to ${result.veracity}.`;
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#editExpiry").onclick = async () => {
+        const validUntil = await askExpiry2(item.valid_until || "");
+        if (validUntil === null) return;
+        try {
+          const result = await runButtonAction2($2("#editExpiry"), "Saving...", () => postJson2("/api/admin/memory/expiry", { memory_id: item.id, valid_until: validUntil, backup: backup() }), () => ({ tone: "success", title: "Expiry updated", body: validUntil ? `Valid until ${validUntil}` : "Scheduled expiry cleared." }));
+          $2("#memoryActionStatus").textContent = `Expiry ${result.valid_until ? `set to ${result.valid_until}` : "cleared"}.`;
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#supersedeMemory").onclick = async () => {
+        const replacement = await askReplacement2(item.content || "");
+        if (replacement === null) return;
+        try {
+          const result = await runButtonAction2($2("#supersedeMemory"), "Creating...", () => postJson2("/api/admin/memory/supersede", { memory_id: item.id, content: replacement, importance: Number(item.importance ?? 0.5), backup: backup() }), () => ({ tone: "success", title: "Memory superseded", body: "Opened the replacement memory." }));
+          $2("#memoryActionStatus").textContent = `Superseded by ${result.replacement_id}.`;
+          $2("#memoryStatus").value = "all";
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(result.replacement_id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+    }
+    function sessionEvent(event) {
+      return `<div class="session-event" data-json='${esc(JSON.stringify(event.item))}'><div class="meta"><span class="badge">${esc(event.type)}</span><span>${esc(event.timestamp || "")}</span></div><div class="content"><strong>${esc(event.title)}</strong><br>${esc(event.preview || "")}</div></div>`;
+    }
+    async function openSessionDetail2(sessionId, opts = {}) {
+      if (!sessionId || sessionId === "unknown") return;
+      const data = await api2(`/api/session?id=${encodeURIComponent(sessionId)}&limit=200`);
+      const counts = data.counts || {};
+      showHtmlDetail(`
+    <div class="session-summary">
+      <div class="diag-pill"><strong>${esc(counts.memories || 0)}</strong><span>memories</span></div>
+      <div class="diag-pill"><strong>${esc(counts.triples || 0)}</strong><span>triples</span></div>
+      <div class="diag-pill"><strong>${esc(counts.consolidations || 0)}</strong><span>consolidations</span></div>
+    </div>
+    <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
+    <div class="result-section"><h3>Timeline <span>${esc(counts.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join("") || '<p class="muted">No events for this session.</p>'}</div></div>
+  `, `Session ${sessionId}`);
+      if (opts.push !== false) pushRoute2({ tab: "timelineView", drawer: { type: "session", id: sessionId } });
+      $2("#sessionBrowseMemories").onclick = () => {
+        $2("#memorySession").value = sessionId;
+        $2("#memoryKind").value = "all";
+        $2("#memoryQuery").value = "";
+        switchTab2("memories");
+        closeDetail2({ push: false });
+      };
+      $2("#sessionTimeline").onclick = () => {
+        $2("#timelineGroup").value = "session";
+        $2("#timelineQuery").value = sessionId;
+        switchTab2("timelineView");
+        closeDetail2({ push: false });
+      };
+      $2("#sessionCopy").onclick = () => showSelectableCopy2("Session ID", sessionId);
+      $$2("#detailBody .session-event").forEach((el) => bindActivatable2(el, () => showDetail2(JSON.parse(el.dataset.json), "Session event detail")));
+    }
+    function bindMemoryClicks2(root) {
+      root.querySelectorAll(".session-link").forEach((btn) => {
+        btn.onclick = (event) => {
+          event.stopPropagation();
+          openSessionDetail2(btn.dataset.session || "");
+        };
+      });
+      root.querySelectorAll(".item[data-id]").forEach((el) => bindActivatable2(el, (event) => {
+        if (event.target.closest(".session-link,button,a,label,input")) return;
+        openMemoryDetail2(el.dataset.id);
+      }));
+    }
+    function bindJsonCards2(root, title) {
+      root.querySelectorAll("[data-json]").forEach((el) => bindActivatable2(el, () => showDetail2(JSON.parse(el.dataset.json), title)));
+    }
+    return {
+      bindJsonCards: bindJsonCards2,
+      bindMemoryClicks: bindMemoryClicks2,
+      closeDetail: closeDetail2,
+      openMemoryDetail: openMemoryDetail2,
+      openSessionDetail: openSessionDetail2,
+      showDetail: showDetail2,
+      showHtmlDetail,
+      showSelectableCopy: showSelectableCopy2
+    };
+  }
+
   // static/src/features/graph.js
   var GRAPH_WIDTH = 1e3;
   var GRAPH_HEIGHT = 650;
@@ -1553,53 +1874,6 @@
     return { loadInsights: loadInsights2, disposeInsightsCharts: disposeInsightsCharts2 };
   }
 
-  // static/src/utils/a11y.js
-  var FOCUSABLE_SELECTOR = [
-    "a[href]",
-    "button:not([disabled])",
-    "input:not([disabled])",
-    "select:not([disabled])",
-    "textarea:not([disabled])",
-    '[tabindex]:not([tabindex="-1"])'
-  ].join(",");
-  function focusableElements(container) {
-    if (!container) return [];
-    return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
-      (el) => !el.hasAttribute("hidden") && !el.closest(".hidden")
-    );
-  }
-  function trapFocus(container) {
-    const trigger = document.activeElement;
-    const onKeydown = (event) => {
-      if (event.key !== "Tab") return;
-      const focusable = focusableElements(container);
-      if (!focusable.length) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const current = document.activeElement;
-      if (event.shiftKey && current === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && current === last) {
-        event.preventDefault();
-        first.focus();
-      } else if (!container.contains(current)) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    container.addEventListener("keydown", onKeydown);
-    return function releaseFocusTrap({ restoreFocus = true } = {}) {
-      container.removeEventListener("keydown", onKeydown);
-      if (restoreFocus && trigger && document.contains(trigger) && typeof trigger.focus === "function") {
-        trigger.focus();
-      }
-    };
-  }
-
   // static/src/utils/motion.js
   function prefersReducedMotion() {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1620,7 +1894,6 @@
   var currentRoute = { tab: "overview" };
   var applyingHistory = false;
   var lastBootError = null;
-  var drawerFocusRelease = null;
   var bulkSelection = /* @__PURE__ */ new Set();
   var latestMemoryItems = [];
   var memoryOffset = 0;
@@ -1670,6 +1943,28 @@
     onUnauthorized: showLogin,
     devTiming: localStorage.getItem("mnemosyne-debug-api") === "1",
     onTiming: (info) => console.debug("[api]", info)
+  });
+  var detailDrawer = createDetailDrawerController({
+    $,
+    $$,
+    api,
+    postJson,
+    bindActivatable,
+    canAdmin,
+    confirmAction,
+    askImportance,
+    askReplacement,
+    askVeracity,
+    askExpiry,
+    runButtonAction,
+    refreshAuthState,
+    loadStats,
+    loadMemories,
+    openActionModal,
+    pushRoute,
+    getCurrentRoute: () => currentRoute,
+    memoryRouteState,
+    switchTab
   });
   var { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
   var { loadInsights, disposeInsightsCharts } = createChartsFeature({ $, api, switchTab, loadMemories });
@@ -1815,19 +2110,7 @@
     $("#memorySort").value = "recent";
   }
   function closeDetail(opts = {}) {
-    $("#detail").classList.add("hidden");
-    drawerFocusRelease?.();
-    drawerFocusRelease = null;
-    if (opts.push !== false) pushRoute(currentRoute?.tab === "memories" ? memoryRouteState() : routeTabState(currentRoute?.tab || "overview"));
-  }
-  function activateDrawerFocusTrap() {
-    const drawer = $("#detail");
-    const wasHidden = drawer.classList.contains("hidden");
-    drawer.classList.remove("hidden");
-    if (wasHidden) {
-      drawerFocusRelease = trapFocus(drawer);
-      ($("#closeDetail") || drawer).focus();
-    }
+    detailDrawer.closeDetail(opts);
   }
   async function applyRoute(state) {
     applyingHistory = true;
@@ -1846,34 +2129,10 @@
     }
   }
   function showSelectableCopy(label, value) {
-    openActionModal({
-      title: label,
-      description: "Select the text below and press Cmd/Ctrl+C to copy. This works on non-HTTPS local dashboards.",
-      kicker: "Copy",
-      confirmText: "Done",
-      bodyHtml: `<label class="modal-field"><span>${esc(label)}</span><textarea id="manualCopyValue" class="copy-value" rows="4" readonly>${esc(value || "")}</textarea></label>`,
-      readValue: () => true
-    });
-    setTimeout(() => {
-      const el = $("#manualCopyValue");
-      el?.focus();
-      el?.select();
-    }, 60);
+    detailDrawer.showSelectableCopy(label, value);
   }
   function showDetail(obj, title = "Detail", opts = {}) {
-    const titleEl = document.querySelector(".drawer-title");
-    if (titleEl) titleEl.textContent = title;
-    $("#detailBody").classList.remove("html-detail");
-    $("#detailBody").textContent = JSON.stringify(obj, null, 2);
-    activateDrawerFocusTrap();
-    if (opts.push !== false) pushRoute(currentRoute || routeTabState());
-  }
-  function showHtmlDetail(html, title = "Detail") {
-    const titleEl = document.querySelector(".drawer-title");
-    if (titleEl) titleEl.textContent = title;
-    $("#detailBody").classList.add("html-detail");
-    $("#detailBody").innerHTML = html;
-    activateDrawerFocusTrap();
+    detailDrawer.showDetail(obj, title, opts);
   }
   function modalTemplate() {
     let modal = $("#actionModal");
@@ -2582,195 +2841,18 @@
     });
   }
   function bindMemoryClicks(root) {
-    root.querySelectorAll(".session-link").forEach((btn) => btn.onclick = (e) => {
-      e.stopPropagation();
-      openSessionDetail(btn.dataset.session || "");
-    });
-    root.querySelectorAll(".item[data-id]").forEach((el) => bindActivatable(el, (e) => {
-      if (e.target.closest(".session-link,button,a,label,input")) return;
-      openMemoryDetail(el.dataset.id);
-    }));
+    detailDrawer.bindMemoryClicks(root);
   }
   function canAdmin() {
     const cfg = authState.config || {};
     const localOnly = ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0");
     return !!(cfg.memory_admin_enabled && (localOnly || authState.auth_enabled && authState.authenticated));
   }
-  function whyMemoryHtml(item) {
-    const reasons = [];
-    const q = $("#memoryQuery")?.value.trim();
-    const source = $("#memorySource")?.value;
-    const scope = $("#memoryScope")?.value;
-    const session = $("#memorySession")?.value;
-    const status = $("#memoryStatus")?.value;
-    const veracity = $("#memoryVeracity")?.value;
-    const degradation = $("#memoryDegradation")?.value;
-    const trustPreset = $("#memoryTrustPreset")?.value;
-    const sort = $("#memorySort")?.value;
-    if (q) reasons.push(`matches browser query “${q}” across content, id, session, source, or scope`);
-    if (source && item.source === source) reasons.push(`source filter matched ${source}`);
-    if (scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
-    if (session && item.session_id === session) reasons.push(`session filter matched ${session}`);
-    if (veracity && item.veracity === veracity) reasons.push(`trust filter matched ${veracity}`);
-    if (degradation && String(item.degradation_tier || "") === String(degradation)) reasons.push(`lifecycle filter matched tier ${degradation}`);
-    if (trustPreset === "contaminated" && item.contaminated) reasons.push("needs-review filter matched");
-    if (trustPreset === "degraded" && item.degraded_at) reasons.push("degraded-only filter matched");
-    if (!reasons.length) reasons.push("shown from the current list/search context");
-    return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || "active")}</span></h3><div class="diag-grid compact">
-    <div class="diag-row"><span>Reason</span><strong>${esc(reasons.join(" · "))}</strong></div>
-    <div class="diag-row"><span>Ranking</span><strong>${esc(sort || "recent")} · importance ${Number(item.importance ?? 0).toFixed(2)} · recalled ${Number(item.recall_count || 0).toLocaleString()}×</strong></div>
-    <div class="diag-row"><span>Freshness</span><strong>created ${esc(prettyTime(item.created_at) || item.created_at || "unknown")} · last recalled ${esc(prettyTime(item.last_recalled) || item.last_recalled || "never")}</strong></div>
-    <div class="diag-row"><span>Origin</span><strong>${esc(item.memory_kind || item.tier || "memory")} · ${esc(item.source || "unknown source")} · ${esc(item.scope || "unknown scope")}</strong></div>
-  </div></div>`;
-  }
-  function memoryDetailHtml(item) {
-    const admin = canAdmin();
-    const mutable = isMutableMemory(item);
-    const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editVeracity" class="drawer-action">Set trust</button><button id="editExpiry" class="drawer-action">Set expiry</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : "";
-    const actionNote = admin ? mutable ? "" : `<span class="muted">This memory is ${esc(item.status || "not active")}; mutation actions are disabled.</span>` : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>';
-    const trust = String(item.veracity || "unknown").toLowerCase();
-    const lifecycle = item.degradation_label ? `${item.degradation_label} · tier ${item.degradation_tier}` : "not degraded";
-    return `
-    <div class="memory-detail">
-      ${meta(item, { sessionLink: false })}
-      <div class="content detail-content">${esc(item.content)}</div>
-      <div class="trust-strip">
-        <span class="trust-chip trust-${esc(trust)}">${esc(trust)} trust · ×${Number(item.trust_weight ?? 0).toFixed(2)}</span>
-        <span class="trust-chip lifecycle-${esc(item.degradation_label || "none")}">${esc(lifecycle)}${item.degradation_weight != null ? ` · ×${Number(item.degradation_weight).toFixed(2)}` : ""}</span>
-        <span class="trust-chip">effective ×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</span>
-        ${item.contaminated ? '<span class="trust-chip review">needs review</span>' : ""}
-      </div>
-      ${whyMemoryHtml(item)}
-      <div class="diag-grid compact">
-        <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
-        <div class="diag-row"><span>Session</span>${item.session_id && item.session_id !== "default" ? `<button id="memorySessionLink" class="diag-link" title="Open session: ${esc(item.session_id)}">${esc(item.session_id)}</button>` : `<strong>${esc(item.session_id || "default")}</strong>`}</div>
-        <div class="diag-row"><span>Source</span><strong>${esc(item.source || "unknown")}</strong></div>
-        <div class="diag-row"><span>Trust</span><strong>${esc(trust)} · recall weight ×${Number(item.trust_weight ?? 0).toFixed(2)}${item.contaminated ? " · review recommended" : ""}</strong></div>
-        <div class="diag-row"><span>Lifecycle</span><strong>${esc(lifecycle)} · degraded ${esc(item.degraded_at || "never")} · recall weight ×${Number(item.degradation_weight ?? 1).toFixed(2)}</strong></div>
-        <div class="diag-row"><span>Effective weight</span><strong>×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</strong></div>
-        <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || "none")}</strong></div>
-        <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || "none")}</strong></div>
-      </div>
-      <div class="drawer-actions memory-actions">
-        <button id="copyMemoryId" class="drawer-action">Copy ID</button>
-        ${adminActions}${actionNote}
-      </div>
-      <p id="memoryActionStatus" class="muted"></p>
-    </div>`;
-  }
   async function openMemoryDetail(memoryId, opts = {}) {
-    await refreshAuthState();
-    const item = (await api("/api/memory?id=" + encodeURIComponent(memoryId))).item;
-    showHtmlDetail(memoryDetailHtml(item), "Memory detail");
-    if (opts.push !== false) pushRoute({ tab: "memories", drawer: { type: "memory", id: memoryId } });
-    const sessionLink = $("#memorySessionLink");
-    if (sessionLink) sessionLink.onclick = () => openSessionDetail(item.session_id || "");
-    $("#copyMemoryId").onclick = () => showSelectableCopy("Memory ID", item.id);
-    if (!canAdmin() || !isMutableMemory(item)) return;
-    const backup = () => $("#backupBeforeMutation") ? $("#backupBeforeMutation").checked : true;
-    $("#expireMemory").onclick = async () => {
-      const ok = await confirmAction({
-        title: "Expire this memory?",
-        description: "It will disappear from active recall, but the original record stays available for history and audit.",
-        confirmText: "Expire memory",
-        tone: "warn"
-      });
-      if (!ok) return;
-      try {
-        const r = await runButtonAction($("#expireMemory"), "Expiring...", () => postJson("/api/admin/memory/invalidate", { memory_id: item.id, backup: backup() }), () => ({ tone: "success", title: "Memory expired", body: "The original remains in history and audit." }));
-        $("#memoryActionStatus").textContent = `Expired. Backup: ${r.backup?.path || "not created"}`;
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#editImportance").onclick = async () => {
-      const v = await askImportance(item.importance ?? 0.5);
-      if (v === null) return;
-      try {
-        const r = await runButtonAction($("#editImportance"), "Saving...", () => postJson("/api/admin/memory/importance", { memory_id: item.id, importance: Number(v), backup: backup() }), () => ({ tone: "success", title: "Importance updated", body: `New value: ${Number(v).toFixed(2)}` }));
-        $("#memoryActionStatus").textContent = `Importance updated to ${r.importance}.`;
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#editVeracity").onclick = async () => {
-      const v = await askVeracity(item.veracity || "unknown");
-      if (v === null) return;
-      try {
-        const r = await runButtonAction($("#editVeracity"), "Saving...", () => postJson("/api/admin/memory/veracity", { memory_id: item.id, veracity: v, backup: backup() }), () => ({ tone: "success", title: "Trust updated", body: `Trust is now ${v}.` }));
-        $("#memoryActionStatus").textContent = `Trust updated to ${r.veracity}.`;
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#editExpiry").onclick = async () => {
-      const v = await askExpiry(item.valid_until || "");
-      if (v === null) return;
-      try {
-        const r = await runButtonAction($("#editExpiry"), "Saving...", () => postJson("/api/admin/memory/expiry", { memory_id: item.id, valid_until: v, backup: backup() }), () => ({ tone: "success", title: "Expiry updated", body: v ? `Valid until ${v}` : "Scheduled expiry cleared." }));
-        $("#memoryActionStatus").textContent = `Expiry ${r.valid_until ? `set to ${r.valid_until}` : "cleared"}.`;
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#supersedeMemory").onclick = async () => {
-      const replacement = await askReplacement(item.content || "");
-      if (replacement === null) return;
-      try {
-        const r = await runButtonAction($("#supersedeMemory"), "Creating...", () => postJson("/api/admin/memory/supersede", { memory_id: item.id, content: replacement, importance: Number(item.importance ?? 0.5), backup: backup() }), () => ({ tone: "success", title: "Memory superseded", body: "Opened the replacement memory." }));
-        $("#memoryActionStatus").textContent = `Superseded by ${r.replacement_id}.`;
-        $("#memoryStatus").value = "all";
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(r.replacement_id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-  }
-  function sessionEvent(e) {
-    return `<div class="session-event" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><span>${esc(e.timestamp || "")}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview || "")}</div></div>`;
+    await detailDrawer.openMemoryDetail(memoryId, opts);
   }
   async function openSessionDetail(sessionId, opts = {}) {
-    if (!sessionId || sessionId === "unknown") return;
-    const data = await api(`/api/session?id=${encodeURIComponent(sessionId)}&limit=200`);
-    const c = data.counts || {};
-    showHtmlDetail(`
-    <div class="session-summary">
-      <div class="diag-pill"><strong>${esc(c.memories || 0)}</strong><span>memories</span></div>
-      <div class="diag-pill"><strong>${esc(c.triples || 0)}</strong><span>triples</span></div>
-      <div class="diag-pill"><strong>${esc(c.consolidations || 0)}</strong><span>consolidations</span></div>
-    </div>
-    <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
-    <div class="result-section"><h3>Timeline <span>${esc(c.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join("") || '<p class="muted">No events for this session.</p>'}</div></div>
-  `, `Session ${sessionId}`);
-    if (opts.push !== false) pushRoute({ tab: "timelineView", drawer: { type: "session", id: sessionId } });
-    $("#sessionBrowseMemories").onclick = () => {
-      $("#memorySession").value = sessionId;
-      $("#memoryKind").value = "all";
-      $("#memoryQuery").value = "";
-      switchTab("memories");
-      closeDetail({ push: false });
-    };
-    $("#sessionTimeline").onclick = () => {
-      $("#timelineGroup").value = "session";
-      $("#timelineQuery").value = sessionId;
-      switchTab("timelineView");
-      closeDetail({ push: false });
-    };
-    $("#sessionCopy").onclick = () => showSelectableCopy("Session ID", sessionId);
-    $$("#detailBody .session-event").forEach((el) => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), "Session event detail")));
+    await detailDrawer.openSessionDetail(sessionId, opts);
   }
   async function loadTriples() {
     const q = $("#tripleQuery").value.trim();
@@ -2819,7 +2901,7 @@
     return `<div class="item" data-json='${esc(JSON.stringify(c))}'><div class="meta"><span class="badge">consolidation</span><span class="badge">${esc(c.items_consolidated)} items</span><span>${esc(c.created_at)}</span></div><div class="content">${esc(c.session_id || "")}: ${esc(c.summary_preview || "")}</div></div>`;
   }
   function bindJsonCards(root, title) {
-    root.querySelectorAll("[data-json]").forEach((el) => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), title)));
+    detailDrawer.bindJsonCards(root, title);
   }
   async function runSearchFromInput(inputId) {
     const q = $(inputId)?.value.trim() || "";

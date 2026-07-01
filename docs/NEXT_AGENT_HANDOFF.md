@@ -35,7 +35,7 @@ Regenerate public screenshots:
 
 ## Future Release Backlog
 
-- Release 11C: In progress. Review controller has been extracted from `static/src/app-main.js`; remaining slices are detail/session drawer, auth/settings, and visualisers.
+- Release 11C: In progress. Review and detail/session drawer controllers have been extracted from `static/src/app-main.js`; remaining slices are auth/settings and visualisers.
 - Release 11D: Add keyboard equivalents and accessible data paths for canvas/WebGL visualisers.
 
 ## Notes
