@@ -129,7 +129,13 @@
     return rows.map((r) => ({ value: r[key] || "", label: r[labelKey] || r[key] || "unknown", count: r.count || 0 })).filter((o) => o.value && !seen.has(o.value) && seen.add(o.value));
   }
   function breakdown(rows, labelKey, max = 8) {
-    return rows.slice(0, max).map((r) => `<div class="break-row" data-filter="${esc(r[labelKey] || "")}"><span>${esc(r[labelKey] || "unknown")}</span><strong>${Number(r.count).toLocaleString()}</strong></div>`).join("") || '<p class="muted">No data</p>';
+    const items = rows.slice(0, max);
+    const total = items.reduce((sum, r) => sum + Number(r.count || 0), 0) || 1;
+    return items.map((r) => {
+      const count = Number(r.count || 0);
+      const pct = count ? Math.max(2, Math.round(count / total * 100)) : 0;
+      return `<div class="break-row" data-filter="${esc(r[labelKey] || "")}"><span class="break-row-fill" style="width:${pct}%"></span><span class="break-row-label">${esc(r[labelKey] || "unknown")}</span><strong>${count.toLocaleString()}</strong></div>`;
+    }).join("") || '<p class="muted">No data</p>';
   }
   function stateHtml(kind, title, body = "") {
     return `<div class="state-card state-${esc(kind)}"><strong>${esc(title)}</strong>${body ? `<p>${esc(body)}</p>` : ""}</div>`;
@@ -217,7 +223,10 @@
     search: (q = "", limit = 30) => `/api/search?${query({ q, limit: String(limit) })}`,
     memories: (params = {}) => `/api/memories?${new URLSearchParams(params).toString()}`,
     graph: (q = "", limit = 300) => `/api/graph?${query({ q, limit: String(limit) })}`,
-    review: (params = {}) => `/api/review?${new URLSearchParams(params).toString()}`
+    review: (params = {}) => `/api/review?${new URLSearchParams(params).toString()}`,
+    memoryGrowth: (days = 30) => `/api/insights/memory-growth?${query({ days: String(days) })}`,
+    auditActivity: (days = 30) => `/api/insights/audit-activity?${query({ days: String(days) })}`,
+    recallDistribution: () => "/api/insights/recall-distribution"
   };
   var lowVolatilityTtlMs = {
     "/api/auth/status": 3e3,
@@ -801,6 +810,228 @@
     return { drawGraph, loadGraph: loadGraph2, resetGraphView: resetGraphView2, inspectNode, inspectEdge };
   }
 
+  // static/src/utils/charts.js
+  var uplotModulePromise = null;
+  function loadUplotModule() {
+    if (!uplotModulePromise) uplotModulePromise = import("/static/vendor/uplot.esm.min.js");
+    return uplotModulePromise;
+  }
+  function isoDayToUnixSeconds(day) {
+    return Math.floor(Date.parse(`${day}T00:00:00Z`) / 1e3);
+  }
+  function buildGrowthChartData(series) {
+    const days = series?.days || [];
+    const xValues = days.map(isoDayToUnixSeconds);
+    return [xValues, series?.working || days.map(() => 0), series?.episodic || days.map(() => 0)];
+  }
+  var AUDIT_ACTION_ORDER = ["invalidate", "veracity", "expiry", "importance", "supersede"];
+  var AUDIT_ACTION_LABELS = {
+    invalidate: "Expired",
+    veracity: "Trust changed",
+    expiry: "Expiry set",
+    importance: "Importance changed",
+    supersede: "Superseded"
+  };
+  function buildAuditActivityChartData(series) {
+    const days = series?.days || [];
+    const xValues = days.map(isoDayToUnixSeconds);
+    const byAction = series?.by_action || {};
+    return [xValues, ...AUDIT_ACTION_ORDER.map((action) => byAction[action] || days.map(() => 0))];
+  }
+  function recallDistributionBars(items = []) {
+    const counts = items.map((item) => Number(item.count || 0));
+    const max = Math.max(1, ...counts);
+    return items.map((item) => {
+      const count = Number(item.count || 0);
+      return {
+        bucket: item.bucket,
+        count,
+        percent: count ? Math.max(4, Math.round(count / max * 100)) : 0
+      };
+    });
+  }
+
+  // static/src/features/charts.js
+  var CHART_HEIGHT_FALLBACK = 240;
+  function isCancelledRequest(error) {
+    return error?.name === "ApiError" && error.status === 0 && !error.retryable;
+  }
+  function resolveCssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  function withAlpha(hex, alpha) {
+    return /^#[0-9a-f]{6}$/i.test(hex) ? `${hex}${alpha}` : hex;
+  }
+  function loadingCardHtml(title, detail) {
+    return `<div class="async-loading-card"><h3>${esc(title)}</h3><p>${esc(detail)}</p></div>`;
+  }
+  function fallbackCardHtml(title, detail) {
+    return `<div class="async-fallback-card"><h3>${esc(title)}</h3><p>${esc(detail)}</p></div>`;
+  }
+  function chartTooltipPlugin(labels, colors) {
+    let tooltip = null;
+    return {
+      hooks: {
+        init: (u) => {
+          tooltip = document.createElement("div");
+          tooltip.className = "u-tooltip";
+          tooltip.style.position = "absolute";
+          tooltip.style.pointerEvents = "none";
+          tooltip.style.display = "none";
+          tooltip.style.zIndex = "5";
+          u.over.appendChild(tooltip);
+        },
+        setCursor: (u) => {
+          if (!tooltip) return;
+          const { idx } = u.cursor;
+          if (idx == null) {
+            tooltip.style.display = "none";
+            return;
+          }
+          const x = u.data[0][idx];
+          const rows = labels.map((label, i) => {
+            const value = u.data[i + 1]?.[idx] ?? 0;
+            return `<div><span style="color:${esc(colors[i])}">${esc(label)}</span> <strong>${esc(String(value))}</strong></div>`;
+          }).join("");
+          tooltip.innerHTML = `<div class="u-tooltip-date">${esc(new Date(x * 1e3).toLocaleDateString())}</div>${rows}`;
+          tooltip.style.display = "block";
+          const overWidth = u.over.clientWidth;
+          const left = u.cursor.left ?? 0;
+          const top = u.cursor.top ?? 0;
+          tooltip.style.left = `${Math.max(0, Math.min(left + 12, overWidth - tooltip.offsetWidth - 4))}px`;
+          tooltip.style.top = `${Math.max(0, top - 8)}px`;
+        }
+      }
+    };
+  }
+  function createChartsFeature({ $: $2, api: api2, switchTab: switchTab2, loadMemories: loadMemories2 }) {
+    let growthChart = null;
+    let auditChart = null;
+    function disposeInsightsCharts2() {
+      growthChart?.destroy();
+      auditChart?.destroy();
+      growthChart = null;
+      auditChart = null;
+    }
+    function baseChartOptions(viewport, series) {
+      const axisColor = resolveCssVar("--text-muted");
+      const gridColor = resolveCssVar("--chart-grid");
+      return {
+        width: viewport.clientWidth || 600,
+        height: viewport.clientHeight || CHART_HEIGHT_FALLBACK,
+        series,
+        scales: { x: { time: true } },
+        axes: [
+          { stroke: axisColor, grid: { stroke: gridColor }, ticks: { stroke: gridColor } },
+          { stroke: axisColor, grid: { stroke: gridColor }, ticks: { stroke: gridColor } }
+        ],
+        cursor: { drag: { x: true, y: false } }
+      };
+    }
+    async function renderGrowthChart(seriesData) {
+      const viewport = $2("#growthChartViewport");
+      if (!viewport) return;
+      const { default: uPlot } = await loadUplotModule();
+      const data = buildGrowthChartData(seriesData);
+      const labels = ["Working", "Episodic"];
+      const colors = [resolveCssVar("--chart-1"), resolveCssVar("--chart-2")];
+      const series = [
+        {},
+        ...labels.map((label, i) => ({
+          label,
+          stroke: colors[i],
+          width: 2,
+          fill: withAlpha(colors[i], "26")
+        }))
+      ];
+      growthChart?.destroy();
+      viewport.innerHTML = "";
+      growthChart = new uPlot(
+        { ...baseChartOptions(viewport, series), plugins: [chartTooltipPlugin(labels, colors)] },
+        data,
+        viewport
+      );
+    }
+    async function renderAuditChart(seriesData) {
+      const viewport = $2("#auditChartViewport");
+      if (!viewport) return;
+      const { default: uPlot } = await loadUplotModule();
+      const data = buildAuditActivityChartData(seriesData);
+      const labels = AUDIT_ACTION_ORDER.map((action) => AUDIT_ACTION_LABELS[action]);
+      const colors = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5"].map(resolveCssVar);
+      const series = [
+        {},
+        ...labels.map((label, i) => ({
+          label,
+          stroke: colors[i],
+          width: 2
+        }))
+      ];
+      auditChart?.destroy();
+      viewport.innerHTML = "";
+      auditChart = new uPlot(
+        { ...baseChartOptions(viewport, series), plugins: [chartTooltipPlugin(labels, colors)] },
+        data,
+        viewport
+      );
+    }
+    function renderRecallDistribution(items) {
+      const el = $2("#recallDistribution");
+      if (!el) return;
+      const bars = recallDistributionBars(items);
+      if (!bars.some((bar) => bar.count > 0)) {
+        el.innerHTML = '<span class="muted">No recall activity recorded yet.</span>';
+        return;
+      }
+      el.innerHTML = bars.map(
+        (bar) => `<button class="pattern-bar" data-bucket="${esc(bar.bucket)}" title="Browse memories recalled ${esc(bar.bucket)} times"><span class="pattern-bar-fill" style="width:${bar.percent}%"></span><span class="pattern-bar-label">Recalled ${esc(bar.bucket)}×</span><strong>${bar.count.toLocaleString()}</strong></button>`
+      ).join("");
+      el.querySelectorAll(".pattern-bar").forEach((btn) => {
+        btn.onclick = () => {
+          switchTab2("memories");
+          $2("#memoryStatus").value = "active";
+          $2("#memorySort").value = "recall";
+          $2("#memoryQuery").value = "";
+          loadMemories2();
+        };
+      });
+    }
+    async function loadInsights2() {
+      const days = Number($2("#insightsDays")?.value || 30);
+      const growthViewport = $2("#growthChartViewport");
+      const auditViewport = $2("#auditChartViewport");
+      if (growthViewport) growthViewport.innerHTML = loadingCardHtml("Loading chart…", "Fetching memory growth history.");
+      if (auditViewport) auditViewport.innerHTML = loadingCardHtml("Loading chart…", "Fetching admin activity history.");
+      try {
+        const [growth, audit, recall] = await Promise.all([
+          api2(endpoints.memoryGrowth(days), { requestKey: "insights-growth" }),
+          api2(endpoints.auditActivity(days), { requestKey: "insights-audit" }),
+          api2(endpoints.recallDistribution(), { requestKey: "insights-recall" })
+        ]);
+        await renderGrowthChart(growth);
+        await renderAuditChart(audit);
+        renderRecallDistribution(recall.items || []);
+      } catch (e) {
+        if (isCancelledRequest(e)) return;
+        const message = e?.message || "Try again.";
+        if (growthViewport) growthViewport.innerHTML = fallbackCardHtml("Could not load chart", message);
+        if (auditViewport) auditViewport.innerHTML = fallbackCardHtml("Could not load chart", message);
+      }
+    }
+    function resizeInsightsCharts() {
+      const growthViewport = $2("#growthChartViewport");
+      const auditViewport = $2("#auditChartViewport");
+      if (growthChart && growthViewport) {
+        growthChart.setSize({ width: growthViewport.clientWidth || 600, height: growthViewport.clientHeight || CHART_HEIGHT_FALLBACK });
+      }
+      if (auditChart && auditViewport) {
+        auditChart.setSize({ width: auditViewport.clientWidth || 600, height: auditViewport.clientHeight || CHART_HEIGHT_FALLBACK });
+      }
+    }
+    window.addEventListener("resize", resizeInsightsCharts, { passive: true });
+    return { loadInsights: loadInsights2, disposeInsightsCharts: disposeInsightsCharts2 };
+  }
+
   // static/src/utils/a11y.js
   var FOCUSABLE_SELECTOR = [
     "a[href]",
@@ -925,7 +1156,8 @@
     onTiming: (info) => console.debug("[api]", info)
   });
   var { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
-  function isCancelledRequest(error) {
+  var { loadInsights, disposeInsightsCharts } = createChartsFeature({ $, api, switchTab, loadMemories });
+  function isCancelledRequest2(error) {
     return error?.name === "ApiError" && error.status === 0 && !error.retryable;
   }
   function bootErrorPayload() {
@@ -1381,6 +1613,7 @@
     if (section !== "constellation") stopCanvasVisualiserLoop();
     if (section !== "visualiser3d" && threeVis?.renderer) clearThreeScene();
     if (section !== "memoryPalace" && memoryPalace?.renderer) clearPalaceScene();
+    if (section !== "insights") disposeInsightsCharts();
     document.body.classList.toggle("compact-page", section !== "overview");
     $$(".tab").forEach((x) => x.classList.remove("active"));
     $$("nav button").forEach((x) => {
@@ -1419,6 +1652,7 @@
       loadRealtimePanel();
     }
     if (section === "memoria") loadMemoria();
+    if (section === "insights") loadInsights();
   }
   async function loadStats() {
     const s = await api(endpoints.stats());
@@ -1680,7 +1914,7 @@
       updateBulkBar();
       updateMemoryListMeta();
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       $("#memoryList").innerHTML = stateHtml("error", "Could not load memories.", e.message || "Try again.");
       memoryHasMore = false;
       updateMemoryListMeta();
@@ -1719,7 +1953,7 @@
       updateBulkBar();
       updateMemoryListMeta();
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       $("#memoryList").innerHTML = stateHtml("error", "Could not load memories.", e.message || "Try again.");
     }
   }
@@ -2004,7 +2238,7 @@
       $("#tripleRows").innerHTML = data.items.map((t) => `<tr class="triple-row" data-triple='${esc(JSON.stringify(t))}'><td>${esc(t.subject)}</td><td>${esc(t.predicate)}</td><td>${esc(t.object)}</td><td>${esc(t.confidence ?? "")}</td></tr>`).join("") || '<tr><td colspan="4" class="empty-cell">No triples found.</td></tr>';
       $$("#tripleRows .triple-row").forEach((row) => bindActivatable(row, () => showDetail(JSON.parse(row.dataset.triple), "Triple detail")));
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       $("#tripleRows").innerHTML = `<tr><td colspan="4" class="empty-cell">Could not load triples: ${esc(e.message || "Try again.")}</td></tr>`;
     }
   }
@@ -2078,7 +2312,7 @@
       bindMemoryClicks($("#globalSearchResults"));
       bindJsonCards($("#globalSearchResults"), "Search result detail");
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       $("#globalSearchResults").innerHTML = stateHtml("error", "Search failed.", e.message || "The dashboard could not load search results.");
     }
   }
@@ -2100,7 +2334,7 @@
       $("#recallResults").innerHTML = data.items.map(recallItem).join("") || '<p class="muted">No matching memories.</p>';
       bindMemoryClicks($("#recallResults"));
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       $("#recallNote").textContent = "Recall debug failed.";
       $("#recallResults").innerHTML = stateHtml("error", "Could not explain recall ranking.", e.message || "Try again.");
     }
@@ -2122,7 +2356,7 @@
       });
       $$("#timelineResults .open-session").forEach((btn) => btn.onclick = () => openSessionDetail(btn.dataset.session || ""));
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       $("#timelineResults").innerHTML = stateHtml("error", "Could not load timeline.", e.message || "Try again.");
     }
   }
@@ -2354,7 +2588,7 @@
       })), { requestKey: "review" });
       renderSelectedReviewQueue(data, append);
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       $("#reviewQueues").innerHTML = stateHtml("error", "Could not load review queue.", e.message || "Try again.");
     }
   }
@@ -3955,7 +4189,7 @@
     try {
       renderThreeVisualiser(await api("/api/constellation?limit=320"));
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       if (labels) labels.innerHTML = `<div class="three-fallback-card"><h3>Could not load the 3D visualiser</h3><p>${esc(e.message || "Try again.")}</p></div>`;
     }
   }
@@ -4249,7 +4483,7 @@
     try {
       renderMemoryPalace(await api("/api/constellation?limit=360"));
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       if (labels) labels.innerHTML = `<div class="three-fallback-card"><h3>Could not load the labyrinth</h3><p>${esc(e.message || "Try again.")}</p></div>`;
     }
   }
@@ -4817,7 +5051,7 @@
       const renderer = memoriaRenderer(apiPath);
       list.innerHTML = items.map((item) => renderer(item)).join("");
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       list.innerHTML = stateHtml("error", "Could not load MEMORIA entries.", e.message || "Try again.");
     }
   }
@@ -4878,7 +5112,7 @@
       items = r.items || [];
       $("#memoriaKgCount").textContent = `${items.length} entries`;
     } catch (e) {
-      if (isCancelledRequest(e)) return;
+      if (isCancelledRequest2(e)) return;
       tbody.innerHTML = `<tr><td colspan="5" class="empty-cell">Could not load MEMORIA KG: ${esc(e.message || "Try again.")}</td></tr>`;
       return;
     }
@@ -4990,6 +5224,8 @@
     loadGraph();
   };
   $("#graphResetView").onclick = resetGraphView;
+  $("#insightsRefresh").onclick = loadInsights;
+  $("#insightsDays").onchange = loadInsights;
   $("#constellationRefresh").onclick = loadConstellation;
   $("#constellationReset").onclick = resetConstellationView;
   $("#constellationPanMode").onclick = toggleConstellationPanMode;

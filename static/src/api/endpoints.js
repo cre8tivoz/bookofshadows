@@ -15,6 +15,9 @@ export const endpoints = {
   memories: (params = {}) => `/api/memories?${new URLSearchParams(params).toString()}`,
   graph: (q = "", limit = 300) => `/api/graph?${query({ q, limit: String(limit) })}`,
   review: (params = {}) => `/api/review?${new URLSearchParams(params).toString()}`,
+  memoryGrowth: (days = 30) => `/api/insights/memory-growth?${query({ days: String(days) })}`,
+  auditActivity: (days = 30) => `/api/insights/audit-activity?${query({ days: String(days) })}`,
+  recallDistribution: () => "/api/insights/recall-distribution",
 };
 
 export const lowVolatilityTtlMs = {

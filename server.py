@@ -388,6 +388,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(self.store.stats())
             if path == "/api/digest/today":
                 return self._send_json(self.store.today_digest(day=q.get("day", ""), limit=_safe_int(q.get("limit"), 80, maximum=300)))
+            if path == "/api/insights/memory-growth":
+                return self._send_json(self.store.memory_growth_series(days=_safe_int(q.get("days"), 30, maximum=180)))
+            if path == "/api/insights/audit-activity":
+                return self._send_json(self.store.audit_activity_series(days=_safe_int(q.get("days"), 30, maximum=180)))
+            if path == "/api/insights/recall-distribution":
+                return self._send_json({"items": self.store.recall_distribution()})
             if path == "/api/review":
                 return self._send_json(self.store.review_queues(
                     queue=q.get("queue", "contaminated"), q=q.get("q", ""),
