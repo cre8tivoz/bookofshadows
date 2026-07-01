@@ -627,7 +627,7 @@ Good one-session candidate. It is narrow and mostly mechanical, but it should st
 
 **Outcome:** `static/src/app-main.js` stops being the primary place where unrelated feature behavior accumulates.
 
-**Status:** In progress. Review, detail/session drawer, auth/settings, and shared visualiser chrome extracted 2026-07-02.
+**Status:** Complete. Review, detail/session drawer, auth/settings, and visualiser controllers extracted 2026-07-02.
 
 **Scope:**
 
@@ -647,7 +647,7 @@ Good one-session candidate. It is narrow and mostly mechanical, but it should st
 
 - `static/src/features/review-controller.js`
 - `static/src/features/detail-drawer.js`
-- `static/src/features/settings.js`
+- `static/src/features/settings-controller.js`
 - `static/src/visualisers/constellation.js`
 - `static/src/visualisers/three-visualiser.js`
 - `static/src/visualisers/memory-palace.js`
@@ -696,6 +696,23 @@ Do not do the entire extraction in one session unless the goal is explicitly a l
 - Kept existing `app-main.js` wrapper names for fullscreen, exit, responsive fill, and button updates so current canvas/WebGL/FPS event wiring remains stable.
 - Verified frontend bundle/tests, backend tests, ruff, and compileall after extraction.
 - Remaining 11C visualiser work: split the canvas constellation, Three.js visualiser, and Mnemosyne Labyrinth implementations into dedicated visualiser modules.
+
+**Release 11C status update - 2026-07-02, Mnemosyne Labyrinth slice**
+
+- Extracted the Memory Palace / Mnemosyne Labyrinth FPS implementation into `static/src/visualisers/memory-palace.js`.
+- Kept `app-main.js` wrapper names for load, reset, search beacon, resize, render-loop resume, and disposal so route changes, fullscreen resize, and visibility lifecycle continue to use the existing orchestration surface.
+- Replaced app-level direct state checks with narrow controller methods for `isRendering()` and `resume()`.
+- Verified frontend bundle/tests, backend tests, ruff, compileall, and browser smoke after extraction.
+- Remaining 11C visualiser work: split the canvas constellation and Three.js visualiser implementations into dedicated visualiser modules.
+
+**Release 11C status update - 2026-07-02, visualiser completion slice**
+
+- Extracted the canvas constellation/neural map implementation into `static/src/visualisers/constellation.js`.
+- Extracted the WebGL Three.js constellation/neural visualiser implementation into `static/src/visualisers/three-visualiser.js`.
+- Kept the shared Three.js lazy loader in `app-main.js` so both WebGL visualiser controllers continue to use one vendor import promise.
+- Kept `app-main.js` as the visualiser orchestration layer with thin wrappers for route cleanup, fullscreen redraw/resize, tab buttons, pause/pan controls, and visibility resume.
+- Verified frontend bundle/tests, backend tests, ruff, compileall, and browser smoke after the completed visualiser extraction.
+- Release 11C is complete; Release 11D remains the next visualiser-focused phase for keyboard equivalents and accessible data paths.
 
 ### Release 11D - Visualiser Accessibility
 

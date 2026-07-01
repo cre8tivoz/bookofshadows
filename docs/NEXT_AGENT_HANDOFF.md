@@ -35,7 +35,7 @@ Regenerate public screenshots:
 
 ## Future Release Backlog
 
-- Release 11C: In progress. Review, detail/session drawer, auth/settings, and shared visualiser chrome have been extracted from `static/src/app-main.js`; remaining visualiser work is splitting canvas constellation, Three.js visualiser, and Mnemosyne Labyrinth modules.
+- Release 11C: Complete. Review, detail/session drawer, auth/settings, shared visualiser chrome, canvas constellation/neural map, Three.js visualiser, and Mnemosyne Labyrinth have been extracted from `static/src/app-main.js`; Release 11D is next for keyboard equivalents and accessible data paths.
 - Release 11D: Add keyboard equivalents and accessible data paths for canvas/WebGL visualisers.
 
 ## Notes
