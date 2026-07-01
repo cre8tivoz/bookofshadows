@@ -35,7 +35,7 @@ Regenerate public screenshots:
 
 ## Future Release Backlog
 
-- Release 11C: In progress. Review, detail/session drawer, and auth/settings controllers have been extracted from `static/src/app-main.js`; remaining slice is visualisers.
+- Release 11C: In progress. Review, detail/session drawer, auth/settings, and shared visualiser chrome have been extracted from `static/src/app-main.js`; remaining visualiser work is splitting canvas constellation, Three.js visualiser, and Mnemosyne Labyrinth modules.
 - Release 11D: Add keyboard equivalents and accessible data paths for canvas/WebGL visualisers.
 
 ## Notes

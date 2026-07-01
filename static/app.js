@@ -2091,6 +2091,52 @@
     return { loadInsights: loadInsights2, disposeInsightsCharts: disposeInsightsCharts2 };
   }
 
+  // static/src/visualisers/chrome.js
+  function createVisualiserChrome({ $: $2, redrawCanvas, resizeThree: resizeThree2, resizeMemoryPalace: resizeMemoryPalace2 }) {
+    function responsiveFill(width, height) {
+      const w = Math.max(0, Number(width) || 0);
+      const h = Math.max(0, Number(height) || 0);
+      if (w < 760 || h < 520) return 1;
+      const widthFill = Math.max(0, Math.min(1, (w - 760) / 760));
+      const heightFill = Math.max(0, Math.min(1, (h - 520) / 360));
+      return 1 + Math.min(0.22, widthFill * 0.16 + heightFill * 0.06);
+    }
+    async function toggleFullscreen(selector) {
+      const el = $2(selector);
+      if (!el || !document.fullscreenEnabled) return;
+      if (document.fullscreenElement === el) {
+        await document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
+      }
+    }
+    async function exitFullscreen(event) {
+      event?.stopPropagation?.();
+      if (document.fullscreenElement) await document.exitFullscreen();
+    }
+    function updateFullscreenButtons() {
+      const current = document.fullscreenElement;
+      const constellation = current === $2(".constellation-wrap");
+      const three = current === $2("#threeViewport");
+      const palace = current === $2("#palaceViewport");
+      const constellationButton = $2("#constellationFullscreen");
+      const threeButton = $2("#threeFullscreen");
+      const palaceButton = $2("#palaceFullscreen");
+      if (constellationButton) constellationButton.textContent = constellation ? "Exit fullscreen" : "Fullscreen";
+      if (threeButton) threeButton.textContent = three ? "Exit fullscreen" : "Fullscreen";
+      if (palaceButton) palaceButton.textContent = palace ? "Exit fullscreen" : "Fullscreen";
+      redrawCanvas();
+      resizeThree2();
+      resizeMemoryPalace2();
+    }
+    return {
+      exitFullscreen,
+      responsiveFill,
+      toggleFullscreen,
+      updateFullscreenButtons
+    };
+  }
+
   // static/src/utils/motion.js
   function prefersReducedMotion() {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -2196,6 +2242,14 @@
   });
   var { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
   var { loadInsights, disposeInsightsCharts } = createChartsFeature({ $, api, switchTab, loadMemories });
+  var visualiserChrome = createVisualiserChrome({
+    $,
+    redrawCanvas: () => {
+      if (isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data);
+    },
+    resizeThree,
+    resizeMemoryPalace
+  });
   var reviewController = createReviewController({
     $,
     $$,
@@ -2596,37 +2650,16 @@
     return $("#constellation")?.classList.contains("active");
   }
   function visualiserResponsiveFill(width, height) {
-    const w = Math.max(0, Number(width) || 0);
-    const h = Math.max(0, Number(height) || 0);
-    if (w < 760 || h < 520) return 1;
-    const widthFill = Math.max(0, Math.min(1, (w - 760) / 760));
-    const heightFill = Math.max(0, Math.min(1, (h - 520) / 360));
-    return 1 + Math.min(0.22, widthFill * 0.16 + heightFill * 0.06);
+    return visualiserChrome.responsiveFill(width, height);
   }
   async function toggleVisualiserFullscreen(selector) {
-    const el = $(selector);
-    if (!el || !document.fullscreenEnabled) return;
-    if (document.fullscreenElement === el) await document.exitFullscreen();
-    else await el.requestFullscreen();
+    await visualiserChrome.toggleFullscreen(selector);
   }
   async function exitVisualiserFullscreen(event) {
-    event?.stopPropagation?.();
-    if (document.fullscreenElement) await document.exitFullscreen();
+    await visualiserChrome.exitFullscreen(event);
   }
   function updateVisualiserFullscreenButtons() {
-    const current = document.fullscreenElement;
-    const legacy = current === $(".constellation-wrap");
-    const three = current === $("#threeViewport");
-    const palace = current === $("#palaceViewport");
-    const legacyButton = $("#constellationFullscreen");
-    const threeButton = $("#threeFullscreen");
-    const palaceButton = $("#palaceFullscreen");
-    if (legacyButton) legacyButton.textContent = legacy ? "Exit fullscreen" : "Fullscreen";
-    if (threeButton) threeButton.textContent = three ? "Exit fullscreen" : "Fullscreen";
-    if (palaceButton) palaceButton.textContent = palace ? "Exit fullscreen" : "Fullscreen";
-    if (isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data);
-    if (threeVis.renderer) resizeThree();
-    if (memoryPalace.renderer) resizeMemoryPalace();
+    visualiserChrome.updateFullscreenButtons();
   }
   function switchTab(name, opts = {}) {
     const section = sectionFor(name);

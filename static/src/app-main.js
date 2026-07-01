@@ -13,6 +13,7 @@ import { createDetailDrawerController } from './features/detail-drawer.js';
 import { createSettingsController } from './features/settings-controller.js';
 import { createGraphFeature } from './features/graph.js';
 import { createChartsFeature } from './features/charts.js';
+import { createVisualiserChrome } from './visualisers/chrome.js';
 import { trapFocus } from './utils/a11y.js';
 import { prefersReducedMotion } from './utils/motion.js';
 
@@ -100,6 +101,12 @@ const detailDrawer = createDetailDrawerController({
 });
 const { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
 const { loadInsights, disposeInsightsCharts } = createChartsFeature({ $, api, switchTab, loadMemories });
+const visualiserChrome = createVisualiserChrome({
+  $,
+  redrawCanvas: () => { if(isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data); },
+  resizeThree,
+  resizeMemoryPalace,
+});
 const reviewController = createReviewController({
   $,
   $$,
@@ -478,37 +485,16 @@ function stopCanvasVisualiserLoop(){
 }
 function isCanvasVisualiserActive(){ return $('#constellation')?.classList.contains('active'); }
 function visualiserResponsiveFill(width, height){
-  const w = Math.max(0, Number(width) || 0);
-  const h = Math.max(0, Number(height) || 0);
-  if(w < 760 || h < 520) return 1;
-  const widthFill = Math.max(0, Math.min(1, (w - 760) / 760));
-  const heightFill = Math.max(0, Math.min(1, (h - 520) / 360));
-  return 1 + Math.min(.22, (widthFill * .16) + (heightFill * .06));
+  return visualiserChrome.responsiveFill(width, height);
 }
 async function toggleVisualiserFullscreen(selector){
-  const el = $(selector);
-  if(!el || !document.fullscreenEnabled) return;
-  if(document.fullscreenElement === el) await document.exitFullscreen();
-  else await el.requestFullscreen();
+  await visualiserChrome.toggleFullscreen(selector);
 }
 async function exitVisualiserFullscreen(event){
-  event?.stopPropagation?.();
-  if(document.fullscreenElement) await document.exitFullscreen();
+  await visualiserChrome.exitFullscreen(event);
 }
 function updateVisualiserFullscreenButtons(){
-  const current = document.fullscreenElement;
-  const legacy = current === $('.constellation-wrap');
-  const three = current === $('#threeViewport');
-  const palace = current === $('#palaceViewport');
-  const legacyButton = $('#constellationFullscreen');
-  const threeButton = $('#threeFullscreen');
-  const palaceButton = $('#palaceFullscreen');
-  if(legacyButton) legacyButton.textContent = legacy ? 'Exit fullscreen' : 'Fullscreen';
-  if(threeButton) threeButton.textContent = three ? 'Exit fullscreen' : 'Fullscreen';
-  if(palaceButton) palaceButton.textContent = palace ? 'Exit fullscreen' : 'Fullscreen';
-  if(isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data);
-  if(threeVis.renderer) resizeThree();
-  if(memoryPalace.renderer) resizeMemoryPalace();
+  visualiserChrome.updateFullscreenButtons();
 }
 function switchTab(name, opts={}){
   const section = sectionFor(name);
