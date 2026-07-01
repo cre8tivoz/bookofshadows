@@ -877,6 +877,544 @@
     };
   }
 
+  // static/src/utils/a11y.js
+  var FOCUSABLE_SELECTOR = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(",");
+  function focusableElements(container) {
+    if (!container) return [];
+    return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+      (el) => !el.hasAttribute("hidden") && !el.closest(".hidden")
+    );
+  }
+  function trapFocus(container) {
+    const trigger = document.activeElement;
+    const onKeydown = (event) => {
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements(container);
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && current === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && current === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (!container.contains(current)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    container.addEventListener("keydown", onKeydown);
+    return function releaseFocusTrap({ restoreFocus = true } = {}) {
+      container.removeEventListener("keydown", onKeydown);
+      if (restoreFocus && trigger && document.contains(trigger) && typeof trigger.focus === "function") {
+        trigger.focus();
+      }
+    };
+  }
+
+  // static/src/features/detail-drawer.js
+  function createDetailDrawerController({
+    $: $2,
+    $$: $$2,
+    api: api2,
+    postJson: postJson2,
+    bindActivatable: bindActivatable2,
+    canAdmin: canAdmin2,
+    confirmAction: confirmAction2,
+    askImportance: askImportance2,
+    askReplacement: askReplacement2,
+    askVeracity: askVeracity2,
+    askExpiry: askExpiry2,
+    runButtonAction: runButtonAction2,
+    refreshAuthState: refreshAuthState2,
+    loadStats: loadStats2,
+    loadMemories: loadMemories2,
+    openActionModal: openActionModal2,
+    pushRoute: pushRoute2,
+    getCurrentRoute,
+    memoryRouteState: memoryRouteState2,
+    switchTab: switchTab2
+  }) {
+    let focusRelease = null;
+    function closeDetail2(opts = {}) {
+      $2("#detail").classList.add("hidden");
+      focusRelease?.();
+      focusRelease = null;
+      if (opts.push !== false) {
+        const currentRoute2 = getCurrentRoute();
+        pushRoute2(currentRoute2?.tab === "memories" ? memoryRouteState2() : routeTabState(currentRoute2?.tab || "overview"));
+      }
+    }
+    function activateDrawerFocusTrap() {
+      const drawer = $2("#detail");
+      const wasHidden = drawer.classList.contains("hidden");
+      drawer.classList.remove("hidden");
+      if (wasHidden) {
+        focusRelease = trapFocus(drawer);
+        ($2("#closeDetail") || drawer).focus();
+      }
+    }
+    function showSelectableCopy2(label, value) {
+      openActionModal2({
+        title: label,
+        description: "Select the text below and press Cmd/Ctrl+C to copy. This works on non-HTTPS local dashboards.",
+        kicker: "Copy",
+        confirmText: "Done",
+        bodyHtml: `<label class="modal-field"><span>${esc(label)}</span><textarea id="manualCopyValue" class="copy-value" rows="4" readonly>${esc(value || "")}</textarea></label>`,
+        readValue: () => true
+      });
+      setTimeout(() => {
+        const el = $2("#manualCopyValue");
+        el?.focus();
+        el?.select();
+      }, 60);
+    }
+    function showDetail2(obj, title = "Detail", opts = {}) {
+      const titleEl = document.querySelector(".drawer-title");
+      if (titleEl) titleEl.textContent = title;
+      $2("#detailBody").classList.remove("html-detail");
+      $2("#detailBody").textContent = JSON.stringify(obj, null, 2);
+      activateDrawerFocusTrap();
+      if (opts.push !== false) pushRoute2(getCurrentRoute() || routeTabState());
+    }
+    function showHtmlDetail(html, title = "Detail") {
+      const titleEl = document.querySelector(".drawer-title");
+      if (titleEl) titleEl.textContent = title;
+      $2("#detailBody").classList.add("html-detail");
+      $2("#detailBody").innerHTML = html;
+      activateDrawerFocusTrap();
+    }
+    function whyMemoryHtml(item) {
+      const reasons = [];
+      const q = $2("#memoryQuery")?.value.trim();
+      const source = $2("#memorySource")?.value;
+      const scope = $2("#memoryScope")?.value;
+      const session = $2("#memorySession")?.value;
+      const veracity = $2("#memoryVeracity")?.value;
+      const degradation = $2("#memoryDegradation")?.value;
+      const trustPreset = $2("#memoryTrustPreset")?.value;
+      const sort = $2("#memorySort")?.value;
+      if (q) reasons.push(`matches browser query “${q}” across content, id, session, source, or scope`);
+      if (source && item.source === source) reasons.push(`source filter matched ${source}`);
+      if (scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
+      if (session && item.session_id === session) reasons.push(`session filter matched ${session}`);
+      if (veracity && item.veracity === veracity) reasons.push(`trust filter matched ${veracity}`);
+      if (degradation && String(item.degradation_tier || "") === String(degradation)) reasons.push(`lifecycle filter matched tier ${degradation}`);
+      if (trustPreset === "contaminated" && item.contaminated) reasons.push("needs-review filter matched");
+      if (trustPreset === "degraded" && item.degraded_at) reasons.push("degraded-only filter matched");
+      if (!reasons.length) reasons.push("shown from the current list/search context");
+      return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || "active")}</span></h3><div class="diag-grid compact">
+    <div class="diag-row"><span>Reason</span><strong>${esc(reasons.join(" · "))}</strong></div>
+    <div class="diag-row"><span>Ranking</span><strong>${esc(sort || "recent")} · importance ${Number(item.importance ?? 0).toFixed(2)} · recalled ${Number(item.recall_count || 0).toLocaleString()}×</strong></div>
+    <div class="diag-row"><span>Freshness</span><strong>created ${esc(prettyTime(item.created_at) || item.created_at || "unknown")} · last recalled ${esc(prettyTime(item.last_recalled) || item.last_recalled || "never")}</strong></div>
+    <div class="diag-row"><span>Origin</span><strong>${esc(item.memory_kind || item.tier || "memory")} · ${esc(item.source || "unknown source")} · ${esc(item.scope || "unknown scope")}</strong></div>
+  </div></div>`;
+    }
+    function memoryDetailHtml(item) {
+      const admin = canAdmin2();
+      const mutable = isMutableMemory(item);
+      const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editVeracity" class="drawer-action">Set trust</button><button id="editExpiry" class="drawer-action">Set expiry</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : "";
+      const actionNote = admin ? mutable ? "" : `<span class="muted">This memory is ${esc(item.status || "not active")}; mutation actions are disabled.</span>` : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>';
+      const trust = String(item.veracity || "unknown").toLowerCase();
+      const lifecycle = item.degradation_label ? `${item.degradation_label} · tier ${item.degradation_tier}` : "not degraded";
+      return `
+    <div class="memory-detail">
+      ${meta(item, { sessionLink: false })}
+      <div class="content detail-content">${esc(item.content)}</div>
+      <div class="trust-strip">
+        <span class="trust-chip trust-${esc(trust)}">${esc(trust)} trust · ×${Number(item.trust_weight ?? 0).toFixed(2)}</span>
+        <span class="trust-chip lifecycle-${esc(item.degradation_label || "none")}">${esc(lifecycle)}${item.degradation_weight != null ? ` · ×${Number(item.degradation_weight).toFixed(2)}` : ""}</span>
+        <span class="trust-chip">effective ×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</span>
+        ${item.contaminated ? '<span class="trust-chip review">needs review</span>' : ""}
+      </div>
+      ${whyMemoryHtml(item)}
+      <div class="diag-grid compact">
+        <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
+        <div class="diag-row"><span>Session</span>${item.session_id && item.session_id !== "default" ? `<button id="memorySessionLink" class="diag-link" title="Open session: ${esc(item.session_id)}">${esc(item.session_id)}</button>` : `<strong>${esc(item.session_id || "default")}</strong>`}</div>
+        <div class="diag-row"><span>Source</span><strong>${esc(item.source || "unknown")}</strong></div>
+        <div class="diag-row"><span>Trust</span><strong>${esc(trust)} · recall weight ×${Number(item.trust_weight ?? 0).toFixed(2)}${item.contaminated ? " · review recommended" : ""}</strong></div>
+        <div class="diag-row"><span>Lifecycle</span><strong>${esc(lifecycle)} · degraded ${esc(item.degraded_at || "never")} · recall weight ×${Number(item.degradation_weight ?? 1).toFixed(2)}</strong></div>
+        <div class="diag-row"><span>Effective weight</span><strong>×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</strong></div>
+        <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || "none")}</strong></div>
+        <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || "none")}</strong></div>
+      </div>
+      <div class="drawer-actions memory-actions">
+        <button id="copyMemoryId" class="drawer-action">Copy ID</button>
+        ${adminActions}${actionNote}
+      </div>
+      <p id="memoryActionStatus" class="muted"></p>
+    </div>`;
+    }
+    async function openMemoryDetail2(memoryId, opts = {}) {
+      await refreshAuthState2();
+      const item = (await api2("/api/memory?id=" + encodeURIComponent(memoryId))).item;
+      showHtmlDetail(memoryDetailHtml(item), "Memory detail");
+      if (opts.push !== false) pushRoute2({ tab: "memories", drawer: { type: "memory", id: memoryId } });
+      const sessionLink = $2("#memorySessionLink");
+      if (sessionLink) sessionLink.onclick = () => openSessionDetail2(item.session_id || "");
+      $2("#copyMemoryId").onclick = () => showSelectableCopy2("Memory ID", item.id);
+      if (!canAdmin2() || !isMutableMemory(item)) return;
+      const backup = () => $2("#backupBeforeMutation") ? $2("#backupBeforeMutation").checked : true;
+      $2("#expireMemory").onclick = async () => {
+        const ok = await confirmAction2({
+          title: "Expire this memory?",
+          description: "It will disappear from active recall, but the original record stays available for history and audit.",
+          confirmText: "Expire memory",
+          tone: "warn"
+        });
+        if (!ok) return;
+        try {
+          const result = await runButtonAction2($2("#expireMemory"), "Expiring...", () => postJson2("/api/admin/memory/invalidate", { memory_id: item.id, backup: backup() }), () => ({ tone: "success", title: "Memory expired", body: "The original remains in history and audit." }));
+          $2("#memoryActionStatus").textContent = `Expired. Backup: ${result.backup?.path || "not created"}`;
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#editImportance").onclick = async () => {
+        const importance = await askImportance2(item.importance ?? 0.5);
+        if (importance === null) return;
+        try {
+          const result = await runButtonAction2($2("#editImportance"), "Saving...", () => postJson2("/api/admin/memory/importance", { memory_id: item.id, importance: Number(importance), backup: backup() }), () => ({ tone: "success", title: "Importance updated", body: `New value: ${Number(importance).toFixed(2)}` }));
+          $2("#memoryActionStatus").textContent = `Importance updated to ${result.importance}.`;
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#editVeracity").onclick = async () => {
+        const veracity = await askVeracity2(item.veracity || "unknown");
+        if (veracity === null) return;
+        try {
+          const result = await runButtonAction2($2("#editVeracity"), "Saving...", () => postJson2("/api/admin/memory/veracity", { memory_id: item.id, veracity, backup: backup() }), () => ({ tone: "success", title: "Trust updated", body: `Trust is now ${veracity}.` }));
+          $2("#memoryActionStatus").textContent = `Trust updated to ${result.veracity}.`;
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#editExpiry").onclick = async () => {
+        const validUntil = await askExpiry2(item.valid_until || "");
+        if (validUntil === null) return;
+        try {
+          const result = await runButtonAction2($2("#editExpiry"), "Saving...", () => postJson2("/api/admin/memory/expiry", { memory_id: item.id, valid_until: validUntil, backup: backup() }), () => ({ tone: "success", title: "Expiry updated", body: validUntil ? `Valid until ${validUntil}` : "Scheduled expiry cleared." }));
+          $2("#memoryActionStatus").textContent = `Expiry ${result.valid_until ? `set to ${result.valid_until}` : "cleared"}.`;
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(item.id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+      $2("#supersedeMemory").onclick = async () => {
+        const replacement = await askReplacement2(item.content || "");
+        if (replacement === null) return;
+        try {
+          const result = await runButtonAction2($2("#supersedeMemory"), "Creating...", () => postJson2("/api/admin/memory/supersede", { memory_id: item.id, content: replacement, importance: Number(item.importance ?? 0.5), backup: backup() }), () => ({ tone: "success", title: "Memory superseded", body: "Opened the replacement memory." }));
+          $2("#memoryActionStatus").textContent = `Superseded by ${result.replacement_id}.`;
+          $2("#memoryStatus").value = "all";
+          await loadStats2();
+          await loadMemories2();
+          await openMemoryDetail2(result.replacement_id);
+        } catch (error) {
+          $2("#memoryActionStatus").textContent = error.message;
+        }
+      };
+    }
+    function sessionEvent(event) {
+      return `<div class="session-event" data-json='${esc(JSON.stringify(event.item))}'><div class="meta"><span class="badge">${esc(event.type)}</span><span>${esc(event.timestamp || "")}</span></div><div class="content"><strong>${esc(event.title)}</strong><br>${esc(event.preview || "")}</div></div>`;
+    }
+    async function openSessionDetail2(sessionId, opts = {}) {
+      if (!sessionId || sessionId === "unknown") return;
+      const data = await api2(`/api/session?id=${encodeURIComponent(sessionId)}&limit=200`);
+      const counts = data.counts || {};
+      showHtmlDetail(`
+    <div class="session-summary">
+      <div class="diag-pill"><strong>${esc(counts.memories || 0)}</strong><span>memories</span></div>
+      <div class="diag-pill"><strong>${esc(counts.triples || 0)}</strong><span>triples</span></div>
+      <div class="diag-pill"><strong>${esc(counts.consolidations || 0)}</strong><span>consolidations</span></div>
+    </div>
+    <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
+    <div class="result-section"><h3>Timeline <span>${esc(counts.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join("") || '<p class="muted">No events for this session.</p>'}</div></div>
+  `, `Session ${sessionId}`);
+      if (opts.push !== false) pushRoute2({ tab: "timelineView", drawer: { type: "session", id: sessionId } });
+      $2("#sessionBrowseMemories").onclick = () => {
+        $2("#memorySession").value = sessionId;
+        $2("#memoryKind").value = "all";
+        $2("#memoryQuery").value = "";
+        switchTab2("memories");
+        closeDetail2({ push: false });
+      };
+      $2("#sessionTimeline").onclick = () => {
+        $2("#timelineGroup").value = "session";
+        $2("#timelineQuery").value = sessionId;
+        switchTab2("timelineView");
+        closeDetail2({ push: false });
+      };
+      $2("#sessionCopy").onclick = () => showSelectableCopy2("Session ID", sessionId);
+      $$2("#detailBody .session-event").forEach((el) => bindActivatable2(el, () => showDetail2(JSON.parse(el.dataset.json), "Session event detail")));
+    }
+    function bindMemoryClicks2(root) {
+      root.querySelectorAll(".session-link").forEach((btn) => {
+        btn.onclick = (event) => {
+          event.stopPropagation();
+          openSessionDetail2(btn.dataset.session || "");
+        };
+      });
+      root.querySelectorAll(".item[data-id]").forEach((el) => bindActivatable2(el, (event) => {
+        if (event.target.closest(".session-link,button,a,label,input")) return;
+        openMemoryDetail2(el.dataset.id);
+      }));
+    }
+    function bindJsonCards2(root, title) {
+      root.querySelectorAll("[data-json]").forEach((el) => bindActivatable2(el, () => showDetail2(JSON.parse(el.dataset.json), title)));
+    }
+    return {
+      bindJsonCards: bindJsonCards2,
+      bindMemoryClicks: bindMemoryClicks2,
+      closeDetail: closeDetail2,
+      openMemoryDetail: openMemoryDetail2,
+      openSessionDetail: openSessionDetail2,
+      showDetail: showDetail2,
+      showHtmlDetail,
+      showSelectableCopy: showSelectableCopy2
+    };
+  }
+
+  // static/src/features/settings-controller.js
+  function createSettingsController({
+    $: $2,
+    api: api2,
+    postJson: postJson2,
+    setCsrfToken: setCsrfToken2,
+    confirmAction: confirmAction2,
+    runButtonAction: runButtonAction2,
+    showDetail: showDetail2,
+    showSelectableCopy: showSelectableCopy2,
+    loadStats: loadStats2
+  }) {
+    let authState = { config: {}, auth_enabled: false, authenticated: true };
+    let loginFocusRelease = null;
+    let lastDiagnostics = null;
+    function setAuthState(state) {
+      if (state) authState = state;
+      if (authState.csrf_token) setCsrfToken2(authState.csrf_token || "");
+      return authState;
+    }
+    function showLogin2() {
+      const overlay = $2("#loginOverlay");
+      if (!overlay) return;
+      const wasHidden = overlay.classList.contains("hidden");
+      overlay.classList.remove("hidden");
+      if (wasHidden) {
+        loginFocusRelease = trapFocus(overlay);
+        $2("#loginPassword")?.focus();
+      }
+    }
+    function hideLogin2() {
+      const overlay = $2("#loginOverlay");
+      if (!overlay) return;
+      overlay.classList.add("hidden");
+      loginFocusRelease?.();
+      loginFocusRelease = null;
+    }
+    function canAdmin2() {
+      const cfg = authState.config || {};
+      const localOnly = ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0");
+      return !!(cfg.memory_admin_enabled && (localOnly || authState.auth_enabled && authState.authenticated));
+    }
+    function runtimeRow(label, value, opts = {}) {
+      const safe = value === void 0 || value === null || value === "" ? "—" : value;
+      return `<div class="diag-row ${opts.wide ? "wide" : ""}"><span>${esc(label)}</span><strong title="${esc(safe)}">${esc(safe)}</strong></div>`;
+    }
+    function renderRuntimeDiagnostics(runtime) {
+      const el = $2("#runtimeDiagnostics");
+      if (!el) return;
+      const probe = runtime.probe || {};
+      const cfg = runtime.config || {};
+      const health = runtime.running && runtime.reachable && !runtime.stale_pid && !runtime.runtime_stale ? "Healthy" : "Needs attention";
+      const started = runtime.started_at ? prettyTime(Number(runtime.started_at) * 1e3) : "";
+      el.innerHTML = [
+        runtimeRow("Status", health),
+        runtimeRow("PID", runtime.pid),
+        runtimeRow("PID file", runtime.pid_file_pid),
+        runtimeRow("Listener PID", (runtime.listener_pids || []).join(", ") || "none"),
+        runtimeRow("Launch source", runtime.runtime_source || "server.py"),
+        runtimeRow("Stale PID", runtime.stale_pid ? "yes — repaired on restart/start" : "no"),
+        runtimeRow("Runtime stale", runtime.runtime_stale ? "yes" : "no"),
+        runtimeRow("Probe", `${probe.status || "n/a"} ${probe.url || ""}`, { wide: true }),
+        runtimeRow("Local URL", cfg.local_url || "", { wide: true }),
+        runtimeRow("LAN URL", cfg.lan_url || "not exposed", { wide: true }),
+        runtimeRow("Started", started || runtime.started_at || "", { wide: true })
+      ].join("");
+    }
+    async function loadRuntimeDiagnostics2() {
+      try {
+        renderRuntimeDiagnostics(await api2(endpoints.runtimeStatus()));
+      } catch (error) {
+        const el = $2("#runtimeDiagnostics");
+        if (el) el.innerHTML = `<div class="state-card state-error"><strong>Runtime diagnostics unavailable</strong><p>${esc(error.message)}</p></div>`;
+      }
+    }
+    async function loadDiagnostics2() {
+      const diag = await api2(endpoints.diagnostics());
+      const counts = diag.table_counts || {};
+      const core = ["working_memory", "episodic_memory", "triples", "consolidation_log"].filter((table) => table in counts);
+      $2("#diagnosticsSummary").innerHTML = `
+    <div class="diag-row"><span>Status</span><strong>${diag.ok ? "OK" : "Needs attention"}</strong></div>
+    <div class="diag-row"><span>DB path</span><strong title="${esc(diag.db_path)}">${esc(diag.db_path)}</strong></div>
+    <div class="diag-row"><span>Readable</span><strong>${diag.readable ? "yes" : "no"}</strong></div>
+    <div class="diag-row"><span>Size</span><strong>${fmtBytes(diag.size_bytes)}</strong></div>
+    <div class="diag-row"><span>Last modified</span><strong>${esc(diag.modified_at || "n/a")}</strong></div>
+    <div class="diag-row"><span>Tables</span><strong>${esc((diag.tables || []).length)}</strong></div>
+    <div class="diag-row wide"><span>Core rows</span><strong>${core.map((table) => `${table}: ${Number(counts[table] || 0).toLocaleString()}`).join(" · ") || "none"}</strong></div>`;
+      $2("#diagnosticsStatus").textContent = diag.error || ((diag.missing_expected_tables || []).length ? `Missing expected tables: ${diag.missing_expected_tables.join(", ")}` : "Database looks healthy.");
+      lastDiagnostics = diag;
+      window.lastDiagnostics = diag;
+    }
+    async function copyDiagnostics() {
+      if (!lastDiagnostics) await loadDiagnostics2();
+      showSelectableCopy2("Diagnostics JSON", JSON.stringify(lastDiagnostics, null, 2));
+    }
+    async function refreshAuthState2() {
+      authState = await api2("/api/auth/status");
+      setCsrfToken2(authState.csrf_token || "");
+      return authState;
+    }
+    async function loadAuthStatus2() {
+      const data = await refreshAuthState2();
+      const cfg = data.config || {};
+      $2("#configHost").value = cfg.host || "";
+      $2("#configPort").value = cfg.port || "";
+      $2("#configDbPath").value = cfg.db_path || "";
+      const urls = [`This Mac: ${cfg.local_url || ""}`];
+      if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
+      $2("#configStatus").textContent = `Current access URLs — ${urls.join(" · ")}`;
+      authState = data;
+      $2("#authEnabled").checked = !!data.auth_enabled;
+      $2("#authStatus").textContent = data.has_password ? "Password is set." : "No password set.";
+      $2("#memoryAdminEnabled").checked = !!cfg.memory_admin_enabled;
+      $2("#memoryAdminStatus").textContent = cfg.memory_admin_enabled ? ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0") ? "Local-only admin mode is enabled. Mutations are audited; password is only required for LAN/non-local hosts." : "Admin maintenance mode is enabled. LAN/non-local mutations require password auth and are audited." : "Admin maintenance mode is disabled; dashboard is read-only.";
+    }
+    function bindControls() {
+      $2("#loginButton").onclick = async () => {
+        try {
+          await runButtonAction2($2("#loginButton"), "Signing in...", () => postJson2("/api/auth/login", { password: $2("#loginPassword").value }), { tone: "success", title: "Signed in" });
+          hideLogin2();
+          $2("#loginError").textContent = "";
+          await refreshAuthState2();
+          loadStats2();
+        } catch (error) {
+          $2("#loginError").textContent = error.message;
+        }
+      };
+      $2("#loginPassword").onkeydown = (event) => {
+        if (event.key === "Enter") $2("#loginButton").click();
+      };
+      $2("#refreshDiagnostics").onclick = loadDiagnostics2;
+      $2("#copyDiagnostics").onclick = copyDiagnostics;
+      $2("#saveRuntimeConfig").onclick = async () => {
+        try {
+          const body = { host: $2("#configHost").value.trim(), port: $2("#configPort").value.trim(), db_path: $2("#configDbPath").value.trim() };
+          const result = await runButtonAction2($2("#saveRuntimeConfig"), "Saving...", () => postJson2("/api/config", body), { tone: "success", title: "Server settings saved", body: "Restart the dashboard to apply host, port, or database changes." });
+          const cfg = result.config || {};
+          $2("#configHost").value = cfg.host || "";
+          $2("#configPort").value = cfg.port || "";
+          $2("#configDbPath").value = cfg.db_path || "";
+          const urls = [`This Mac: ${cfg.local_url || ""}`];
+          if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
+          $2("#configStatus").textContent = `${result.message || "Saved. Restart the dashboard to apply server/database changes."} ${urls.join(" · ")}`;
+        } catch (error) {
+          $2("#configStatus").textContent = error.message;
+        }
+      };
+      $2("#saveAuth").onclick = async () => {
+        try {
+          const body = { auth_enabled: $2("#authEnabled").checked };
+          if ($2("#authPassword").value) body.password = $2("#authPassword").value;
+          const result = await runButtonAction2($2("#saveAuth"), "Saving...", () => postJson2("/api/config", body), { tone: "success", title: "Auth settings saved" });
+          $2("#authPassword").value = "";
+          $2("#authStatus").textContent = result.message || "Saved";
+        } catch (error) {
+          $2("#authStatus").textContent = error.message;
+        }
+      };
+      $2("#clearAuth").onclick = async () => {
+        try {
+          const ok = await confirmAction2({ title: "Disable password auth?", description: "This clears the dashboard password and disables password auth.", confirmText: "Disable auth", tone: "warn" });
+          if (!ok) return;
+          const result = await runButtonAction2($2("#clearAuth"), "Disabling...", () => postJson2("/api/config", { clear_password: true }), { tone: "success", title: "Password auth disabled" });
+          $2("#authEnabled").checked = false;
+          $2("#authPassword").value = "";
+          $2("#memoryAdminEnabled").checked = !!(result.config && result.config.memory_admin_enabled);
+          $2("#authStatus").textContent = result.message || "Auth disabled";
+          await loadAuthStatus2();
+        } catch (error) {
+          $2("#authStatus").textContent = error.message;
+        }
+      };
+      $2("#saveMemoryAdmin").onclick = async () => {
+        try {
+          const result = await runButtonAction2($2("#saveMemoryAdmin"), "Saving...", () => postJson2("/api/config", { memory_admin_enabled: $2("#memoryAdminEnabled").checked }), { tone: "success", title: "Memory admin settings saved" });
+          authState.config = result.config || {};
+          $2("#memoryAdminStatus").textContent = result.message || "Saved";
+          await loadAuthStatus2();
+        } catch (error) {
+          $2("#memoryAdminStatus").textContent = error.message;
+        }
+      };
+      $2("#createBackup").onclick = async () => {
+        try {
+          const result = await runButtonAction2($2("#createBackup"), "Creating...", () => postJson2("/api/admin/backup", {}), (response) => ({ tone: "success", title: "Backup created", body: response.backup?.path || "" }));
+          $2("#memoryAdminStatus").textContent = `Backup created: ${result.backup.path}`;
+        } catch (error) {
+          $2("#memoryAdminStatus").textContent = error.message;
+        }
+      };
+      $2("#viewAuditLog").onclick = async () => {
+        try {
+          const result = await api2("/api/admin/audit?limit=50");
+          showDetail2(result.items, "Memory audit log");
+        } catch (error) {
+          $2("#memoryAdminStatus").textContent = error.message;
+        }
+      };
+      $2("#logoutAuth").onclick = async () => {
+        await runButtonAction2($2("#logoutAuth"), "Logging out...", () => postJson2("/api/auth/logout", {}), { tone: "success", title: "Logged out" });
+        setCsrfToken2("");
+        showLogin2();
+      };
+    }
+    return {
+      bindControls,
+      canAdmin: canAdmin2,
+      hideLogin: hideLogin2,
+      loadAuthStatus: loadAuthStatus2,
+      loadDiagnostics: loadDiagnostics2,
+      loadRuntimeDiagnostics: loadRuntimeDiagnostics2,
+      refreshAuthState: refreshAuthState2,
+      setAuthState,
+      showLogin: showLogin2
+    };
+  }
+
   // static/src/features/graph.js
   var GRAPH_WIDTH = 1e3;
   var GRAPH_HEIGHT = 650;
@@ -1553,50 +2091,49 @@
     return { loadInsights: loadInsights2, disposeInsightsCharts: disposeInsightsCharts2 };
   }
 
-  // static/src/utils/a11y.js
-  var FOCUSABLE_SELECTOR = [
-    "a[href]",
-    "button:not([disabled])",
-    "input:not([disabled])",
-    "select:not([disabled])",
-    "textarea:not([disabled])",
-    '[tabindex]:not([tabindex="-1"])'
-  ].join(",");
-  function focusableElements(container) {
-    if (!container) return [];
-    return [...container.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
-      (el) => !el.hasAttribute("hidden") && !el.closest(".hidden")
-    );
-  }
-  function trapFocus(container) {
-    const trigger = document.activeElement;
-    const onKeydown = (event) => {
-      if (event.key !== "Tab") return;
-      const focusable = focusableElements(container);
-      if (!focusable.length) {
-        event.preventDefault();
-        return;
+  // static/src/visualisers/chrome.js
+  function createVisualiserChrome({ $: $2, redrawCanvas, resizeThree: resizeThree2, resizeMemoryPalace: resizeMemoryPalace2 }) {
+    function responsiveFill(width, height) {
+      const w = Math.max(0, Number(width) || 0);
+      const h = Math.max(0, Number(height) || 0);
+      if (w < 760 || h < 520) return 1;
+      const widthFill = Math.max(0, Math.min(1, (w - 760) / 760));
+      const heightFill = Math.max(0, Math.min(1, (h - 520) / 360));
+      return 1 + Math.min(0.22, widthFill * 0.16 + heightFill * 0.06);
+    }
+    async function toggleFullscreen(selector) {
+      const el = $2(selector);
+      if (!el || !document.fullscreenEnabled) return;
+      if (document.fullscreenElement === el) {
+        await document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
       }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const current = document.activeElement;
-      if (event.shiftKey && current === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && current === last) {
-        event.preventDefault();
-        first.focus();
-      } else if (!container.contains(current)) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    container.addEventListener("keydown", onKeydown);
-    return function releaseFocusTrap({ restoreFocus = true } = {}) {
-      container.removeEventListener("keydown", onKeydown);
-      if (restoreFocus && trigger && document.contains(trigger) && typeof trigger.focus === "function") {
-        trigger.focus();
-      }
+    }
+    async function exitFullscreen(event) {
+      event?.stopPropagation?.();
+      if (document.fullscreenElement) await document.exitFullscreen();
+    }
+    function updateFullscreenButtons() {
+      const current = document.fullscreenElement;
+      const constellation = current === $2(".constellation-wrap");
+      const three = current === $2("#threeViewport");
+      const palace = current === $2("#palaceViewport");
+      const constellationButton = $2("#constellationFullscreen");
+      const threeButton = $2("#threeFullscreen");
+      const palaceButton = $2("#palaceFullscreen");
+      if (constellationButton) constellationButton.textContent = constellation ? "Exit fullscreen" : "Fullscreen";
+      if (threeButton) threeButton.textContent = three ? "Exit fullscreen" : "Fullscreen";
+      if (palaceButton) palaceButton.textContent = palace ? "Exit fullscreen" : "Fullscreen";
+      redrawCanvas();
+      resizeThree2();
+      resizeMemoryPalace2();
+    }
+    return {
+      exitFullscreen,
+      responsiveFill,
+      toggleFullscreen,
+      updateFullscreenButtons
     };
   }
 
@@ -1609,7 +2146,6 @@
   var THEME_KEY = "mnemosyne-dashboard-theme";
   var VISUALISER_MODE_KEY = "mnemosyne-dashboard-visualiser-mode";
   var consolidationState = [];
-  var authState = { config: {}, auth_enabled: false, authenticated: true };
   var realtimeState = { paused: false, source: null, events: [], status: null };
   var LIVE_MEMORY_PAGE_SIZE = 25;
   var liveMemoryItems = [];
@@ -1620,7 +2156,6 @@
   var currentRoute = { tab: "overview" };
   var applyingHistory = false;
   var lastBootError = null;
-  var drawerFocusRelease = null;
   var bulkSelection = /* @__PURE__ */ new Set();
   var latestMemoryItems = [];
   var memoryOffset = 0;
@@ -1648,31 +2183,73 @@
     const preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
     setTheme(saved || preferred);
   }
-  var loginFocusRelease = null;
-  function showLogin() {
-    const overlay = $("#loginOverlay");
-    if (!overlay) return;
-    const wasHidden = overlay.classList.contains("hidden");
-    overlay.classList.remove("hidden");
-    if (wasHidden) {
-      loginFocusRelease = trapFocus(overlay);
-      $("#loginPassword")?.focus();
-    }
-  }
-  function hideLogin() {
-    const overlay = $("#loginOverlay");
-    if (!overlay) return;
-    overlay.classList.add("hidden");
-    loginFocusRelease?.();
-    loginFocusRelease = null;
-  }
+  var settingsController;
   var { api, postJson, setCsrfToken } = createApiClient({
-    onUnauthorized: showLogin,
+    onUnauthorized: () => settingsController?.showLogin(),
     devTiming: localStorage.getItem("mnemosyne-debug-api") === "1",
     onTiming: (info) => console.debug("[api]", info)
   });
+  settingsController = createSettingsController({
+    $,
+    api,
+    postJson,
+    setCsrfToken,
+    confirmAction,
+    runButtonAction,
+    showDetail,
+    showSelectableCopy,
+    loadStats
+  });
+  function showLogin() {
+    settingsController.showLogin();
+  }
+  function hideLogin() {
+    settingsController.hideLogin();
+  }
+  function refreshAuthState() {
+    return settingsController.refreshAuthState();
+  }
+  function loadAuthStatus() {
+    return settingsController.loadAuthStatus();
+  }
+  function loadDiagnostics() {
+    return settingsController.loadDiagnostics();
+  }
+  function loadRuntimeDiagnostics() {
+    return settingsController.loadRuntimeDiagnostics();
+  }
+  var detailDrawer = createDetailDrawerController({
+    $,
+    $$,
+    api,
+    postJson,
+    bindActivatable,
+    canAdmin,
+    confirmAction,
+    askImportance,
+    askReplacement,
+    askVeracity,
+    askExpiry,
+    runButtonAction,
+    refreshAuthState,
+    loadStats,
+    loadMemories,
+    openActionModal,
+    pushRoute,
+    getCurrentRoute: () => currentRoute,
+    memoryRouteState,
+    switchTab
+  });
   var { loadGraph, resetGraphView } = createGraphFeature({ $, $$, api, showDetail, switchTab });
   var { loadInsights, disposeInsightsCharts } = createChartsFeature({ $, api, switchTab, loadMemories });
+  var visualiserChrome = createVisualiserChrome({
+    $,
+    redrawCanvas: () => {
+      if (isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data);
+    },
+    resizeThree,
+    resizeMemoryPalace
+  });
   var reviewController = createReviewController({
     $,
     $$,
@@ -1742,7 +2319,7 @@
     try {
       const r = await fetch("/api/auth/status", { cache: "no-store" });
       status = await r.json();
-      if (r.ok) authState = status;
+      if (r.ok) settingsController.setAuthState(status);
     } catch {
     }
     const authRequired = !!(status && status.auth_enabled && !status.authenticated);
@@ -1815,19 +2392,7 @@
     $("#memorySort").value = "recent";
   }
   function closeDetail(opts = {}) {
-    $("#detail").classList.add("hidden");
-    drawerFocusRelease?.();
-    drawerFocusRelease = null;
-    if (opts.push !== false) pushRoute(currentRoute?.tab === "memories" ? memoryRouteState() : routeTabState(currentRoute?.tab || "overview"));
-  }
-  function activateDrawerFocusTrap() {
-    const drawer = $("#detail");
-    const wasHidden = drawer.classList.contains("hidden");
-    drawer.classList.remove("hidden");
-    if (wasHidden) {
-      drawerFocusRelease = trapFocus(drawer);
-      ($("#closeDetail") || drawer).focus();
-    }
+    detailDrawer.closeDetail(opts);
   }
   async function applyRoute(state) {
     applyingHistory = true;
@@ -1846,34 +2411,10 @@
     }
   }
   function showSelectableCopy(label, value) {
-    openActionModal({
-      title: label,
-      description: "Select the text below and press Cmd/Ctrl+C to copy. This works on non-HTTPS local dashboards.",
-      kicker: "Copy",
-      confirmText: "Done",
-      bodyHtml: `<label class="modal-field"><span>${esc(label)}</span><textarea id="manualCopyValue" class="copy-value" rows="4" readonly>${esc(value || "")}</textarea></label>`,
-      readValue: () => true
-    });
-    setTimeout(() => {
-      const el = $("#manualCopyValue");
-      el?.focus();
-      el?.select();
-    }, 60);
+    detailDrawer.showSelectableCopy(label, value);
   }
   function showDetail(obj, title = "Detail", opts = {}) {
-    const titleEl = document.querySelector(".drawer-title");
-    if (titleEl) titleEl.textContent = title;
-    $("#detailBody").classList.remove("html-detail");
-    $("#detailBody").textContent = JSON.stringify(obj, null, 2);
-    activateDrawerFocusTrap();
-    if (opts.push !== false) pushRoute(currentRoute || routeTabState());
-  }
-  function showHtmlDetail(html, title = "Detail") {
-    const titleEl = document.querySelector(".drawer-title");
-    if (titleEl) titleEl.textContent = title;
-    $("#detailBody").classList.add("html-detail");
-    $("#detailBody").innerHTML = html;
-    activateDrawerFocusTrap();
+    detailDrawer.showDetail(obj, title, opts);
   }
   function modalTemplate() {
     let modal = $("#actionModal");
@@ -2109,37 +2650,16 @@
     return $("#constellation")?.classList.contains("active");
   }
   function visualiserResponsiveFill(width, height) {
-    const w = Math.max(0, Number(width) || 0);
-    const h = Math.max(0, Number(height) || 0);
-    if (w < 760 || h < 520) return 1;
-    const widthFill = Math.max(0, Math.min(1, (w - 760) / 760));
-    const heightFill = Math.max(0, Math.min(1, (h - 520) / 360));
-    return 1 + Math.min(0.22, widthFill * 0.16 + heightFill * 0.06);
+    return visualiserChrome.responsiveFill(width, height);
   }
   async function toggleVisualiserFullscreen(selector) {
-    const el = $(selector);
-    if (!el || !document.fullscreenEnabled) return;
-    if (document.fullscreenElement === el) await document.exitFullscreen();
-    else await el.requestFullscreen();
+    await visualiserChrome.toggleFullscreen(selector);
   }
   async function exitVisualiserFullscreen(event) {
-    event?.stopPropagation?.();
-    if (document.fullscreenElement) await document.exitFullscreen();
+    await visualiserChrome.exitFullscreen(event);
   }
   function updateVisualiserFullscreenButtons() {
-    const current = document.fullscreenElement;
-    const legacy = current === $(".constellation-wrap");
-    const three = current === $("#threeViewport");
-    const palace = current === $("#palaceViewport");
-    const legacyButton = $("#constellationFullscreen");
-    const threeButton = $("#threeFullscreen");
-    const palaceButton = $("#palaceFullscreen");
-    if (legacyButton) legacyButton.textContent = legacy ? "Exit fullscreen" : "Fullscreen";
-    if (threeButton) threeButton.textContent = three ? "Exit fullscreen" : "Fullscreen";
-    if (palaceButton) palaceButton.textContent = palace ? "Exit fullscreen" : "Fullscreen";
-    if (isCanvasVisualiserActive() && constellationScene.data) drawConstellation(constellationScene.data);
-    if (threeVis.renderer) resizeThree();
-    if (memoryPalace.renderer) resizeMemoryPalace();
+    visualiserChrome.updateFullscreenButtons();
   }
   function switchTab(name, opts = {}) {
     const section = sectionFor(name);
@@ -2321,39 +2841,6 @@
     ];
     const delta = $("#settingsDeltaSync");
     if (delta) delta.innerHTML = cards.map(([label, num]) => `<div class="realtime-kv"><strong>${esc(label)}</strong><span>${esc(num)}</span></div>`).join("") + `<div class="realtime-kv"><strong>Transport</strong><span>${esc(status.transport || "sse")}</span></div><div class="realtime-kv"><strong>Tables</strong><span>${esc((status.deltasync_tables || []).join(", ") || "none")}</span></div><div class="realtime-kv"><strong>DeltaSync methods</strong><span>${esc((status.deltasync_methods || []).join(", ") || "none")}</span></div><div class="realtime-kv"><strong>Event types</strong><span>${esc((status.event_types || []).join(", ") || "none")}</span></div><div class="realtime-kv"><strong>Payload policy</strong><span>${esc(status.payload_policy || "private dashboard payload")}</span></div><div class="realtime-kv"><strong>DB modified</strong><span>${esc(status.db_modified_at || "")}</span></div>`;
-  }
-  function runtimeRow(label, value, opts = {}) {
-    const safe = value === void 0 || value === null || value === "" ? "—" : value;
-    return `<div class="diag-row ${opts.wide ? "wide" : ""}"><span>${esc(label)}</span><strong title="${esc(safe)}">${esc(safe)}</strong></div>`;
-  }
-  function renderRuntimeDiagnostics(runtime) {
-    const el = $("#runtimeDiagnostics");
-    if (!el) return;
-    const probe = runtime.probe || {};
-    const cfg = runtime.config || {};
-    const health = runtime.running && runtime.reachable && !runtime.stale_pid && !runtime.runtime_stale ? "Healthy" : "Needs attention";
-    const started = runtime.started_at ? prettyTime(Number(runtime.started_at) * 1e3) : "";
-    el.innerHTML = [
-      runtimeRow("Status", health),
-      runtimeRow("PID", runtime.pid),
-      runtimeRow("PID file", runtime.pid_file_pid),
-      runtimeRow("Listener PID", (runtime.listener_pids || []).join(", ") || "none"),
-      runtimeRow("Launch source", runtime.runtime_source || "server.py"),
-      runtimeRow("Stale PID", runtime.stale_pid ? "yes — repaired on restart/start" : "no"),
-      runtimeRow("Runtime stale", runtime.runtime_stale ? "yes" : "no"),
-      runtimeRow("Probe", `${probe.status || "n/a"} ${probe.url || ""}`, { wide: true }),
-      runtimeRow("Local URL", cfg.local_url || "", { wide: true }),
-      runtimeRow("LAN URL", cfg.lan_url || "not exposed", { wide: true }),
-      runtimeRow("Started", started || runtime.started_at || "", { wide: true })
-    ].join("");
-  }
-  async function loadRuntimeDiagnostics() {
-    try {
-      renderRuntimeDiagnostics(await api(endpoints.runtimeStatus()));
-    } catch (e) {
-      const el = $("#runtimeDiagnostics");
-      if (el) el.innerHTML = `<div class="state-card state-error"><strong>Runtime diagnostics unavailable</strong><p>${esc(e.message)}</p></div>`;
-    }
   }
   async function loadRealtimePanel() {
     try {
@@ -2582,195 +3069,16 @@
     });
   }
   function bindMemoryClicks(root) {
-    root.querySelectorAll(".session-link").forEach((btn) => btn.onclick = (e) => {
-      e.stopPropagation();
-      openSessionDetail(btn.dataset.session || "");
-    });
-    root.querySelectorAll(".item[data-id]").forEach((el) => bindActivatable(el, (e) => {
-      if (e.target.closest(".session-link,button,a,label,input")) return;
-      openMemoryDetail(el.dataset.id);
-    }));
+    detailDrawer.bindMemoryClicks(root);
   }
   function canAdmin() {
-    const cfg = authState.config || {};
-    const localOnly = ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0");
-    return !!(cfg.memory_admin_enabled && (localOnly || authState.auth_enabled && authState.authenticated));
-  }
-  function whyMemoryHtml(item) {
-    const reasons = [];
-    const q = $("#memoryQuery")?.value.trim();
-    const source = $("#memorySource")?.value;
-    const scope = $("#memoryScope")?.value;
-    const session = $("#memorySession")?.value;
-    const status = $("#memoryStatus")?.value;
-    const veracity = $("#memoryVeracity")?.value;
-    const degradation = $("#memoryDegradation")?.value;
-    const trustPreset = $("#memoryTrustPreset")?.value;
-    const sort = $("#memorySort")?.value;
-    if (q) reasons.push(`matches browser query “${q}” across content, id, session, source, or scope`);
-    if (source && item.source === source) reasons.push(`source filter matched ${source}`);
-    if (scope && item.scope === scope) reasons.push(`scope filter matched ${scope}`);
-    if (session && item.session_id === session) reasons.push(`session filter matched ${session}`);
-    if (veracity && item.veracity === veracity) reasons.push(`trust filter matched ${veracity}`);
-    if (degradation && String(item.degradation_tier || "") === String(degradation)) reasons.push(`lifecycle filter matched tier ${degradation}`);
-    if (trustPreset === "contaminated" && item.contaminated) reasons.push("needs-review filter matched");
-    if (trustPreset === "degraded" && item.degraded_at) reasons.push("degraded-only filter matched");
-    if (!reasons.length) reasons.push("shown from the current list/search context");
-    return `<div class="result-section why-panel"><h3>Why shown <span>${esc(item.status || "active")}</span></h3><div class="diag-grid compact">
-    <div class="diag-row"><span>Reason</span><strong>${esc(reasons.join(" · "))}</strong></div>
-    <div class="diag-row"><span>Ranking</span><strong>${esc(sort || "recent")} · importance ${Number(item.importance ?? 0).toFixed(2)} · recalled ${Number(item.recall_count || 0).toLocaleString()}×</strong></div>
-    <div class="diag-row"><span>Freshness</span><strong>created ${esc(prettyTime(item.created_at) || item.created_at || "unknown")} · last recalled ${esc(prettyTime(item.last_recalled) || item.last_recalled || "never")}</strong></div>
-    <div class="diag-row"><span>Origin</span><strong>${esc(item.memory_kind || item.tier || "memory")} · ${esc(item.source || "unknown source")} · ${esc(item.scope || "unknown scope")}</strong></div>
-  </div></div>`;
-  }
-  function memoryDetailHtml(item) {
-    const admin = canAdmin();
-    const mutable = isMutableMemory(item);
-    const adminActions = admin && mutable ? '<button id="expireMemory" class="drawer-action warn">Expire now</button><button id="editVeracity" class="drawer-action">Set trust</button><button id="editExpiry" class="drawer-action">Set expiry</button><button id="editImportance" class="drawer-action">Edit importance</button><button id="supersedeMemory" class="drawer-action primary">Supersede</button>' : "";
-    const actionNote = admin ? mutable ? "" : `<span class="muted">This memory is ${esc(item.status || "not active")}; mutation actions are disabled.</span>` : '<span class="muted">Enable Settings → Memory maintenance to modify memories.</span>';
-    const trust = String(item.veracity || "unknown").toLowerCase();
-    const lifecycle = item.degradation_label ? `${item.degradation_label} · tier ${item.degradation_tier}` : "not degraded";
-    return `
-    <div class="memory-detail">
-      ${meta(item, { sessionLink: false })}
-      <div class="content detail-content">${esc(item.content)}</div>
-      <div class="trust-strip">
-        <span class="trust-chip trust-${esc(trust)}">${esc(trust)} trust · ×${Number(item.trust_weight ?? 0).toFixed(2)}</span>
-        <span class="trust-chip lifecycle-${esc(item.degradation_label || "none")}">${esc(lifecycle)}${item.degradation_weight != null ? ` · ×${Number(item.degradation_weight).toFixed(2)}` : ""}</span>
-        <span class="trust-chip">effective ×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</span>
-        ${item.contaminated ? '<span class="trust-chip review">needs review</span>' : ""}
-      </div>
-      ${whyMemoryHtml(item)}
-      <div class="diag-grid compact">
-        <div class="diag-row"><span>ID</span><strong>${esc(item.id)}</strong></div>
-        <div class="diag-row"><span>Session</span>${item.session_id && item.session_id !== "default" ? `<button id="memorySessionLink" class="diag-link" title="Open session: ${esc(item.session_id)}">${esc(item.session_id)}</button>` : `<strong>${esc(item.session_id || "default")}</strong>`}</div>
-        <div class="diag-row"><span>Source</span><strong>${esc(item.source || "unknown")}</strong></div>
-        <div class="diag-row"><span>Trust</span><strong>${esc(trust)} · recall weight ×${Number(item.trust_weight ?? 0).toFixed(2)}${item.contaminated ? " · review recommended" : ""}</strong></div>
-        <div class="diag-row"><span>Lifecycle</span><strong>${esc(lifecycle)} · degraded ${esc(item.degraded_at || "never")} · recall weight ×${Number(item.degradation_weight ?? 1).toFixed(2)}</strong></div>
-        <div class="diag-row"><span>Effective weight</span><strong>×${Number(item.effective_memory_weight ?? 0).toFixed(2)}</strong></div>
-        <div class="diag-row"><span>Valid until</span><strong>${esc(item.valid_until || "none")}</strong></div>
-        <div class="diag-row"><span>Superseded by</span><strong>${esc(item.superseded_by || "none")}</strong></div>
-      </div>
-      <div class="drawer-actions memory-actions">
-        <button id="copyMemoryId" class="drawer-action">Copy ID</button>
-        ${adminActions}${actionNote}
-      </div>
-      <p id="memoryActionStatus" class="muted"></p>
-    </div>`;
+    return settingsController.canAdmin();
   }
   async function openMemoryDetail(memoryId, opts = {}) {
-    await refreshAuthState();
-    const item = (await api("/api/memory?id=" + encodeURIComponent(memoryId))).item;
-    showHtmlDetail(memoryDetailHtml(item), "Memory detail");
-    if (opts.push !== false) pushRoute({ tab: "memories", drawer: { type: "memory", id: memoryId } });
-    const sessionLink = $("#memorySessionLink");
-    if (sessionLink) sessionLink.onclick = () => openSessionDetail(item.session_id || "");
-    $("#copyMemoryId").onclick = () => showSelectableCopy("Memory ID", item.id);
-    if (!canAdmin() || !isMutableMemory(item)) return;
-    const backup = () => $("#backupBeforeMutation") ? $("#backupBeforeMutation").checked : true;
-    $("#expireMemory").onclick = async () => {
-      const ok = await confirmAction({
-        title: "Expire this memory?",
-        description: "It will disappear from active recall, but the original record stays available for history and audit.",
-        confirmText: "Expire memory",
-        tone: "warn"
-      });
-      if (!ok) return;
-      try {
-        const r = await runButtonAction($("#expireMemory"), "Expiring...", () => postJson("/api/admin/memory/invalidate", { memory_id: item.id, backup: backup() }), () => ({ tone: "success", title: "Memory expired", body: "The original remains in history and audit." }));
-        $("#memoryActionStatus").textContent = `Expired. Backup: ${r.backup?.path || "not created"}`;
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#editImportance").onclick = async () => {
-      const v = await askImportance(item.importance ?? 0.5);
-      if (v === null) return;
-      try {
-        const r = await runButtonAction($("#editImportance"), "Saving...", () => postJson("/api/admin/memory/importance", { memory_id: item.id, importance: Number(v), backup: backup() }), () => ({ tone: "success", title: "Importance updated", body: `New value: ${Number(v).toFixed(2)}` }));
-        $("#memoryActionStatus").textContent = `Importance updated to ${r.importance}.`;
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#editVeracity").onclick = async () => {
-      const v = await askVeracity(item.veracity || "unknown");
-      if (v === null) return;
-      try {
-        const r = await runButtonAction($("#editVeracity"), "Saving...", () => postJson("/api/admin/memory/veracity", { memory_id: item.id, veracity: v, backup: backup() }), () => ({ tone: "success", title: "Trust updated", body: `Trust is now ${v}.` }));
-        $("#memoryActionStatus").textContent = `Trust updated to ${r.veracity}.`;
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#editExpiry").onclick = async () => {
-      const v = await askExpiry(item.valid_until || "");
-      if (v === null) return;
-      try {
-        const r = await runButtonAction($("#editExpiry"), "Saving...", () => postJson("/api/admin/memory/expiry", { memory_id: item.id, valid_until: v, backup: backup() }), () => ({ tone: "success", title: "Expiry updated", body: v ? `Valid until ${v}` : "Scheduled expiry cleared." }));
-        $("#memoryActionStatus").textContent = `Expiry ${r.valid_until ? `set to ${r.valid_until}` : "cleared"}.`;
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(item.id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-    $("#supersedeMemory").onclick = async () => {
-      const replacement = await askReplacement(item.content || "");
-      if (replacement === null) return;
-      try {
-        const r = await runButtonAction($("#supersedeMemory"), "Creating...", () => postJson("/api/admin/memory/supersede", { memory_id: item.id, content: replacement, importance: Number(item.importance ?? 0.5), backup: backup() }), () => ({ tone: "success", title: "Memory superseded", body: "Opened the replacement memory." }));
-        $("#memoryActionStatus").textContent = `Superseded by ${r.replacement_id}.`;
-        $("#memoryStatus").value = "all";
-        await loadStats();
-        await loadMemories();
-        await openMemoryDetail(r.replacement_id);
-      } catch (e) {
-        $("#memoryActionStatus").textContent = e.message;
-      }
-    };
-  }
-  function sessionEvent(e) {
-    return `<div class="session-event" data-json='${esc(JSON.stringify(e.item))}'><div class="meta"><span class="badge">${esc(e.type)}</span><span>${esc(e.timestamp || "")}</span></div><div class="content"><strong>${esc(e.title)}</strong><br>${esc(e.preview || "")}</div></div>`;
+    await detailDrawer.openMemoryDetail(memoryId, opts);
   }
   async function openSessionDetail(sessionId, opts = {}) {
-    if (!sessionId || sessionId === "unknown") return;
-    const data = await api(`/api/session?id=${encodeURIComponent(sessionId)}&limit=200`);
-    const c = data.counts || {};
-    showHtmlDetail(`
-    <div class="session-summary">
-      <div class="diag-pill"><strong>${esc(c.memories || 0)}</strong><span>memories</span></div>
-      <div class="diag-pill"><strong>${esc(c.triples || 0)}</strong><span>triples</span></div>
-      <div class="diag-pill"><strong>${esc(c.consolidations || 0)}</strong><span>consolidations</span></div>
-    </div>
-    <div class="drawer-actions session-actions"><button id="sessionBrowseMemories" class="drawer-action primary">Browse memories</button><button id="sessionTimeline" class="drawer-action">Timeline by session</button><button id="sessionCopy" class="drawer-action">Copy session ID</button></div>
-    <div class="result-section"><h3>Timeline <span>${esc(c.events || 0)}</span></h3><div class="timeline">${(data.events || []).map(sessionEvent).join("") || '<p class="muted">No events for this session.</p>'}</div></div>
-  `, `Session ${sessionId}`);
-    if (opts.push !== false) pushRoute({ tab: "timelineView", drawer: { type: "session", id: sessionId } });
-    $("#sessionBrowseMemories").onclick = () => {
-      $("#memorySession").value = sessionId;
-      $("#memoryKind").value = "all";
-      $("#memoryQuery").value = "";
-      switchTab("memories");
-      closeDetail({ push: false });
-    };
-    $("#sessionTimeline").onclick = () => {
-      $("#timelineGroup").value = "session";
-      $("#timelineQuery").value = sessionId;
-      switchTab("timelineView");
-      closeDetail({ push: false });
-    };
-    $("#sessionCopy").onclick = () => showSelectableCopy("Session ID", sessionId);
-    $$("#detailBody .session-event").forEach((el) => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), "Session event detail")));
+    await detailDrawer.openSessionDetail(sessionId, opts);
   }
   async function loadTriples() {
     const q = $("#tripleQuery").value.trim();
@@ -2819,7 +3127,7 @@
     return `<div class="item" data-json='${esc(JSON.stringify(c))}'><div class="meta"><span class="badge">consolidation</span><span class="badge">${esc(c.items_consolidated)} items</span><span>${esc(c.created_at)}</span></div><div class="content">${esc(c.session_id || "")}: ${esc(c.summary_preview || "")}</div></div>`;
   }
   function bindJsonCards(root, title) {
-    root.querySelectorAll("[data-json]").forEach((el) => bindActivatable(el, () => showDetail(JSON.parse(el.dataset.json), title)));
+    detailDrawer.bindJsonCards(root, title);
   }
   async function runSearchFromInput(inputId) {
     const q = $(inputId)?.value.trim() || "";
@@ -3814,45 +4122,6 @@
   }
   async function loadConstellation() {
     drawConstellation(await api("/api/constellation?limit=240"));
-  }
-  async function loadDiagnostics() {
-    const diag = await api(endpoints.diagnostics());
-    const counts = diag.table_counts || {};
-    const core = ["working_memory", "episodic_memory", "triples", "consolidation_log"].filter((t) => t in counts);
-    $("#diagnosticsSummary").innerHTML = `
-    <div class="diag-row"><span>Status</span><strong>${diag.ok ? "OK" : "Needs attention"}</strong></div>
-    <div class="diag-row"><span>DB path</span><strong title="${esc(diag.db_path)}">${esc(diag.db_path)}</strong></div>
-    <div class="diag-row"><span>Readable</span><strong>${diag.readable ? "yes" : "no"}</strong></div>
-    <div class="diag-row"><span>Size</span><strong>${fmtBytes(diag.size_bytes)}</strong></div>
-    <div class="diag-row"><span>Last modified</span><strong>${esc(diag.modified_at || "n/a")}</strong></div>
-    <div class="diag-row"><span>Tables</span><strong>${esc((diag.tables || []).length)}</strong></div>
-    <div class="diag-row wide"><span>Core rows</span><strong>${core.map((t) => `${t}: ${Number(counts[t] || 0).toLocaleString()}`).join(" · ") || "none"}</strong></div>`;
-    $("#diagnosticsStatus").textContent = diag.error || ((diag.missing_expected_tables || []).length ? `Missing expected tables: ${diag.missing_expected_tables.join(", ")}` : "Database looks healthy.");
-    window.lastDiagnostics = diag;
-  }
-  async function copyDiagnostics() {
-    if (!window.lastDiagnostics) await loadDiagnostics();
-    showSelectableCopy("Diagnostics JSON", JSON.stringify(window.lastDiagnostics, null, 2));
-  }
-  async function refreshAuthState() {
-    authState = await api("/api/auth/status");
-    setCsrfToken(authState.csrf_token || "");
-    return authState;
-  }
-  async function loadAuthStatus() {
-    const data = await refreshAuthState();
-    const cfg = data.config || {};
-    $("#configHost").value = cfg.host || "";
-    $("#configPort").value = cfg.port || "";
-    $("#configDbPath").value = cfg.db_path || "";
-    const urls = [`This Mac: ${cfg.local_url || ""}`];
-    if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
-    $("#configStatus").textContent = `Current access URLs — ${urls.join(" · ")}`;
-    authState = data;
-    $("#authEnabled").checked = !!data.auth_enabled;
-    $("#authStatus").textContent = data.has_password ? "Password is set." : "No password set.";
-    $("#memoryAdminEnabled").checked = !!cfg.memory_admin_enabled;
-    $("#memoryAdminStatus").textContent = cfg.memory_admin_enabled ? ["127.0.0.1", "localhost", "::1"].includes(cfg.host || "0.0.0.0") ? "Local-only admin mode is enabled. Mutations are audited; password is only required for LAN/non-local hosts." : "Admin maintenance mode is enabled. LAN/non-local mutations require password auth and are audited." : "Admin maintenance mode is disabled; dashboard is read-only.";
   }
   var threeModulePromise = null;
   var threeVis = {
@@ -5637,95 +5906,9 @@
     if (e.key === "Enter") $("#memoriaPreferencesSearch").click();
   };
   $("#closeDetail").onclick = () => closeDetail();
-  $("#loginButton").onclick = async () => {
-    try {
-      await runButtonAction($("#loginButton"), "Signing in...", () => postJson("/api/auth/login", { password: $("#loginPassword").value }), { tone: "success", title: "Signed in" });
-      hideLogin();
-      $("#loginError").textContent = "";
-      await refreshAuthState();
-      loadStats();
-    } catch (e) {
-      $("#loginError").textContent = e.message;
-    }
-  };
-  $("#loginPassword").onkeydown = (e) => {
-    if (e.key === "Enter") $("#loginButton").click();
-  };
-  $("#refreshDiagnostics").onclick = loadDiagnostics;
-  $("#copyDiagnostics").onclick = copyDiagnostics;
-  $("#saveRuntimeConfig").onclick = async () => {
-    try {
-      const body = { host: $("#configHost").value.trim(), port: $("#configPort").value.trim(), db_path: $("#configDbPath").value.trim() };
-      const r = await runButtonAction($("#saveRuntimeConfig"), "Saving...", () => postJson("/api/config", body), { tone: "success", title: "Server settings saved", body: "Restart the dashboard to apply host, port, or database changes." });
-      const cfg = r.config || {};
-      $("#configHost").value = cfg.host || "";
-      $("#configPort").value = cfg.port || "";
-      $("#configDbPath").value = cfg.db_path || "";
-      const urls = [`This Mac: ${cfg.local_url || ""}`];
-      if (cfg.lan_url) urls.push(`LAN: ${cfg.lan_url}`);
-      $("#configStatus").textContent = `${r.message || "Saved. Restart the dashboard to apply server/database changes."} ${urls.join(" · ")}`;
-    } catch (e) {
-      $("#configStatus").textContent = e.message;
-    }
-  };
-  $("#saveAuth").onclick = async () => {
-    try {
-      const body = { auth_enabled: $("#authEnabled").checked };
-      if ($("#authPassword").value) body.password = $("#authPassword").value;
-      const r = await runButtonAction($("#saveAuth"), "Saving...", () => postJson("/api/config", body), { tone: "success", title: "Auth settings saved" });
-      $("#authPassword").value = "";
-      $("#authStatus").textContent = r.message || "Saved";
-    } catch (e) {
-      $("#authStatus").textContent = e.message;
-    }
-  };
-  $("#clearAuth").onclick = async () => {
-    try {
-      const ok = await confirmAction({ title: "Disable password auth?", description: "This clears the dashboard password and disables password auth.", confirmText: "Disable auth", tone: "warn" });
-      if (!ok) return;
-      const r = await runButtonAction($("#clearAuth"), "Disabling...", () => postJson("/api/config", { clear_password: true }), { tone: "success", title: "Password auth disabled" });
-      $("#authEnabled").checked = false;
-      $("#authPassword").value = "";
-      $("#memoryAdminEnabled").checked = !!(r.config && r.config.memory_admin_enabled);
-      $("#authStatus").textContent = r.message || "Auth disabled";
-      await loadAuthStatus();
-    } catch (e) {
-      $("#authStatus").textContent = e.message;
-    }
-  };
-  $("#saveMemoryAdmin").onclick = async () => {
-    try {
-      const r = await runButtonAction($("#saveMemoryAdmin"), "Saving...", () => postJson("/api/config", { memory_admin_enabled: $("#memoryAdminEnabled").checked }), { tone: "success", title: "Memory admin settings saved" });
-      authState.config = r.config || {};
-      $("#memoryAdminStatus").textContent = r.message || "Saved";
-      await loadAuthStatus();
-    } catch (e) {
-      $("#memoryAdminStatus").textContent = e.message;
-    }
-  };
-  $("#createBackup").onclick = async () => {
-    try {
-      const r = await runButtonAction($("#createBackup"), "Creating...", () => postJson("/api/admin/backup", {}), (result) => ({ tone: "success", title: "Backup created", body: result.backup?.path || "" }));
-      $("#memoryAdminStatus").textContent = `Backup created: ${r.backup.path}`;
-    } catch (e) {
-      $("#memoryAdminStatus").textContent = e.message;
-    }
-  };
-  $("#viewAuditLog").onclick = async () => {
-    try {
-      const r = await api("/api/admin/audit?limit=50");
-      showDetail(r.items, "Memory audit log");
-    } catch (e) {
-      $("#memoryAdminStatus").textContent = e.message;
-    }
-  };
+  settingsController.bindControls();
   $("#retryBootstrap").onclick = () => bootstrapDashboard().catch(handleInitError);
   $("#copyBootError").onclick = copyBootErrorDetails;
-  $("#logoutAuth").onclick = async () => {
-    await runButtonAction($("#logoutAuth"), "Logging out...", () => postJson("/api/auth/logout", {}), { tone: "success", title: "Logged out" });
-    setCsrfToken("");
-    showLogin();
-  };
   function toggleTheme() {
     setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
   }

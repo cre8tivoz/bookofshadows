@@ -627,7 +627,7 @@ Good one-session candidate. It is narrow and mostly mechanical, but it should st
 
 **Outcome:** `static/src/app-main.js` stops being the primary place where unrelated feature behavior accumulates.
 
-**Status:** In progress. Review controller extracted 2026-07-01.
+**Status:** In progress. Review, detail/session drawer, auth/settings, and shared visualiser chrome extracted 2026-07-02.
 
 **Scope:**
 
@@ -675,6 +675,27 @@ Do not do the entire extraction in one session unless the goal is explicitly a l
 - Kept `app-main.js` as the route/orchestration layer: the Review route now calls `reviewController.loadReview()`, and startup wiring calls `reviewController.bindGlobalControls()`.
 - Preserved existing Review helper tests and used the frontend bundle/test suite plus browser smoke as the regression guard for this controller slice.
 - Remaining 11C controller families: detail/session drawer, auth/settings, and visualisers.
+
+**Release 11C status update - 2026-07-02**
+
+- Extracted generic detail rendering, manual-copy modal handoff, memory detail drawer, session detail drawer, memory-card click binding, and JSON-card inspection binding into `static/src/features/detail-drawer.js`.
+- Kept existing app-wide function names in `app-main.js` as thin orchestration wrappers so graph, search, profile, timeline, visualiser, and settings callers continue to use the same surface.
+- Verified frontend bundle/tests, backend tests, ruff, compileall, and browser smoke after extraction.
+- Remaining 11C controller families: auth/settings and visualisers.
+
+**Release 11C status update - 2026-07-02, auth/settings slice**
+
+- Extracted password auth overlay handling, auth status/config hydration, memory-admin mode controls, backup/audit actions, database diagnostics, and runtime diagnostics into `static/src/features/settings-controller.js`.
+- Moved auth/admin state ownership out of `app-main.js`; the main file now exposes thin `canAdmin()`, `refreshAuthState()`, and settings loader wrappers for other controllers and route orchestration.
+- Verified frontend bundle/tests, backend tests, ruff, compileall, and browser smoke after extraction.
+- Remaining 11C controller family: visualisers.
+
+**Release 11C status update - 2026-07-02, visualiser chrome slice**
+
+- Added `static/src/visualisers/chrome.js` for shared visualiser fullscreen/chrome helpers.
+- Kept existing `app-main.js` wrapper names for fullscreen, exit, responsive fill, and button updates so current canvas/WebGL/FPS event wiring remains stable.
+- Verified frontend bundle/tests, backend tests, ruff, and compileall after extraction.
+- Remaining 11C visualiser work: split the canvas constellation, Three.js visualiser, and Mnemosyne Labyrinth implementations into dedicated visualiser modules.
 
 ### Release 11D - Visualiser Accessibility
 
