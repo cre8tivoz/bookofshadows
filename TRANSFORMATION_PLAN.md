@@ -100,20 +100,20 @@ Loading states, disabled states, keyboard navigation, focus management, empty st
 
 ### Tasks
 
-- [ ] Confirm repo remote is clean and disconnected from original fork lineage.
-- [ ] Run and record backend tests: `python -m pytest tests/ -v`.
-- [ ] Add a lightweight frontend smoke test if none exists.
-- [ ] Capture baseline screenshots for every major tab: Overview, Today, Visualiser, Review, Memories, Context Bank, Lifecycle, Knowledge Graph, MEMORIA, History, Settings.
-- [ ] Record baseline frontend payload sizes:
+- [x] Confirm repo remote is clean and disconnected from original fork lineage.
+- [x] Run and record backend tests: `python -m pytest tests/ -v`.
+- [x] Add a lightweight frontend smoke test if none exists.
+- [x] Capture baseline screenshots for every major tab: Overview, Today, Visualiser, Review, Memories, Context Bank, Lifecycle, Knowledge Graph, MEMORIA, History, Settings.
+- [x] Record baseline frontend payload sizes:
   - `static/app.js`
   - `static/style.css`
   - `static/vendor/three.module.min.js`
-- [ ] Record baseline performance in browser:
+- [x] Record baseline performance in browser:
   - first load
   - tab switch latency
   - memory search latency
   - visualiser open time
-- [ ] Add a local `docs/` folder if needed for screenshots and architecture docs.
+- [x] Add a local `docs/` folder if needed for screenshots and architecture docs.
 
 ### Acceptance criteria
 
@@ -121,6 +121,16 @@ Loading states, disabled states, keyboard navigation, focus management, empty st
 - Backend tests are green.
 - There is at least one repeatable browser smoke check.
 - No feature work begins without a known baseline.
+
+### Phase 0 status update - 2026-07-01
+
+- Baseline details live in `docs/PHASE_0_BASELINE.md`.
+- Remote state was recorded as `https://github.com/cre8tivoz/bookofshadows.git` on `main`, with the original review baseline taken from `codex/phase-0-baseline`.
+- Backend baseline was recorded as `45 passed`; the current post-Phase-4 suite also reports `45 passed`.
+- Screenshot coverage is generated from fictional mock data via `scripts/generate_mock_screenshots.py`; the manifest covers desktop and mobile baseline views under `docs/screenshots/`.
+- Payload sizes for `static/app.js`, `static/style.css`, and `static/vendor/three.module.min.js` are recorded in `docs/PHASE_0_BASELINE.md`.
+- Browser timing is a coarse repeatable smoke baseline from `scripts/frontend_smoke.py`. It records HTTP checks and representative Chrome route timings; it does not yet isolate lab-grade memory-search latency or visualiser-open latency.
+- Architecture and testing docs now live under `docs/ARCHITECTURE.md` and `docs/FRONTEND_TESTING.md`.
 
 ## Phase 1 - Frontend Architecture Extraction
 
