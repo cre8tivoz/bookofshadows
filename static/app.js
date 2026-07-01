@@ -506,7 +506,8 @@
   function isMutableMemory(item) {
     return String(item?.status || "active").toLowerCase() === "active";
   }
-  function memoryFilterParams(filters = {}, limit = 150) {
+  var MEMORY_PAGE_SIZE = 150;
+  function memoryFilterParams(filters = {}, limit = MEMORY_PAGE_SIZE, offset = 0) {
     const trustPreset = filters.trustPreset || "";
     return new URLSearchParams({
       kind: filters.kind || "",
@@ -521,8 +522,27 @@
       due_for_degradation: trustPreset === "due" ? "1" : "",
       status: filters.status || "",
       sort: filters.sort || "",
-      limit: String(limit)
+      limit: String(limit),
+      offset: String(offset)
     });
+  }
+  function mergeMemoryPage(existingItems, newItems, { append = false } = {}) {
+    const merged = append ? [...existingItems, ...newItems] : newItems;
+    return [...new Map(merged.map((item) => [item.id, item])).values()];
+  }
+  var MEMORY_FILTER_PRESETS = [
+    { key: "needs-review", label: "Needs review", filters: { kind: "all", status: "active", trust: "contaminated", sort: "importance" } },
+    { key: "high-importance", label: "High importance", filters: { kind: "all", status: "active", sort: "importance" } },
+    { key: "recently-recalled", label: "Recently recalled", filters: { kind: "all", status: "active", sort: "recall" } },
+    { key: "expiring-soon", label: "Expiring soon", filters: { kind: "all", status: "active", sort: "recent" }, special: "expiring-soon" },
+    { key: "tool-generated", label: "Tool-generated", filters: { kind: "all", status: "active", veracity: "tool" } },
+    { key: "unknown-trust", label: "Unknown trust", filters: { kind: "all", status: "active", veracity: "unknown" } }
+  ];
+  function memoryPresetByKey(key) {
+    return MEMORY_FILTER_PRESETS.find((preset) => preset.key === key) || null;
+  }
+  function sortByExpiringSoon(items) {
+    return items.filter((item) => item.valid_until).slice().sort((a, b) => Date.parse(a.valid_until) - Date.parse(b.valid_until));
   }
   function selectedMutableIds(items, selectedSet) {
     return items.filter((item) => selectedSet.has(item.id) && isMutableMemory(item)).map((item) => item.id);
@@ -845,6 +865,9 @@
   var latestReviewData = null;
   var REVIEW_PAGE_SIZE = 100;
   var latestMemoryItems = [];
+  var memoryOffset = 0;
+  var memoryHasMore = true;
+  var memoryListIsPreset = false;
   var latestReviewItems = [];
   var goChordUntil = 0;
   var toastTimer = 0;
@@ -1008,6 +1031,12 @@
     if ("trust" in filters) $("#memoryTrustPreset").value = filters.trust || "";
     if ("status" in filters) $("#memoryStatus").value = filters.status || "active";
     if ("sort" in filters) $("#memorySort").value = filters.sort || "recent";
+  }
+  function resetMemoryFilterControls() {
+    ["memoryQuery", "memorySource", "memoryScope", "memorySession", "memoryVeracity", "memoryDegradation", "memoryTrustPreset"].forEach((id) => $("#" + id).value = "");
+    $("#memoryKind").value = "all";
+    $("#memoryStatus").value = "active";
+    $("#memorySort").value = "recent";
   }
   function closeDetail(opts = {}) {
     $("#detail").classList.add("hidden");
@@ -1603,8 +1632,8 @@
     }));
     $$("#sessionBreakdown .break-row").forEach((row) => bindActivatable(row, () => openSessionDetail(row.dataset.filter || "")));
   }
-  async function loadMemories() {
-    const params = memoryFilterParams({
+  function currentMemoryFilterValues() {
+    return {
       kind: $("#memoryKind").value,
       q: $("#memoryQuery").value,
       source: $("#memorySource").value,
@@ -1615,19 +1644,84 @@
       trustPreset: $("#memoryTrustPreset").value,
       status: $("#memoryStatus").value,
       sort: $("#memorySort").value
-    });
+    };
+  }
+  function updateMemoryListMeta() {
+    const countEl = $("#memoryListCount");
+    if (countEl) countEl.textContent = `${latestMemoryItems.length.toLocaleString()} loaded`;
+    const loadBar = $("#memoryLoadBar");
+    if (loadBar) loadBar.classList.toggle("hidden", memoryListIsPreset || !memoryHasMore);
+  }
+  async function loadMemories() {
+    memoryListIsPreset = false;
+    memoryOffset = 0;
     $("#memoryList").innerHTML = skeletonHtml("Loading memories", 4);
     try {
+      const params = memoryFilterParams(currentMemoryFilterValues(), MEMORY_PAGE_SIZE, memoryOffset);
       const data = await api(endpoints.memories(params), { requestKey: "memories" });
-      latestMemoryItems = data.items || [];
+      const items = data.items || [];
+      latestMemoryItems = mergeMemoryPage([], items);
+      memoryOffset = items.length;
+      memoryHasMore = items.length === MEMORY_PAGE_SIZE;
       $("#memoryList").innerHTML = latestMemoryItems.map((item) => memoryItem(item, { selectable: true, selectedSet: bulkSelection })).join("") || stateHtml("empty", "No memories found.", "Try clearing filters or broadening the memory content search.");
       bindMemoryClicks($("#memoryList"));
       bindBulkMemoryControls();
       updateBulkBar();
+      updateMemoryListMeta();
+    } catch (e) {
+      if (isCancelledRequest(e)) return;
+      $("#memoryList").innerHTML = stateHtml("error", "Could not load memories.", e.message || "Try again.");
+      memoryHasMore = false;
+      updateMemoryListMeta();
+    }
+  }
+  async function loadMoreMemories() {
+    if (memoryListIsPreset || !memoryHasMore) return;
+    await runButtonAction($("#memoryLoadMore"), "Loading...", async () => {
+      const params = memoryFilterParams(currentMemoryFilterValues(), MEMORY_PAGE_SIZE, memoryOffset);
+      const data = await api(endpoints.memories(params), { requestKey: "memories-more" });
+      const items = data.items || [];
+      const seen = new Set(latestMemoryItems.map((item) => item.id));
+      const newItems = items.filter((item) => !seen.has(item.id));
+      latestMemoryItems = mergeMemoryPage(latestMemoryItems, items, { append: true });
+      memoryOffset += items.length;
+      memoryHasMore = items.length === MEMORY_PAGE_SIZE;
+      const newHtml = newItems.map((item) => memoryItem(item, { selectable: true, selectedSet: bulkSelection })).join("");
+      if (newHtml) $("#memoryList").insertAdjacentHTML("beforeend", newHtml);
+      bindMemoryClicks($("#memoryList"));
+      bindBulkMemoryControls();
+      updateBulkBar();
+      updateMemoryListMeta();
+    });
+  }
+  async function loadExpiringSoonPreset() {
+    memoryListIsPreset = true;
+    $("#memoryList").innerHTML = skeletonHtml("Loading memories", 4);
+    try {
+      const params = memoryFilterParams({ kind: "all", status: "active", sort: "recent" }, 500, 0);
+      const data = await api(endpoints.memories(params), { requestKey: "memories" });
+      latestMemoryItems = sortByExpiringSoon(data.items || []).slice(0, 100);
+      memoryHasMore = false;
+      $("#memoryList").innerHTML = latestMemoryItems.map((item) => memoryItem(item, { selectable: true, selectedSet: bulkSelection })).join("") || stateHtml("empty", "No memories with a scheduled expiry found.", "Expiring soon only lists active memories with an explicit expiry date set.");
+      bindMemoryClicks($("#memoryList"));
+      bindBulkMemoryControls();
+      updateBulkBar();
+      updateMemoryListMeta();
     } catch (e) {
       if (isCancelledRequest(e)) return;
       $("#memoryList").innerHTML = stateHtml("error", "Could not load memories.", e.message || "Try again.");
     }
+  }
+  function applyMemoryPreset(key) {
+    const preset = memoryPresetByKey(key);
+    if (!preset) return;
+    resetMemoryFilterControls();
+    applyMemoryRouteFilters(preset.filters);
+    if (preset.special === "expiring-soon") {
+      loadExpiringSoonPreset().then(() => pushRoute(memoryRouteState(), true));
+      return;
+    }
+    refreshMemoriesRouteAndLoad();
   }
   function refreshMemoriesRouteAndLoad() {
     pushRoute(memoryRouteState(), true);
@@ -4849,13 +4943,12 @@
   };
   $("#timelineGroup").onchange = loadTimeline;
   $("#memoryClear").onclick = () => {
-    ["memoryQuery", "memorySource", "memoryScope", "memorySession", "memoryVeracity", "memoryDegradation", "memoryTrustPreset"].forEach((id) => $("#" + id).value = "");
-    $("#memoryKind").value = "all";
-    $("#memoryStatus").value = "active";
-    $("#memorySort").value = "recent";
+    resetMemoryFilterControls();
     refreshMemoriesRouteAndLoad();
   };
   ["memoryKind", "memorySource", "memoryScope", "memorySession", "memoryVeracity", "memoryDegradation", "memoryTrustPreset", "memoryStatus", "memorySort"].forEach((id) => $("#" + id).onchange = refreshMemoriesRouteAndLoad);
+  $("#memoryLoadMore").onclick = loadMoreMemories;
+  $$("#memoryPresetBar [data-memory-preset]").forEach((btn) => btn.onclick = () => applyMemoryPreset(btn.dataset.memoryPreset));
   $("#tripleSearch").onclick = loadTriples;
   $("#tripleQuery").onkeydown = (e) => {
     if (e.key === "Enter") loadTriples();

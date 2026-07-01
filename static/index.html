@@ -316,6 +316,15 @@
           </div>
           <div id="exploreMemories" class="subpanel active">
             <div class="section-head mini"><h2>Memory browser</h2><span>working + episodic</span></div>
+            <div class="toolbar glass" id="memoryPresetBar" aria-label="Saved filter views">
+              <label class="muted">Saved views</label>
+              <button type="button" class="tiny" data-memory-preset="needs-review">Needs review</button>
+              <button type="button" class="tiny" data-memory-preset="high-importance">High importance</button>
+              <button type="button" class="tiny" data-memory-preset="recently-recalled">Recently recalled</button>
+              <button type="button" class="tiny" data-memory-preset="expiring-soon">Expiring soon</button>
+              <button type="button" class="tiny" data-memory-preset="tool-generated">Tool-generated</button>
+              <button type="button" class="tiny" data-memory-preset="unknown-trust">Unknown trust</button>
+            </div>
             <div class="toolbar glass">
               <input id="memoryQuery" placeholder="Search memory content…" />
               <select id="memoryKind"><option value="all">all tiers</option><option value="working">working</option><option value="episodic">episodic</option></select>
@@ -329,6 +338,7 @@
               <select id="memorySort"><option value="recent">newest</option><option value="oldest">oldest</option><option value="importance">importance</option><option value="recall">recall count</option></select>
               <button id="memorySearch" class="primary">Search</button>
               <button id="memoryClear">Clear</button>
+              <span id="memoryListCount" class="muted">0 listed</span>
             </div>
             <div id="bulkMemoryBar" class="bulk-bar glass hidden">
               <label class="bulk-select-control"><input id="bulkSelectAll" type="checkbox" /> <span>Select visible</span></label>
@@ -340,6 +350,9 @@
               <button id="bulkClear" class="drawer-action">Clear selection</button>
             </div>
             <div id="memoryList" class="list memory-grid"></div>
+            <div class="toolbar glass memory-load-bar hidden" id="memoryLoadBar">
+              <button id="memoryLoadMore" class="primary">Load 150 more</button>
+            </div>
           </div>
           <div id="exploreRecall" class="subpanel">
             <div class="section-head mini"><h2>Recall debugger</h2><span>why memories rank</span></div>

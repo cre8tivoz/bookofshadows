@@ -6,7 +6,7 @@ import { actionSummary, keyboardActionForEvent, renderToast, setButtonPending, s
 import { createApiClient } from './api/client.js';
 import { endpoints } from './api/endpoints.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
-import { bulkSelectionState, isMutableMemory, liveEventMeta, memoryFilterParams, memoryItem, meta, selectedMutableIds } from './features/memories.js';
+import { bulkSelectionState, isMutableMemory, liveEventMeta, MEMORY_FILTER_PRESETS, MEMORY_PAGE_SIZE, memoryFilterParams, memoryItem, memoryPresetByKey, mergeMemoryPage, meta, selectedMutableIds, sortByExpiringSoon } from './features/memories.js';
 import { lifecycleQueueHtml, reviewActionableIds, reviewFilterParams, reviewQueueHtml } from './features/review.js';
 import { createGraphFeature } from './features/graph.js';
 import { trapFocus } from './utils/a11y.js';
@@ -33,6 +33,9 @@ let reviewOffset = 0;
 let latestReviewData = null;
 const REVIEW_PAGE_SIZE = 100;
 let latestMemoryItems = [];
+let memoryOffset = 0;
+let memoryHasMore = true;
+let memoryListIsPreset = false;
 let latestReviewItems = [];
 let goChordUntil = 0;
 let toastTimer = 0;
@@ -190,6 +193,12 @@ function applyMemoryRouteFilters(filters={}){
   if('trust' in filters) $('#memoryTrustPreset').value = filters.trust || '';
   if('status' in filters) $('#memoryStatus').value = filters.status || 'active';
   if('sort' in filters) $('#memorySort').value = filters.sort || 'recent';
+}
+function resetMemoryFilterControls(){
+  ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = '');
+  $('#memoryKind').value = 'all';
+  $('#memoryStatus').value = 'active';
+  $('#memorySort').value = 'recent';
 }
 function closeDetail(opts={}){
   $('#detail').classList.add('hidden');
@@ -730,8 +739,8 @@ function bindBreakdownClicks(){
   $$('#degradationBreakdown .break-row').forEach(row => bindActivatable(row, () => { const map={hot:'1',warm:'2',cold:'3'}; $('#memoryDegradation').value = map[row.dataset.filter] || ''; switchTab('memories'); }));
   $$('#sessionBreakdown .break-row').forEach(row => bindActivatable(row, () => openSessionDetail(row.dataset.filter || '')));
 }
-async function loadMemories(){
-  const params = memoryFilterParams({
+function currentMemoryFilterValues(){
+  return {
     kind: $('#memoryKind').value,
     q: $('#memoryQuery').value,
     source: $('#memorySource').value,
@@ -742,19 +751,84 @@ async function loadMemories(){
     trustPreset: $('#memoryTrustPreset').value,
     status: $('#memoryStatus').value,
     sort: $('#memorySort').value
-  });
+  };
+}
+function updateMemoryListMeta(){
+  const countEl = $('#memoryListCount');
+  if(countEl) countEl.textContent = `${latestMemoryItems.length.toLocaleString()} loaded`;
+  const loadBar = $('#memoryLoadBar');
+  if(loadBar) loadBar.classList.toggle('hidden', memoryListIsPreset || !memoryHasMore);
+}
+async function loadMemories(){
+  memoryListIsPreset = false;
+  memoryOffset = 0;
   $('#memoryList').innerHTML = skeletonHtml('Loading memories', 4);
   try {
+    const params = memoryFilterParams(currentMemoryFilterValues(), MEMORY_PAGE_SIZE, memoryOffset);
     const data = await api(endpoints.memories(params), {requestKey:'memories'});
-    latestMemoryItems = data.items || [];
+    const items = data.items || [];
+    latestMemoryItems = mergeMemoryPage([], items);
+    memoryOffset = items.length;
+    memoryHasMore = items.length === MEMORY_PAGE_SIZE;
     $('#memoryList').innerHTML = latestMemoryItems.map(item => memoryItem(item, {selectable:true, selectedSet:bulkSelection})).join('') || stateHtml('empty', 'No memories found.', 'Try clearing filters or broadening the memory content search.');
     bindMemoryClicks($('#memoryList'));
     bindBulkMemoryControls();
     updateBulkBar();
+    updateMemoryListMeta();
+  } catch(e) {
+    if(isCancelledRequest(e)) return;
+    $('#memoryList').innerHTML = stateHtml('error', 'Could not load memories.', e.message || 'Try again.');
+    memoryHasMore = false;
+    updateMemoryListMeta();
+  }
+}
+async function loadMoreMemories(){
+  if(memoryListIsPreset || !memoryHasMore) return;
+  await runButtonAction($('#memoryLoadMore'), 'Loading...', async () => {
+    const params = memoryFilterParams(currentMemoryFilterValues(), MEMORY_PAGE_SIZE, memoryOffset);
+    const data = await api(endpoints.memories(params), {requestKey:'memories-more'});
+    const items = data.items || [];
+    const seen = new Set(latestMemoryItems.map(item => item.id));
+    const newItems = items.filter(item => !seen.has(item.id));
+    latestMemoryItems = mergeMemoryPage(latestMemoryItems, items, {append:true});
+    memoryOffset += items.length;
+    memoryHasMore = items.length === MEMORY_PAGE_SIZE;
+    const newHtml = newItems.map(item => memoryItem(item, {selectable:true, selectedSet:bulkSelection})).join('');
+    if(newHtml) $('#memoryList').insertAdjacentHTML('beforeend', newHtml);
+    bindMemoryClicks($('#memoryList'));
+    bindBulkMemoryControls();
+    updateBulkBar();
+    updateMemoryListMeta();
+  });
+}
+async function loadExpiringSoonPreset(){
+  memoryListIsPreset = true;
+  $('#memoryList').innerHTML = skeletonHtml('Loading memories', 4);
+  try {
+    const params = memoryFilterParams({kind:'all', status:'active', sort:'recent'}, 500, 0);
+    const data = await api(endpoints.memories(params), {requestKey:'memories'});
+    latestMemoryItems = sortByExpiringSoon(data.items || []).slice(0, 100);
+    memoryHasMore = false;
+    $('#memoryList').innerHTML = latestMemoryItems.map(item => memoryItem(item, {selectable:true, selectedSet:bulkSelection})).join('') || stateHtml('empty', 'No memories with a scheduled expiry found.', 'Expiring soon only lists active memories with an explicit expiry date set.');
+    bindMemoryClicks($('#memoryList'));
+    bindBulkMemoryControls();
+    updateBulkBar();
+    updateMemoryListMeta();
   } catch(e) {
     if(isCancelledRequest(e)) return;
     $('#memoryList').innerHTML = stateHtml('error', 'Could not load memories.', e.message || 'Try again.');
   }
+}
+function applyMemoryPreset(key){
+  const preset = memoryPresetByKey(key);
+  if(!preset) return;
+  resetMemoryFilterControls();
+  applyMemoryRouteFilters(preset.filters);
+  if(preset.special === 'expiring-soon'){
+    loadExpiringSoonPreset().then(() => pushRoute(memoryRouteState(), true));
+    return;
+  }
+  refreshMemoriesRouteAndLoad();
 }
 function refreshMemoriesRouteAndLoad(){
   pushRoute(memoryRouteState(), true);
@@ -3634,8 +3708,10 @@ $('#globalSearchButton').onclick = () => runButtonAction($('#globalSearchButton'
 $('#menuSearchButton').onclick = () => runButtonAction($('#menuSearchButton'), 'Searching...', menuSearch); $('#menuSearchQuery').onkeydown = e => { if(e.key==='Enter') $('#menuSearchButton').click(); };
 $('#recallButton').onclick = () => runButtonAction($('#recallButton'), 'Explaining...', loadRecallDebug); $('#recallQuery').onkeydown = e => { if(e.key==='Enter') $('#recallButton').click(); };
 $('#timelineButton').onclick = () => runButtonAction($('#timelineButton'), 'Loading...', loadTimeline); $('#timelineQuery').onkeydown = e => { if(e.key==='Enter') $('#timelineButton').click(); }; $('#timelineGroup').onchange = loadTimeline;
-$('#memoryClear').onclick = () => { ['memoryQuery','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset'].forEach(id => $('#'+id).value = ''); $('#memoryKind').value = 'all'; $('#memoryStatus').value = 'active'; $('#memorySort').value = 'recent'; refreshMemoriesRouteAndLoad(); };
+$('#memoryClear').onclick = () => { resetMemoryFilterControls(); refreshMemoriesRouteAndLoad(); };
 ['memoryKind','memorySource','memoryScope','memorySession','memoryVeracity','memoryDegradation','memoryTrustPreset','memoryStatus','memorySort'].forEach(id => $('#'+id).onchange = refreshMemoriesRouteAndLoad);
+$('#memoryLoadMore').onclick = loadMoreMemories;
+$$('#memoryPresetBar [data-memory-preset]').forEach(btn => btn.onclick = () => applyMemoryPreset(btn.dataset.memoryPreset));
 $('#tripleSearch').onclick = loadTriples; $('#tripleQuery').onkeydown = e => { if(e.key==='Enter') loadTriples(); };
 $('#graphRefresh').onclick = loadGraph; $('#graphQuery').onkeydown = e => { if(e.key==='Enter') loadGraph(); };
 $('#graphClear').onclick = () => { $('#graphQuery').value = ''; loadGraph(); };

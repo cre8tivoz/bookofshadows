@@ -50,7 +50,9 @@ export function isMutableMemory(item) {
   return String(item?.status || "active").toLowerCase() === "active";
 }
 
-export function memoryFilterParams(filters = {}, limit = 150) {
+export const MEMORY_PAGE_SIZE = 150;
+
+export function memoryFilterParams(filters = {}, limit = MEMORY_PAGE_SIZE, offset = 0) {
   const trustPreset = filters.trustPreset || "";
   return new URLSearchParams({
     kind: filters.kind || "",
@@ -66,7 +68,33 @@ export function memoryFilterParams(filters = {}, limit = 150) {
     status: filters.status || "",
     sort: filters.sort || "",
     limit: String(limit),
+    offset: String(offset),
   });
+}
+
+export function mergeMemoryPage(existingItems, newItems, { append = false } = {}) {
+  const merged = append ? [...existingItems, ...newItems] : newItems;
+  return [...new Map(merged.map((item) => [item.id, item])).values()];
+}
+
+export const MEMORY_FILTER_PRESETS = [
+  { key: "needs-review", label: "Needs review", filters: { kind: "all", status: "active", trust: "contaminated", sort: "importance" } },
+  { key: "high-importance", label: "High importance", filters: { kind: "all", status: "active", sort: "importance" } },
+  { key: "recently-recalled", label: "Recently recalled", filters: { kind: "all", status: "active", sort: "recall" } },
+  { key: "expiring-soon", label: "Expiring soon", filters: { kind: "all", status: "active", sort: "recent" }, special: "expiring-soon" },
+  { key: "tool-generated", label: "Tool-generated", filters: { kind: "all", status: "active", veracity: "tool" } },
+  { key: "unknown-trust", label: "Unknown trust", filters: { kind: "all", status: "active", veracity: "unknown" } },
+];
+
+export function memoryPresetByKey(key) {
+  return MEMORY_FILTER_PRESETS.find((preset) => preset.key === key) || null;
+}
+
+export function sortByExpiringSoon(items) {
+  return items
+    .filter((item) => item.valid_until)
+    .slice()
+    .sort((a, b) => Date.parse(a.valid_until) - Date.parse(b.valid_until));
 }
 
 export function selectedMutableIds(items, selectedSet) {
