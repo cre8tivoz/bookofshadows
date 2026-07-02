@@ -36,7 +36,7 @@ Regenerate public screenshots:
 ## Future Release Backlog
 
 - Release 11C: Complete. Review, detail/session drawer, auth/settings, shared visualiser chrome, canvas constellation/neural map, Three.js visualiser, and Mnemosyne Labyrinth have been extracted from `static/src/app-main.js`; Release 11D is next for keyboard equivalents and accessible data paths.
-- Release 11D: In progress. Canvas constellation/neural map now has keyboard node navigation/open/reset/pause/zoom, Three.js has practical keyboard camera controls, and all visualiser viewports are focusable; remaining work is richer non-canvas accessible alternative lists/details and deeper WebGL object inspection where useful.
+- Release 11D: Complete. Canvas constellation/neural map has keyboard node navigation/open/reset/pause/zoom, Three.js has practical keyboard camera controls, all visualiser viewports are focusable, and canvas/WebGL/Labyrinth views now have equivalent keyboard-operable data panels.
 
 ## Notes
 

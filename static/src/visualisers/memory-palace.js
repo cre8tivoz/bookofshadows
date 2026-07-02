@@ -188,6 +188,37 @@ export function createMemoryPalaceVisualiser({
       if(visible){ shown++; el.style.left = `${sx}px`; el.style.top = `${sy}px`; el.style.opacity = String(n.room ? .78 : .96); }
     });
   }
+  function accessiblePalaceSummary(node){
+    if(node.kind === 'section') return `Room section · ${Number(node.count || 0).toLocaleString()} artifact${Number(node.count || 0) === 1 ? '' : 's'}`;
+    const kind = node.kind === 'memory' || node.memory_id ? 'Memory relic' : 'Entity relic';
+    const room = node.room || node.pathGroup || node.category || 'Archive';
+    const weight = Number(node.weight || node._weight || 0).toFixed(2);
+    return `${kind} · ${room} · weight ${weight}`;
+  }
+  function renderPalaceAccessibleList(){
+    const root = $('#palaceAccessibleList');
+    if(!root) return;
+    const sections = (memoryPalace.pathSections || []).map(s => ({...s, kind:'section'}));
+    const relics = (memoryPalace.nodes || [])
+      .filter(n => n.featuredPath || n.contaminated || n.kind === 'memory')
+      .filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || '')))
+      .slice(0,30);
+    const items = sections.concat(relics);
+    root.innerHTML = items.length ? items.map((n,i) => `<button class="visualiser-data-row" data-palace-index="${i}"><strong>${esc(String(n.label || 'Archive artifact').replace(/^memory:/,'mem ').slice(0,70))}</strong><span>${esc(accessiblePalaceSummary(n))}</span></button>`).join('') : '<p class="muted">No labyrinth artifacts available yet.</p>';
+    $$('#palaceAccessibleList [data-palace-index]').forEach(row => {
+      row.onclick = () => {
+        const node = items[Number(row.dataset.palaceIndex)];
+        if(!node) return;
+        if(node.kind === 'section'){
+          $('#palaceInspector').innerHTML = `<div class="inspector-kicker">Labyrinth section</div><h3>${esc(node.label || 'Archive section')}</h3><p class="muted">${Number(node.count || 0).toLocaleString()} artifact${Number(node.count || 0) === 1 ? '' : 's'} in this section. Use WASD or arrows in the viewport to walk toward it.</p>`;
+          if(memoryPalace.THREE && memoryPalace.pos){ memoryPalace.pos.z = Number(node.z || memoryPalace.pos.z) + 110; memoryPalace.pos.x = Number(node.x || 0); }
+          return;
+        }
+        inspectPalaceNode(node);
+        palaceSetBeacon(node);
+      };
+    });
+  }
 
 
   // V7: solid first-person memory dungeon. The Labyrinth must feel like walking inside the
@@ -446,6 +477,7 @@ export function createMemoryPalaceVisualiser({
     Object.assign(memoryPalace, { renderer, scene, camera, group:scene, nodes, rooms, pathSections, colors, streamedChunks:new Map(), labels:pathSections.map(s=>({ label:`${s.label} (${s.count})`, x:s.x, y:s.y, z:s.z, kind:'section' })).concat(nodes.filter(n => n.featuredPath || n.contaminated || n.kind === 'memory').filter(n => !/^[a-f0-9]{10,}$/i.test(String(n.label || ''))).slice(0,18)), raycaster:new THREE.Raycaster(), mouse:new THREE.Vector2(), avatar:null, drone, pos:new THREE.Vector3(0,mobilePalace ? 82 : 78,mobilePalace ? 430 : 360), velocity:new THREE.Vector3(), yaw:0, pitch:mobilePalace ? -.14 : -.10, iso:false, paused:prefersReducedMotion() });
     palaceStreamRelicChunks(true);
     $('#palaceLabels').innerHTML = memoryPalace.labels.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label || '').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
+    renderPalaceAccessibleList();
     $('#palaceHudStatus').textContent = 'walk forward — memories are grouped by domain';
     bindPalaceControls(); resizeMemoryPalace(); animateMemoryPalace(0);
   }

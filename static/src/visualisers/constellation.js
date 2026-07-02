@@ -628,6 +628,31 @@ export function createCanvasConstellationVisualiser({
     const hits = keyboardSelectableHits();
     return hits.find(hit => hit.node?.id === constellationScene.selectedNodeId)?.node || hits[0]?.node || null;
   }
+  function accessibleNodeSummary(node){
+    const kind = node.kind === 'memory' ? 'Memory' : 'Entity/topic';
+    const category = node.category || 'Other';
+    const count = Number(node.count || 0).toLocaleString();
+    const weight = Number(node.weight || 0).toFixed(2);
+    return `${kind} · ${category} · ${count} signal${Number(node.count || 0) === 1 ? '' : 's'} · weight ${weight}`;
+  }
+  function renderConstellationAccessibleList(){
+    const root = $('#constellationAccessibleList');
+    if(!root) return;
+    const nodes = [...(constellationScene.nodes || [])]
+      .filter(n => n?.id && !/^[a-f0-9]{10,}$/i.test(String(n.label || '')))
+      .sort((a,b)=>(Number(b.weight || b.count || 0) - Number(a.weight || a.count || 0)))
+      .slice(0,36);
+    root.innerHTML = nodes.length ? nodes.map(n => `<button class="visualiser-data-row" data-node-id="${esc(n.id)}"><strong>${esc(String(n.label || 'Untitled').replace(/^memory:/,'mem ').slice(0,70))}</strong><span>${esc(accessibleNodeSummary(n))}</span></button>`).join('') : '<p class="muted">No visualiser nodes available yet.</p>';
+    $$('#constellationAccessibleList [data-node-id]').forEach(row => {
+      row.onclick = () => {
+        const node = constellationScene.byId[row.dataset.nodeId];
+        if(node){
+          inspectConstellationNode(node);
+          redraw();
+        }
+      };
+    });
+  }
   function bindConstellationKeyboard(canvas){
     if(canvas.dataset.keyboardBound === 'true') return;
     canvas.dataset.keyboardBound = 'true';
@@ -719,6 +744,7 @@ export function createCanvasConstellationVisualiser({
     canvas.onclick = e => { if(canvas.dataset.suppressClick === 'true'){ canvas.dataset.suppressClick = 'false'; return; } const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; const hit=[...constellationScene.hits].reverse().find(h => Math.hypot(h.x-x,h.y-y) <= h.r); if(hit) inspectConstellationNode(hit.node); };
     canvas.onpointermove = e => { if(constellationScene.drag) return; const rect=canvas.getBoundingClientRect(); const x=e.clientX-rect.left, y=e.clientY-rect.top; canvas.style.cursor = constellationScene.hits.some(h => Math.hypot(h.x-x,h.y-y) <= h.r) ? 'pointer' : 'grab'; };
     $('#constellationClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
+    renderConstellationAccessibleList();
     constellationInspectorDefault();
     drawVisualiserFrame(0);
   }
