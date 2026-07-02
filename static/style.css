@@ -1209,6 +1209,9 @@ tr:hover td{background:var(--card-bg-hov)}
 .toast-error{border-color:rgba(239,68,68,.45)}
 .toast-action{justify-self:start;margin-top:4px;height:28px;min-height:28px;border-radius:var(--r-sm);font-size:var(--fs-xs)}
 button[aria-busy="true"]{cursor:progress;opacity:.72}
+.constellation-wrap:focus-within{outline:2px solid var(--accent);outline-offset:3px}
+#constellationCanvas:focus{outline:none}
+#threeViewport:focus-visible,#palaceViewport:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .shortcut-grid{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 12px;align-items:center}
 .shortcut-grid span{font-family:var(--font-mono);font-size:var(--fs-xs);padding:4px 6px;border:1px solid var(--stroke);border-radius:var(--r-sm);background:var(--input-bg);color:var(--text)}
 .shortcut-grid strong{font-size:var(--fs-sm);color:var(--text-sec)}

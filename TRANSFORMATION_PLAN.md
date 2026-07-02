@@ -718,6 +718,8 @@ Do not do the entire extraction in one session unless the goal is explicitly a l
 
 **Outcome:** the signature visualisers become usable beyond pointer-only interaction, with clear keyboard alternatives and reduced-motion behavior preserved.
 
+**Status:** In progress. Canvas constellation/neural map and practical WebGL viewport keyboard access started 2026-07-02.
+
 **Scope:**
 
 - Keyboard controls for canvas constellation/neural map:
@@ -757,6 +759,15 @@ Do not do the entire extraction in one session unless the goal is explicitly a l
 **One-session guidance:**
 
 This is design-sensitive and should not be bundled with Insights or architecture extraction. It can be one session if scoped to keyboard alternatives for one visualiser family at a time.
+
+**Release 11D status update - 2026-07-02, keyboard access slice**
+
+- Made the canvas constellation/neural map focusable and documented keyboard controls in the canvas label and global shortcut help.
+- Added canvas keyboard navigation for visible nodes with arrow keys, selected-node highlighting, Enter/Space open behavior, `R` reset, `P` pause/resume, `M` pan/rotate mode, and `+`/`-` zoom.
+- Made the Three.js visualiser and Mnemosyne Labyrinth viewports focusable with role/labels and visible focus outlines.
+- Added Three.js viewport keyboard controls for rotate/pan arrows, `+`/`-` zoom, `R` reset, and `P` pause/resume.
+- Added regression assertions for focusable visualiser surfaces, keyboard shortcut discovery, and focus styling.
+- Remaining 11D work: richer non-canvas accessible alternative lists/details where needed, plus deeper keyboard inspection behavior for WebGL object selection where useful.
 
 ### Future Backlog Verification Template
 
