@@ -2891,6 +2891,28 @@
       const hits = keyboardSelectableHits();
       return hits.find((hit) => hit.node?.id === constellationScene.selectedNodeId)?.node || hits[0]?.node || null;
     }
+    function accessibleNodeSummary(node) {
+      const kind = node.kind === "memory" ? "Memory" : "Entity/topic";
+      const category = node.category || "Other";
+      const count = Number(node.count || 0).toLocaleString();
+      const weight = Number(node.weight || 0).toFixed(2);
+      return `${kind} · ${category} · ${count} signal${Number(node.count || 0) === 1 ? "" : "s"} · weight ${weight}`;
+    }
+    function renderConstellationAccessibleList() {
+      const root = $2("#constellationAccessibleList");
+      if (!root) return;
+      const nodes = [...constellationScene.nodes || []].filter((n) => n?.id && !/^[a-f0-9]{10,}$/i.test(String(n.label || ""))).sort((a, b) => Number(b.weight || b.count || 0) - Number(a.weight || a.count || 0)).slice(0, 36);
+      root.innerHTML = nodes.length ? nodes.map((n) => `<button class="visualiser-data-row" data-node-id="${esc2(n.id)}"><strong>${esc2(String(n.label || "Untitled").replace(/^memory:/, "mem ").slice(0, 70))}</strong><span>${esc2(accessibleNodeSummary(n))}</span></button>`).join("") : '<p class="muted">No visualiser nodes available yet.</p>';
+      $$2("#constellationAccessibleList [data-node-id]").forEach((row) => {
+        row.onclick = () => {
+          const node = constellationScene.byId[row.dataset.nodeId];
+          if (node) {
+            inspectConstellationNode(node);
+            redraw();
+          }
+        };
+      });
+    }
     function bindConstellationKeyboard(canvas) {
       if (canvas.dataset.keyboardBound === "true") return;
       canvas.dataset.keyboardBound = "true";
@@ -3040,6 +3062,7 @@
         canvas.style.cursor = constellationScene.hits.some((h) => Math.hypot(h.x - x, h.y - y) <= h.r) ? "pointer" : "grab";
       };
       $2("#constellationClusters").innerHTML = (data.clusters || []).map((c) => `<span class="cluster-pill">${esc2(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join("");
+      renderConstellationAccessibleList();
       constellationInspectorDefault();
       drawVisualiserFrame(0);
     }
@@ -3693,6 +3716,7 @@
       $2("#threeLabels").innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n, i) => `<span class="three-label ${n.kind === "memory" ? "memory" : ""}" data-i="${i}">${esc2(String(n.label || "").replace(/^memory:/, "mem ").slice(0, 24))}</span>`).join("");
       Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs: edges, labels: labelNodes, pulses: pulseEdges, pulsePoints, paused: prefersReducedMotion2() });
       $2("#threeClusters").innerHTML = (data.clusters || []).map((c) => `<span class="cluster-pill">${esc2(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join("");
+      renderThreeAccessibleList();
       resetThreeCamera2();
       bindThreeControls();
       resizeThree2();
@@ -4001,6 +4025,25 @@
         }
       }
       if (best) inspectThreeNode(best);
+    }
+    function accessibleThreeSummary(node) {
+      const kind = node.kind === "memory" ? "Memory" : "Entity/topic";
+      const category = node.category || "Other";
+      const count = Number(node.count || 0).toLocaleString();
+      const weight = Number(node.weight || node._weight || 0).toFixed(2);
+      return `${kind} · ${category} · ${count} signal${Number(node.count || 0) === 1 ? "" : "s"} · weight ${weight}`;
+    }
+    function renderThreeAccessibleList() {
+      const root = $2("#threeAccessibleList");
+      if (!root) return;
+      const nodes = [...threeVis.nodes || []].filter((n) => n?.id && !/^[a-f0-9]{10,}$/i.test(String(n.label || ""))).sort((a, b) => Number(b._degree || 0) + Number(b._weight || b.weight || b.count || 0) - (Number(a._degree || 0) + Number(a._weight || a.weight || a.count || 0))).slice(0, 36);
+      root.innerHTML = nodes.length ? nodes.map((n) => `<button class="visualiser-data-row" data-node-id="${esc2(n.id)}"><strong>${esc2(String(n.label || "Untitled").replace(/^memory:/, "mem ").slice(0, 70))}</strong><span>${esc2(accessibleThreeSummary(n))}</span></button>`).join("") : '<p class="muted">No 3D visualiser nodes available yet.</p>';
+      $$2("#threeAccessibleList [data-node-id]").forEach((row) => {
+        row.onclick = () => {
+          const node = threeVis.nodes.find((n) => n.id === row.dataset.nodeId);
+          if (node) inspectThreeNode(node);
+        };
+      });
     }
     function togglePanMode() {
       threeVis.panMode = !threeVis.panMode;
@@ -4326,6 +4369,37 @@
           el.style.top = `${sy}px`;
           el.style.opacity = String(n.room ? 0.78 : 0.96);
         }
+      });
+    }
+    function accessiblePalaceSummary(node) {
+      if (node.kind === "section") return `Room section · ${Number(node.count || 0).toLocaleString()} artifact${Number(node.count || 0) === 1 ? "" : "s"}`;
+      const kind = node.kind === "memory" || node.memory_id ? "Memory relic" : "Entity relic";
+      const room = node.room || node.pathGroup || node.category || "Archive";
+      const weight = Number(node.weight || node._weight || 0).toFixed(2);
+      return `${kind} · ${room} · weight ${weight}`;
+    }
+    function renderPalaceAccessibleList() {
+      const root = $2("#palaceAccessibleList");
+      if (!root) return;
+      const sections = (memoryPalace.pathSections || []).map((s) => ({ ...s, kind: "section" }));
+      const relics = (memoryPalace.nodes || []).filter((n) => n.featuredPath || n.contaminated || n.kind === "memory").filter((n) => !/^[a-f0-9]{10,}$/i.test(String(n.label || ""))).slice(0, 30);
+      const items = sections.concat(relics);
+      root.innerHTML = items.length ? items.map((n, i) => `<button class="visualiser-data-row" data-palace-index="${i}"><strong>${esc2(String(n.label || "Archive artifact").replace(/^memory:/, "mem ").slice(0, 70))}</strong><span>${esc2(accessiblePalaceSummary(n))}</span></button>`).join("") : '<p class="muted">No labyrinth artifacts available yet.</p>';
+      $$2("#palaceAccessibleList [data-palace-index]").forEach((row) => {
+        row.onclick = () => {
+          const node = items[Number(row.dataset.palaceIndex)];
+          if (!node) return;
+          if (node.kind === "section") {
+            $2("#palaceInspector").innerHTML = `<div class="inspector-kicker">Labyrinth section</div><h3>${esc2(node.label || "Archive section")}</h3><p class="muted">${Number(node.count || 0).toLocaleString()} artifact${Number(node.count || 0) === 1 ? "" : "s"} in this section. Use WASD or arrows in the viewport to walk toward it.</p>`;
+            if (memoryPalace.THREE && memoryPalace.pos) {
+              memoryPalace.pos.z = Number(node.z || memoryPalace.pos.z) + 110;
+              memoryPalace.pos.x = Number(node.x || 0);
+            }
+            return;
+          }
+          inspectPalaceNode(node);
+          palaceSetBeacon(node);
+        };
       });
     }
     function palaceFpsRooms(data) {
@@ -4690,6 +4764,7 @@
       Object.assign(memoryPalace, { renderer, scene, camera, group: scene, nodes, rooms, pathSections, colors, streamedChunks: /* @__PURE__ */ new Map(), labels: pathSections.map((s) => ({ label: `${s.label} (${s.count})`, x: s.x, y: s.y, z: s.z, kind: "section" })).concat(nodes.filter((n) => n.featuredPath || n.contaminated || n.kind === "memory").filter((n) => !/^[a-f0-9]{10,}$/i.test(String(n.label || ""))).slice(0, 18)), raycaster: new THREE.Raycaster(), mouse: new THREE.Vector2(), avatar: null, drone, pos: new THREE.Vector3(0, mobilePalace ? 82 : 78, mobilePalace ? 430 : 360), velocity: new THREE.Vector3(), yaw: 0, pitch: mobilePalace ? -0.14 : -0.1, iso: false, paused: prefersReducedMotion2() });
       palaceStreamRelicChunks(true);
       $2("#palaceLabels").innerHTML = memoryPalace.labels.map((n, i) => `<span class="three-label ${n.kind === "memory" ? "memory" : ""}" data-i="${i}">${esc2(String(n.label || "").replace(/^memory:/, "mem ").slice(0, 24))}</span>`).join("");
+      renderPalaceAccessibleList();
       $2("#palaceHudStatus").textContent = "walk forward — memories are grouped by domain";
       bindPalaceControls();
       resizeMemoryPalace2();

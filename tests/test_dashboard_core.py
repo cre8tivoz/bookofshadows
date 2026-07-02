@@ -847,6 +847,12 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" tabindex="0" role="application"' in html
     assert 'Use arrow keys to move between visible nodes' in html
     assert 'Use arrow keys to rotate or pan' in html
+    assert 'An equivalent keyboard list is below' in html
+    assert 'id="constellationAccessibleList"' in html
+    assert 'id="threeAccessibleList"' in html
+    assert 'id="palaceAccessibleList"' in html
+    assert 'Accessible visualiser data' in html
+    assert 'Accessible labyrinth data' in html
     assert 'data-tab="palace"' in html
     assert 'data-tab="palace" class="nav-hidden" aria-hidden="true" tabindex="-1"' in html
     assert 'id="memoryPalace"' in html
@@ -947,6 +953,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'visualiserResponsiveFill' in js
     assert 'selectConstellationHit' in js
     assert 'keyboardSelectableHits' in js
+    assert 'renderConstellationAccessibleList' in js
+    assert 'renderThreeAccessibleList' in js
+    assert 'renderPalaceAccessibleList' in js
+    assert 'visualiser-data-row' in js
     assert 'Canvas arrows' in js
     assert '3D arrows' in js
     assert 'Labyrinth WASD' in js
@@ -965,6 +975,9 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert '.constellation-wrap:focus-within' in css
     assert '#threeViewport:focus-visible' in css
     assert '#palaceViewport:focus-visible' in css
+    assert '.visualiser-data-path' in css
+    assert '.visualiser-data-list' in css
+    assert '.visualiser-data-row' in css
     assert 'body:has(#memoryPalace.active) main' in css
     assert 'height:100svh' in css
     assert 'position:fixed;left:0;right:0;top:0;z-index:70' in css

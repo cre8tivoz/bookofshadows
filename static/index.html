@@ -193,7 +193,7 @@
             <span id="visualiserHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom · focus canvas for keyboard controls.</span>
           </div>
           <div class="constellation-layout">
-            <div class="constellation-wrap"><canvas id="constellationCanvas" tabindex="0" role="application" aria-label="Interactive 3D memory constellation. Use arrow keys to move between visible nodes, Enter to open a node, R to reset, P to pause or resume, and plus or minus to zoom." aria-describedby="visualiserHelp constellationInspector"></canvas><button id="constellationExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
+            <div class="constellation-wrap"><canvas id="constellationCanvas" tabindex="0" role="application" aria-label="Interactive 3D memory constellation. Use arrow keys to move between visible nodes, Enter to open a node, R to reset, P to pause or resume, and plus or minus to zoom. An equivalent keyboard list is below." aria-describedby="visualiserHelp constellationInspector constellationDataHeading"></canvas><button id="constellationExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
             <aside id="constellationInspector" class="graph-inspector glass">
               <div class="inspector-kicker">Constellation inspector</div>
               <h3>Nothing selected</h3>
@@ -201,6 +201,10 @@
             </aside>
           </div>
           <div id="constellationClusters" class="cluster-row"></div>
+          <section class="visualiser-data-path glass" aria-labelledby="constellationDataHeading">
+            <div class="section-head mini"><h3 id="constellationDataHeading">Accessible visualiser data</h3><span>Keyboard list of the same nodes in the canvas</span></div>
+            <div id="constellationAccessibleList" class="visualiser-data-list" aria-live="polite"></div>
+          </section>
         </section>
 
         <section id="visualiser3d" class="tab">
@@ -218,7 +222,7 @@
             <span id="threeHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom · focus viewport for keyboard controls.</span>
           </div>
           <div class="three-layout">
-            <div id="threeViewport" class="three-viewport glass" tabindex="0" role="application" aria-label="Interactive 3D memory visualiser. Use arrow keys to rotate or pan, plus and minus to zoom, R to reset, and P to pause or resume." aria-describedby="threeHelp threeInspector">
+            <div id="threeViewport" class="three-viewport glass" tabindex="0" role="application" aria-label="Interactive 3D memory visualiser. Use arrow keys to rotate or pan, plus and minus to zoom, R to reset, and P to pause or resume. An equivalent keyboard list is below." aria-describedby="threeHelp threeInspector threeDataHeading">
               <button id="threeExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
               <div id="threeLabels" class="three-labels"></div>
               <div id="threeLegend" class="constellation-legend three-legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div>
@@ -230,6 +234,10 @@
             </aside>
           </div>
           <div id="threeClusters" class="cluster-row"></div>
+          <section class="visualiser-data-path glass" aria-labelledby="threeDataHeading">
+            <div class="section-head mini"><h3 id="threeDataHeading">Accessible visualiser data</h3><span>Keyboard list of the same nodes in the WebGL view</span></div>
+            <div id="threeAccessibleList" class="visualiser-data-list" aria-live="polite"></div>
+          </section>
         </section>
 
         <section id="memoryPalace" class="tab">
@@ -243,7 +251,7 @@
             <span class="muted">WASD to move · drag to look · tap relics · artifact rooms · Memory Diver + Hammy drone</span>
           </div>
           <div class="palace-layout">
-            <div id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" tabindex="0" role="application" aria-label="First-person Mnemosyne Labyrinth explorer. Use W A S D or arrow keys to move, Shift to move faster, drag to look, and tap or click a nearby relic to scan it.">
+            <div id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" tabindex="0" role="application" aria-label="First-person Mnemosyne Labyrinth explorer. Use W A S D or arrow keys to move, Shift to move faster, drag to look, and tap or click a nearby relic to scan it. An equivalent keyboard list is below." aria-describedby="palaceDataHeading palaceInspector">
               <button id="palaceExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
               <div id="palaceLabels" class="three-labels palace-labels"></div>
               <div class="palace-reticle" aria-hidden="true"></div>
@@ -256,6 +264,10 @@
               <p class="muted">Move between artifact rooms, inspect relics on pedestals, and use search to summon a golden thread.</p>
             </aside>
           </div>
+          <section class="visualiser-data-path glass" aria-labelledby="palaceDataHeading">
+            <div class="section-head mini"><h3 id="palaceDataHeading">Accessible labyrinth data</h3><span>Keyboard list of featured rooms and relics</span></div>
+            <div id="palaceAccessibleList" class="visualiser-data-list" aria-live="polite"></div>
+          </section>
         </section>
 
         <section id="memoria" class="tab">

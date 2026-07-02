@@ -487,6 +487,7 @@ export function createThreeVisualiser({
     $('#threeLabels').innerHTML = neuralAuraOverlay(threeVis.neuralRegions) + labelNodes.map((n,i)=>`<span class="three-label ${n.kind === 'memory' ? 'memory' : ''}" data-i="${i}">${esc(String(n.label||'').replace(/^memory:/,'mem ').slice(0,24))}</span>`).join('');
     Object.assign(threeVis, { THREE, renderer, scene, camera, group, nodes, edgePairs:edges, labels:labelNodes, pulses:pulseEdges, pulsePoints, paused:prefersReducedMotion() });
     $('#threeClusters').innerHTML = (data.clusters || []).map(c => `<span class="cluster-pill">${esc(c.label)} <strong>${Number(c.count).toLocaleString()}</strong></span>`).join('');
+    renderThreeAccessibleList();
     resetThreeCamera(); bindThreeControls(); resizeThree(); updateThreeUI(); animateThree(0);
   }
   function resizeThree(){
@@ -666,6 +667,28 @@ export function createThreeVisualiser({
       if(d < bestD && d < 18){ bestD=d; best=n; }
     }
     if(best) inspectThreeNode(best);
+  }
+  function accessibleThreeSummary(node){
+    const kind = node.kind === 'memory' ? 'Memory' : 'Entity/topic';
+    const category = node.category || 'Other';
+    const count = Number(node.count || 0).toLocaleString();
+    const weight = Number(node.weight || node._weight || 0).toFixed(2);
+    return `${kind} · ${category} · ${count} signal${Number(node.count || 0) === 1 ? '' : 's'} · weight ${weight}`;
+  }
+  function renderThreeAccessibleList(){
+    const root = $('#threeAccessibleList');
+    if(!root) return;
+    const nodes = [...(threeVis.nodes || [])]
+      .filter(n => n?.id && !/^[a-f0-9]{10,}$/i.test(String(n.label || '')))
+      .sort((a,b)=>((Number(b._degree || 0) + Number(b._weight || b.weight || b.count || 0)) - (Number(a._degree || 0) + Number(a._weight || a.weight || a.count || 0))))
+      .slice(0,36);
+    root.innerHTML = nodes.length ? nodes.map(n => `<button class="visualiser-data-row" data-node-id="${esc(n.id)}"><strong>${esc(String(n.label || 'Untitled').replace(/^memory:/,'mem ').slice(0,70))}</strong><span>${esc(accessibleThreeSummary(n))}</span></button>`).join('') : '<p class="muted">No 3D visualiser nodes available yet.</p>';
+    $$('#threeAccessibleList [data-node-id]').forEach(row => {
+      row.onclick = () => {
+        const node = threeVis.nodes.find(n => n.id === row.dataset.nodeId);
+        if(node) inspectThreeNode(node);
+      };
+    });
   }
 
   function togglePanMode(){
