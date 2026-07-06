@@ -234,11 +234,11 @@ export async function bootstrapProviderShell() {
   const { providers: health } = await healthResp.json();
   renderSidebar(providers, health);
 
-  // Select default provider
+  // Select default provider (don't auto-load content — it dumps memories above the cards)
   const defaultSlug = getDefaultProvider();
   if (providers[defaultSlug]) {
     selectProvider(defaultSlug);
-    loadProviderContent(defaultSlug);
+    // loadProviderContent(defaultSlug); // DISABLED: renders above metric cards
   } else if (Object.keys(providers).length === 0) {
     showEmptyState('Book of Shadows', 'No memory providers detected.');
   }
