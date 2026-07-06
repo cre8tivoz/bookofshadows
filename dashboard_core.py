@@ -899,12 +899,22 @@ class DashboardStore:
                 params.append(self._prefix_pattern(value))
         clause = "WHERE " + " AND ".join(where) if where else ""
         with self.connect() as con:
-            if "triples" not in self._tables(con):
-                return []
-            return [dict(r) for r in con.execute(
-                f"SELECT id, subject, predicate, object, valid_from, valid_until, source, confidence, created_at FROM triples {clause} ORDER BY created_at DESC LIMIT ?",
-                [*params, limit],
-            )]
+            # Try triples table first
+            if "triples" in self._tables(con):
+                results = [dict(r) for r in con.execute(
+                    f"SELECT id, subject, predicate, object, valid_from, valid_until, source, confidence, created_at FROM triples {clause} ORDER BY created_at DESC LIMIT ?",
+                    [*params, limit],
+                )]
+                if results:
+                    return results
+            # Fall back to facts table if triples is empty or doesn't exist
+            if "facts" in self._tables(con):
+                facts_where = clause.replace("source", "session_id") if clause else ""
+                return [dict(r) for r in con.execute(
+                    f"SELECT rowid as id, subject, predicate, object, timestamp as valid_from, NULL as valid_until, session_id as source, confidence, created_at FROM facts {facts_where} ORDER BY created_at DESC LIMIT ?",
+                    [*params, limit],
+                )]
+            return []
 
     def graph(self, q: str = "", limit: int = 300) -> dict[str, Any]:
         triples = self.triples(q=q, limit=limit)
