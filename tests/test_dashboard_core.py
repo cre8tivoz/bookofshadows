@@ -759,10 +759,10 @@ def test_realtime_event_snapshot_orders_newest_first(tmp_path):
 
 
 def test_static_ui_boot_error_diagnostics_and_history_alias_are_present():
-    html = (ROOT / 'static' / 'index.html').read_text()
-    js = "\n".join(path.read_text() for path in sorted((ROOT / 'static' / 'src').rglob('*.js')))
-    routing_js = (ROOT / 'static' / 'src' / 'state' / 'routing.js').read_text()
-    css = (ROOT / 'static' / 'style.css').read_text()
+    html = (ROOT / 'static' / 'index.html').read_text(encoding='utf-8')
+    js = "\n".join(path.read_text(encoding='utf-8') for path in sorted((ROOT / 'static' / 'src').rglob('*.js')))
+    routing_js = (ROOT / 'static' / 'src' / 'state' / 'routing.js').read_text(encoding='utf-8')
+    css = (ROOT / 'static' / 'style.css').read_text(encoding='utf-8')
 
     assert 'id="bootError"' in html
     assert 'id="bootErrorStatus"' in html

@@ -8,95 +8,185 @@ from providers.mempalace import MemPalaceProvider
 
 
 def make_palace(root: Path) -> Path:
-    """Create a minimal MemPalace palace structure for testing.
+    """Create a minimal MemPalace v3.x ChromaDB structure for testing.
 
-    Returns the palace root directory (parent of config.json).
+    Returns the mempalace config dir (parent of config.json).
     """
-    palace_root = root / "mempalace"
-    palace_root.mkdir(parents=True, exist_ok=True)
+    mp_dir = root / "mempalace"
+    mp_dir.mkdir(parents=True, exist_ok=True)
 
-    # config.json
-    (palace_root / "config.json").write_text(
-        json.dumps({"version": "1.0", "name": "test-palace"}),
+    palace_dir = mp_dir / "palace"
+    palace_dir.mkdir(parents=True, exist_ok=True)
+
+    # config.json with palace_path
+    (mp_dir / "config.json").write_text(
+        json.dumps({
+            "palace_path": str(palace_dir),
+            "collection_name": "mempalace_drawers",
+        }),
         encoding="utf-8",
     )
 
-    # wing_config.json
-    (palace_root / "wing_config.json").write_text(
-        json.dumps({"yc-projects": "palaces/yc-projects"}),
-        encoding="utf-8",
-    )
+    # ChromaDB SQLite with the real schema
+    chroma_db = palace_dir / "chroma.sqlite3"
+    with sqlite3.connect(chroma_db) as con:
+        con.executescript("""
+            CREATE TABLE collections (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                dimension INTEGER,
+                database_id TEXT
+            );
+            CREATE TABLE segments (
+                id TEXT PRIMARY KEY,
+                collection_id TEXT,
+                file_path TEXT
+            );
+            CREATE TABLE embeddings (
+                id INTEGER PRIMARY KEY,
+                segment_id TEXT NOT NULL,
+                embedding_id TEXT NOT NULL,
+                seq_id BLOB NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE embedding_metadata (
+                id INTEGER REFERENCES embeddings(id),
+                key TEXT NOT NULL,
+                string_value TEXT,
+                int_value INTEGER,
+                float_value REAL,
+                bool_value INTEGER,
+                PRIMARY KEY (id, key)
+            );
+        """)
 
-    # palaces/yc-projects/
-    wing_path = palace_root / "palaces" / "yc-projects"
-    wing_path.mkdir(parents=True, exist_ok=True)
+        # Insert a collection (not strictly needed since we filter by
+        # embedding_id prefix, but realistic)
+        con.execute(
+            "INSERT INTO collections(id, name, dimension) VALUES (?, ?, ?)",
+            ("c1", "mempalace_drawers", 384),
+        )
 
-    # kg.db with triples table
-    kg_db = wing_path / "kg.db"
+        # Insert 3 drawers and 1 closet
+        for i, (emb_id, wing, room, hall, content) in enumerate([
+            (
+                "drawer_yc_projects_general_aaa111",
+                "yc-projects",
+                "general",
+                "technical",
+                "YC prefers local-only memory storage",
+            ),
+            (
+                "drawer_yc_projects_general_bbb222",
+                "yc-projects",
+                "general",
+                "technical",
+                "YC uses Obsidian for note-taking",
+            ),
+            (
+                "drawer_yc_projects_notes_ccc333",
+                "yc-projects",
+                "notes",
+                "creative",
+                "MemPalace is a memory palace for AI agents",
+            ),
+            (
+                "closet_yc_projects_summary_ddd444",
+                "yc-projects",
+                "general",
+                "technical",
+                "Summary: YC project values local-first memory",
+            ),
+        ]):
+            con.execute(
+                "INSERT INTO embeddings(id, segment_id, embedding_id, seq_id) "
+                "VALUES (?, ?, ?, ?)",
+                (i, "seg1", emb_id, b"\x00"),
+            )
+            for key, val in [
+                ("wing", wing),
+                ("room", room),
+                ("hall", hall),
+                ("chroma:document", content),
+                ("filed_at", "2026-01-01T00:00:00"),
+                ("source_file", f"/test/{room}.md"),
+                ("added_by", "mempalace"),
+            ]:
+                con.execute(
+                    "INSERT INTO embedding_metadata(id, key, string_value) "
+                    "VALUES (?, ?, ?)",
+                    (i, key, val),
+                )
+
+    # Knowledge graph SQLite
+    kg_db = mp_dir / "knowledge_graph.sqlite3"
     with sqlite3.connect(kg_db) as con:
-        con.execute("""
+        con.executescript("""
+            CREATE TABLE entities (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                type TEXT DEFAULT 'unknown',
+                properties TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE triples (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id TEXT PRIMARY KEY,
                 subject TEXT NOT NULL,
                 predicate TEXT NOT NULL,
                 object TEXT NOT NULL,
-                valid_from TEXT NOT NULL,
-                valid_until TEXT,
-                weight REAL DEFAULT 1.0,
-                source TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+                valid_from TEXT,
+                valid_to TEXT,
+                confidence REAL DEFAULT 1.0,
+                source_closet TEXT,
+                source_file TEXT,
+                source_drawer_id TEXT,
+                adapter_name TEXT,
+                extracted_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         con.execute(
-            "INSERT INTO triples(subject, predicate, object, valid_from, source, weight) VALUES (?, ?, ?, ?, ?, ?)",
-            ("YC", "prefers", "local-only memory", "2026-01-01T00:00:00", "test", 0.95),
+            "INSERT INTO entities(id, name, type) VALUES (?, ?, ?)",
+            ("yc", "YC", "concept"),
         )
-        con.commit()
+        con.execute(
+            "INSERT INTO entities(id, name, type) VALUES (?, ?, ?)",
+            ("local-only memory", "local-only memory", "concept"),
+        )
+        con.execute(
+            "INSERT INTO triples(id, subject, predicate, object, valid_from, confidence) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "t1",
+                "YC",
+                "prefers",
+                "local-only memory",
+                "2026-01-01T00:00:00",
+                0.95,
+            ),
+        )
 
-    # rooms.json (empty rooms dict)
-    (wing_path / "rooms.json").write_text(
-        json.dumps({}),
-        encoding="utf-8",
-    )
-
-    # rooms/ directory with a room containing drawers.json
-    rooms_dir = wing_path / "rooms" / "general"
-    rooms_dir.mkdir(parents=True, exist_ok=True)
-    (rooms_dir / "drawers.json").write_text(
-        json.dumps([
-            "YC prefers local-only memory storage",
-            "YC uses Obsidian for note-taking",
-        ]),
-        encoding="utf-8",
-    )
-    (rooms_dir / "closets.json").write_text(
-        json.dumps(["summary of local-only preference"]),
-        encoding="utf-8",
-    )
-
-    return palace_root
+    return mp_dir
 
 
 # ── tests ────────────────────────────────────────────────────────────
 
 
 def test_detect_finds_config(tmp_path, monkeypatch):
-    palace_root = make_palace(tmp_path)
-    monkeypatch.setenv("MEMPALACE_DIR", str(palace_root))
+    mp_dir = make_palace(tmp_path)
+    monkeypatch.setenv("MEMPALACE_DIR", str(mp_dir))
     assert MemPalaceProvider.detect() is True
 
 
 def test_detect_missing(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMPALACE_DIR", str(tmp_path / "nonexistent"))
     monkeypatch.delenv("MEMPALACE_CONFIG", raising=False)
-    # Override HOME to an empty temp path so ~/.mempalace doesn't exist
     monkeypatch.setenv("HOME", str(tmp_path / "empty_home"))
     assert MemPalaceProvider.detect() is False
 
 
 def test_initialize_returns_health(tmp_path, monkeypatch):
-    palace_root = make_palace(tmp_path)
-    monkeypatch.setenv("MEMPALACE_DIR", str(palace_root))
+    mp_dir = make_palace(tmp_path)
+    monkeypatch.setenv("MEMPALACE_DIR", str(mp_dir))
     provider = MemPalaceProvider()
     health = provider.initialize()
     assert health.status == "ok"
@@ -104,33 +194,32 @@ def test_initialize_returns_health(tmp_path, monkeypatch):
 
 
 def test_query_returns_rows(tmp_path, monkeypatch):
-    palace_root = make_palace(tmp_path)
-    monkeypatch.setenv("MEMPALACE_DIR", str(palace_root))
+    mp_dir = make_palace(tmp_path)
+    monkeypatch.setenv("MEMPALACE_DIR", str(mp_dir))
     provider = MemPalaceProvider()
     provider.initialize()
     rows = provider.query("local-only")
     assert len(rows) >= 1
-    # At least one row should contain the search term
     assert any("local-only" in r.content for r in rows)
 
 
 def test_get_counts(tmp_path, monkeypatch):
-    palace_root = make_palace(tmp_path)
-    monkeypatch.setenv("MEMPALACE_DIR", str(palace_root))
+    mp_dir = make_palace(tmp_path)
+    monkeypatch.setenv("MEMPALACE_DIR", str(mp_dir))
     provider = MemPalaceProvider()
     provider.initialize()
     counts = provider.get_counts()
     assert "total" in counts
     assert counts["wings"] == 1
     assert counts["triples"] == 1
-    assert counts["drawers"] == 2
+    assert counts["drawers"] == 3
     assert counts["closets"] == 1
-    assert counts["total"] >= 4
+    assert counts["total"] == 5  # 3 drawers + 1 closet + 1 triple
 
 
 def test_graph_edges_from_kg(tmp_path, monkeypatch):
-    palace_root = make_palace(tmp_path)
-    monkeypatch.setenv("MEMPALACE_DIR", str(palace_root))
+    mp_dir = make_palace(tmp_path)
+    monkeypatch.setenv("MEMPALACE_DIR", str(mp_dir))
     provider = MemPalaceProvider()
     provider.initialize()
     edges = provider.get_graph_edges()
@@ -143,8 +232,8 @@ def test_graph_edges_from_kg(tmp_path, monkeypatch):
 
 
 def test_timeline_from_valid_from(tmp_path, monkeypatch):
-    palace_root = make_palace(tmp_path)
-    monkeypatch.setenv("MEMPALACE_DIR", str(palace_root))
+    mp_dir = make_palace(tmp_path)
+    monkeypatch.setenv("MEMPALACE_DIR", str(mp_dir))
     provider = MemPalaceProvider()
     provider.initialize()
     timeline = provider.get_timeline()
