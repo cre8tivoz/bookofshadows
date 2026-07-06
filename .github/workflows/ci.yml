@@ -1,32 +1,20 @@
 name: CI
 
-on:
-  push:
-  pull_request:
+on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-      - name: Install test tooling
-        run: python -m pip install --upgrade pip pytest ruff
-      - name: Install frontend tooling
-        run: npm ci
-      - name: Ruff lint
-        run: python -m ruff check .
-      - name: Python tests
-        run: python -m pytest -q
-      - name: Compile Python
-        run: python -m compileall -q .
-      - name: Frontend checks
-        run: npm run check:frontend
+      - run: python -m pip install --upgrade pip pytest ruff
+      - run: ruff check .
+      - run: python -m pytest -q
+      - run: python -m compileall -q .

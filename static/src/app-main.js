@@ -4,6 +4,7 @@ import { $, $$, bindActivatable, closeMobileMenu, closeMobileMenuForViewportChan
 import { breakdown, countLabel, optionsFrom, stateHtml } from './ui/render.js';
 import { actionSummary, keyboardActionForEvent, renderToast, setButtonPending, skeletonHtml } from './ui/feedback.js';
 import { createApiClient } from './api/client.js';
+import { bootstrapProviderShell } from './providers.js';
 import { endpoints } from './api/endpoints.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
 import { bulkSelectionState, isMutableMemory, liveEventMeta, MEMORY_FILTER_PRESETS, MEMORY_PAGE_SIZE, memoryFilterParams, memoryItem, memoryPresetByKey, mergeMemoryPage, meta, selectedMutableIds, sortByExpiringSoon } from './features/memories.js';
@@ -200,6 +201,12 @@ async function bootstrapDashboard(){
   await initRealtime();
   if(route.tab !== 'overview' || route.drawer) await applyRoute(route);
   renderBootErrorStatus();
+  // Initialize provider shell (multi-provider dashboard)
+  try {
+    await bootstrapProviderShell();
+  } catch (e) {
+    console.warn('Provider shell bootstrap failed:', e);
+  }
 }
 function pushRoute(state, replace=false){
   if(applyingHistory) return;

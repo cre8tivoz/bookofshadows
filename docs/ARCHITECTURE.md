@@ -2,12 +2,14 @@
 
 ## Frontend Source Layout
 
-Phase 1 introduces a source tree under `static/src/` and bundles it back to `static/app.js` so the Python server and HTML shell keep serving the same asset path.
+The frontend now includes provider management and cross-search capabilities:
 
 ```text
 static/src/
   app.js
   app-main.js
+  providers.js         # Provider shell (tabs, sidebar, empty/error/loading states)
+  cross-search.js      # Global search UI + unified timeline
   api/
     client.js
   features/
@@ -26,6 +28,11 @@ static/src/
     format.js
     a11y.js
     motion.js
+  visualisers/
+    constellation.js   # Canvas visualiser (constellation/neural/peer modes)
+    three-visualiser.js
+    memory-palace.js
+    chrome.js
 ```
 
 `static/app.js` is generated. Edit `static/src/app.js` and modules under `static/src/`, then run:
@@ -161,6 +168,85 @@ Phase 9 adds a real Insights tab, backed by three new read-only aggregation endp
 - **The vendored file ships no CSS.** The npm package bundles a companion `uPlot.min.css` that the JS assumes is present (e.g. it sets exact pixel dimensions on `.u-wrap` and devicePixelRatio-scaled `width`/`height` attributes on the `<canvas>`, but relies entirely on external CSS for `.u-wrap{position:relative}`, `canvas{width:100%;height:100%}`, and legend/cursor/axis layout). Without that CSS, a chart renders at its raw devicePixelRatio-scaled pixel size instead of its intended CSS size — e.g. 612×520 instead of 306×260 on a 2x display — and overflows its container. `static/style.css`'s `/* INSIGHTS / CHARTS */` section ports the relevant subset of upstream `uPlot.min.css`, scoped under `.chart-viewport`, with the app's own `--chart-1`..`--chart-6`/`--chart-grid`/`--chart-axis`/`--text-muted` variables layered on top so charts follow the active theme.
 - `features/charts.js`'s `createChartsFeature({ $, api, switchTab, loadMemories })` owns the Insights tab: lazy-loads uPlot, builds the two line/area chart instances (memory growth, audit activity) with a custom tooltip plugin (`hooks.init`/`hooks.setCursor`) that shows exact per-day values on hover, renders the recall-frequency distribution via the existing `.pattern-bar` CSS pattern (no uPlot needed there), and wires click-to-filter (a recall bucket click jumps to Memories filtered by `sort=recall`). `switchTab()` calls `disposeInsightsCharts()` when leaving the Insights section, mirroring the existing Three.js/Memory Palace disposal pattern.
 - Reused the Phase 9 work to make the existing Overview breakdown rows (`ui/render.js`'s `breakdown()`) show a proportional background-fill bar — each row's width is its share of that panel's total, with a small minimum so non-zero small entries stay visible. Pure frontend change; no new endpoint.
+
+## Multi-Provider Architecture (Book of Shadows v0.2.0)
+
+The dashboard now supports multiple memory providers through a unified adapter layer:
+
+### Provider Package
+
+```
+providers/
+├── base.py           # MemoryProvider ABC, PeerProvider mixin, dataclasses
+├── mnemosyne.py      # Mnemosyne adapter (SQLite via DashboardStore)
+├── mempalace.py      # MemPalace adapter (SQLite + JSON, AAAK decompression)
+├── mem0.py           # Mem0 adapter (cloud/OSS SDK)
+├── honcho.py         # Honcho adapter (peer/session model)
+└── registry.py       # Provider discovery, initialization, routing
+```
+
+### Provider Adapter Pattern
+
+Every adapter implements the `MemoryProvider` ABC:
+
+```python
+class MemoryProvider(ABC):
+    def initialize() -> ProviderHealth
+    def query(search, limit) -> list[Row]
+    def get_counts() -> dict[str, int]
+    def get_graph_edges(limit) -> list[Edge] | None
+    def get_timeline(limit) -> list[TimelineEntry] | None
+    def capabilities() -> ProviderCapabilities
+    @classmethod
+    def detect() -> bool
+```
+
+Honcho extends this with `PeerProvider` for peer/session-specific methods.
+
+### Provider Registry
+
+`ProviderRegistry` discovers, initializes, and routes to providers at server startup:
+
+```python
+class ProviderRegistry:
+    PROVIDERS = [MnemosyneProvider, MemPalaceProvider, Mem0Provider, HonchoProvider]
+    def discover()  # Detect and initialize all available providers
+    def get(name) -> MemoryProvider | None
+    def active() -> dict[str, MemoryProvider]
+    def all_health() -> dict[str, ProviderHealth]
+    def all_provider_info() -> dict[str, dict]
+```
+
+### API Routes (New in v0.2.0)
+
+Provider-scoped routes are handled by `_route_provider_api()` in `server.py`:
+
+- `GET /api/<provider>/{memories,graph,timeline,counts}` — per-provider reads
+- `GET /api/search?q=&providers=` — cross-provider search with optional filtering
+- `GET /api/timeline?limit=` — unified reverse-chronological timeline
+
+### Frontend Provider Shell
+
+`static/src/providers.js` manages the provider UI:
+
+- Segmented control for provider switching
+- Sidebar cards with health status
+- Empty/loading/error states per provider
+- localStorage persistence for default/last-selected provider
+
+`static/src/cross-search.js` manages cross-provider search:
+
+- Global search input with provider chips
+- Grouped search results with expandable metadata
+- Unified timeline with provider filter chips and "today" highlighting
+
+### Security Hardening (v0.2.0)
+
+- **SSRF protection** — provider `base_url` parameters validated against allowlist
+- **Content-Type validation** — POST endpoints reject non-JSON bodies (415)
+- **ReDoS protection** — regex patterns limited to 100 chars
+- **Persistent rate limiting** — `login_attempts.json` in plugin-data
+- **Configurable Secure cookie** — `cookie_secure` config option
 
 ## Release Package Docs
 

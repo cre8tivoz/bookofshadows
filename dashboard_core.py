@@ -248,7 +248,13 @@ class DashboardStore:
     def _regexp(pattern: str, value: object) -> int:
         if value is None:
             return 0
-        return 1 if re.search(pattern, str(value), flags=re.IGNORECASE) else 0
+        # ReDoS protection: limit pattern length
+        if len(pattern) > 100:
+            return 0
+        try:
+            return 1 if re.search(pattern, str(value), flags=re.IGNORECASE) else 0
+        except re.error:
+            return 0
 
     @staticmethod
     def _search_terms(value: str) -> list[str]:

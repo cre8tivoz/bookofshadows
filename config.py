@@ -15,24 +15,8 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
 
 
-def hermes_home() -> Path:
-    return Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
-
-
-def default_db_path() -> Path:
-    candidates = [
-        os.environ.get("MNEMOSYNE_DASHBOARD_DB"),
-        os.environ.get("MNEMOSYNE_DB_PATH"),
-        os.environ.get("MNEMOSYNE_DB"),
-        hermes_home() / "mnemosyne" / "data" / "mnemosyne.db",
-        hermes_home() / "mnemosyne.db",
-        Path.home() / ".mnemosyne" / "mnemosyne.db",
-    ]
-    expanded = [Path(c).expanduser() for c in candidates if c]
-    for path in expanded:
-        if path.exists():
-            return path
-    return expanded[3] if len(expanded) > 3 else hermes_home() / "mnemosyne" / "data" / "mnemosyne.db"
+from paths import hermes_home
+from paths import mnemosyne_db_path as default_db_path
 
 
 def lan_host() -> str:
@@ -66,6 +50,7 @@ class DashboardConfig:
     password_salt: str = ""
     auth_secret: str = ""
     memory_admin_enabled: bool = False
+    cookie_secure: bool = False
 
     @property
     def bind_url(self) -> str:

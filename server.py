@@ -5,17 +5,20 @@ import hmac
 import json
 import mimetypes
 import os
+import re
 import subprocess
 import threading
 import time
 import tomllib
 import urllib.parse
+from dataclasses import asdict
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 from config import (
+    DashboardConfig,
     auth_cookie_value,
     csrf_token_value,
     data_dir,
@@ -24,7 +27,9 @@ from config import (
     save_config,
     verify_password,
 )
-from dashboard_core import DashboardStore, MemoryQuery, default_db_path
+from dashboard_core import MemoryQuery, default_db_path
+from providers.mnemosyne import MnemosyneDashboardStore
+from providers.registry import ProviderRegistry
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
@@ -53,22 +58,56 @@ _login_attempts: dict[str, list[float]] = {}
 _login_attempts_lock = threading.Lock()
 
 
+def _rate_limit_path() -> Path:
+    """File-based rate limit storage to survive restarts."""
+    return data_dir() / "login_attempts.json"
+
+
+def _load_rate_limit_state() -> dict[str, list[float]]:
+    path = _rate_limit_path()
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_rate_limit_state(state: dict[str, list[float]]) -> None:
+    path = _rate_limit_path()
+    path.write_text(json.dumps(state, ensure_ascii=False, separators=(",", ":")))
+
+
+def _auth_cookie_header(cfg: DashboardConfig, value: str) -> str:
+    """Build Set-Cookie header with appropriate security flags."""
+    flags = ["Path=/", "SameSite=Lax", "HttpOnly"]
+    if cfg.cookie_secure:
+        flags.append("Secure")
+    return f"{AUTH_COOKIE}={value}; " + "; ".join(flags)
+
+
 def _login_rate_limited(client_ip: str) -> bool:
     now = time.time()
     with _login_attempts_lock:
-        attempts = [t for t in _login_attempts.get(client_ip, []) if now - t < LOGIN_WINDOW_SECONDS]
-        _login_attempts[client_ip] = attempts
+        state = _load_rate_limit_state()
+        attempts = [t for t in state.get(client_ip, []) if now - t < LOGIN_WINDOW_SECONDS]
+        state[client_ip] = attempts
+        _save_rate_limit_state(state)
         return len(attempts) >= LOGIN_MAX_ATTEMPTS
 
 
 def _record_login_failure(client_ip: str) -> None:
     with _login_attempts_lock:
-        _login_attempts.setdefault(client_ip, []).append(time.time())
+        state = _load_rate_limit_state()
+        state.setdefault(client_ip, []).append(time.time())
+        _save_rate_limit_state(state)
 
 
 def _clear_login_attempts(client_ip: str) -> None:
     with _login_attempts_lock:
-        _login_attempts.pop(client_ip, None)
+        state = _load_rate_limit_state()
+        state.pop(client_ip, None)
+        _save_rate_limit_state(state)
 
 
 def _json_bytes(obj: Any) -> bytes:
@@ -180,8 +219,41 @@ class Handler(BaseHTTPRequestHandler):
         return
 
     @property
-    def store(self) -> DashboardStore:
-        return DashboardStore(getattr(self.server, "db_path", default_db_path()))
+    def registry(self) -> ProviderRegistry:
+        return getattr(self.server, "registry", ProviderRegistry())
+
+    @property
+    def store(self) -> MnemosyneDashboardStore:
+        return MnemosyneDashboardStore(getattr(self.server, "db_path", default_db_path()))
+
+    def _route_provider_api(self, slug: str, path: str, q: dict[str, str]):
+        """Dispatch /api/<provider>/<path> to the right adapter method."""
+        provider = self.registry.get(slug)
+        if not provider:
+            return self._send_json({"error": f"Provider '{slug}' not active"}, 404)
+
+        if path == "/memories" or path == "/":
+            search = q.get("q", "")
+            limit = _safe_int(q.get("limit"), 100)
+            rows = provider.query(search, limit=limit)
+            return self._send_json({"provider": slug, "memories": [asdict(r) for r in rows]})
+
+        if path == "/graph":
+            edges = provider.get_graph_edges()
+            if edges is None:
+                return self._send_json({"provider": slug, "graph": None, "message": "Graph not supported"})
+            return self._send_json({"provider": slug, "graph": [asdict(e) for e in edges]})
+
+        if path == "/timeline":
+            entries = provider.get_timeline()
+            if entries is None:
+                return self._send_json({"provider": slug, "timeline": None, "message": "Timeline not supported"})
+            return self._send_json({"provider": slug, "timeline": [asdict(e) for e in entries]})
+
+        if path == "/counts":
+            return self._send_json({"provider": slug, "counts": provider.get_counts()})
+
+        return self._send_json({"error": f"Unknown route: /api/{slug}{path}"}, 404)
 
     @property
     def cfg(self):
@@ -279,6 +351,10 @@ class Handler(BaseHTTPRequestHandler):
         return {k: v[-1] for k, v in urllib.parse.parse_qs(parsed.query).items()}
 
     def _json_body(self) -> dict[str, Any]:
+        # Validate Content-Type to prevent form-encoded body confusion
+        content_type = self.headers.get("Content-Type", "")
+        if content_type and not content_type.startswith("application/json"):
+            raise ValueError("Content-Type must be application/json")
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
             return {}
@@ -368,8 +444,84 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/auth/status":
                 return self._send_json(self._auth_status())
+            if path == "/api/providers":
+                return self._send_json({"providers": self.registry.all_provider_info()})
             if path == "/api/health":
-                return self._send_json({"ok": True, "service": "mnemosyne-dashboard", "read_only": not self.cfg.memory_admin_enabled, "config": public_config(self.cfg)})
+                health = {
+                    name: asdict(h) for name, h in self.registry.all_health().items()
+                }
+                return self._send_json({
+                    "ok": True,
+                    "service": "mnemosyne-dashboard",
+                    "read_only": not self.cfg.memory_admin_enabled,
+                    "config": public_config(self.cfg),
+                    "providers": health,
+                })
+            # Provider-scoped routes: /api/<provider>/*
+            # Exclude reserved non-provider routes (memories, memory, graph, etc.)
+            RESERVED_SLUGS = {
+                "auth", "health", "providers", "config", "diagnostics",
+                "runtime", "realtime", "admin", "stats", "digest",
+                "insights", "review", "lifecycle", "profile", "patterns",
+                "constellation", "search", "recall-debug", "timeline",
+                "memories", "memory", "session", "triples", "graph",
+                "consolidations", "memoria",
+            }
+            provider_match = re.match(r"^/api/([a-z0-9_-]+)(/.*)?$", path)
+            if provider_match and provider_match.group(1) not in RESERVED_SLUGS:
+                return self._route_provider_api(
+                    provider_match.group(1),
+                    provider_match.group(2) or "/",
+                    q
+                )
+            # Unified cross-provider timeline (P3)
+            if path == "/api/timeline":
+                limit = _safe_int(q.get("limit"), 200)
+                entries = []
+                for name, provider in self.registry.active().items():
+                    timeline = provider.get_timeline()
+                    if timeline is None:
+                        continue
+                    for entry in timeline:
+                        entries.append({
+                            **asdict(entry),
+                            "provider": name,
+                            "provider_name": provider.name,
+                            "provider_glyph": provider.glyph,
+                            "provider_color": provider.color,
+                        })
+                entries.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+                return self._send_json({
+                    "timeline": entries[:limit],
+                    "total": len(entries),
+                    "providers": list(self.registry.active().keys()),
+                })
+            # Cross-search across providers (P3)
+            if path == "/api/search":
+                search_q = q.get("q", "")
+                search_limit = _safe_int(q.get("limit"), 100)
+                provider_filter = q.get("providers", "")
+                filter_set = None
+                if provider_filter:
+                    filter_set = set(p.strip() for p in provider_filter.split(",") if p.strip())
+                results = {}
+                for name, provider in self.registry.active().items():
+                    if filter_set and name not in filter_set:
+                        continue
+                    try:
+                        rows = provider.query(search_q, limit=search_limit)
+                        results[name] = {
+                            "provider": {
+                                "name": provider.name,
+                                "glyph": provider.glyph,
+                                "color": provider.color,
+                            },
+                            "rows": [asdict(r) for r in rows],
+                            "total": len(rows),
+                        }
+                    except Exception as e:
+                        results[name] = {"error": str(e), "rows": [], "total": 0}
+                return self._send_json({"query": search_q, "results": results})
             if path == "/api/config":
                 return self._send_json({"ok": True, "config": public_config(self.cfg)})
             if path == "/api/diagnostics":
@@ -489,6 +641,7 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         try:
             body = self._json_body()
+            cfg = self.cfg
             if path == "/api/auth/login":
                 cfg = self.cfg
                 if not cfg.auth_enabled:
@@ -500,7 +653,7 @@ class Handler(BaseHTTPRequestHandler):
                     _clear_login_attempts(client_ip)
                     return self._send_json(
                         {"ok": True, **self._auth_status()},
-                        headers={"Set-Cookie": f"{AUTH_COOKIE}={auth_cookie_value(cfg)}; Path=/; SameSite=Lax; HttpOnly"},
+                        headers={"Set-Cookie": _auth_cookie_header(cfg, auth_cookie_value(cfg))},
                     )
                 _record_login_failure(client_ip)
                 return self._send_json({"ok": False, "error": "invalid password"}, 403)
@@ -509,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_csrf():
                 return
             if path == "/api/auth/logout":
-                return self._send_json({"ok": True}, headers={"Set-Cookie": f"{AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly"})
+                return self._send_json({"ok": True}, headers={"Set-Cookie": _auth_cookie_header(cfg, "") + "; Max-Age=0"})
             if path == "/api/config":
                 allowed = {"host", "port", "db_path", "auth_enabled", "password", "clear_password", "memory_admin_enabled"}
                 updates = {k: body.get(k) for k in allowed if k in body}
@@ -554,8 +707,12 @@ def main():
     ap.add_argument("--db", default=None, help="Mnemosyne SQLite DB path. Defaults to plugin config.")
     args = ap.parse_args()
     cfg = effective_config({"host": args.host, "port": args.port, "db_path": args.db})
+    registry = ProviderRegistry()
+    registry.discover()
+    print(f"Active providers: {', '.join(registry.active().keys()) or 'none'}", flush=True)
     httpd = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
     _write_runtime_metadata(cfg)
+    httpd.registry = registry
     httpd.db_path = Path(cfg.db_path)
     httpd.bind_host = cfg.host
     httpd.bind_port = cfg.port

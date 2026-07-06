@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Book of Shadows — Mnemosyne Dashboard by Witch Daddy Labs</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin="anonymous" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous" />
   <link rel="stylesheet" href="/static/style.css?v=stream-v2" />
 </head>
 <body>
@@ -64,6 +64,21 @@
     </aside>
 
     <div class="workspace">
+      <div id="providerShell" class="provider-shell">
+        <div id="providerTabs" class="provider-tabs"></div>
+        <div class="provider-main">
+          <aside id="providerSidebar" class="provider-sidebar"></aside>
+          <div class="provider-center">
+            <div id="loadingSkeleton" class="skeleton hidden"></div>
+            <div id="errorBanner" class="error-banner hidden">
+              <span id="errorText"></span>
+              <button id="retryBtn">Retry</button>
+            </div>
+            <div id="emptyState" class="empty-state hidden"></div>
+            <div id="contentArea" class="content-area"></div>
+          </div>
+        </div>
+      </div>
       <header class="hero">
         <div>
           <div class="eyebrow">Witch Daddy Labs memory console</div>
@@ -183,6 +198,7 @@
           <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode" role="tablist">
             <button role="tab" aria-selected="true" id="visualiserConstellationTab" data-visualiser="constellation" class="active">Constellation</button>
             <button role="tab" aria-selected="false" id="visualiserNeuralTab" data-visualiser="neural">Neural Map</button>
+            <button role="tab" aria-selected="false" id="visualiserPeerTab" data-visualiser="peer" class="nav-hidden" aria-hidden="true" tabindex="-1">🪞 Peers</button>
           </div>
           <div class="toolbar glass">
             <button id="constellationRefresh" class="primary">Refresh visualiser</button>
@@ -212,6 +228,7 @@
           <div class="section-tabs visualiser-tabs glass" aria-label="Visualiser mode" role="tablist">
             <button role="tab" aria-selected="true" id="threeConstellationTab" data-three-mode="constellation" class="active">Constellation</button>
             <button role="tab" aria-selected="false" id="threeNeuralTab" data-three-mode="neural">Neural Map</button>
+            <button role="tab" aria-selected="false" id="threePeerTab" data-three-mode="peer" class="nav-hidden" aria-hidden="true" tabindex="-1">🪞 Peers</button>
           </div>
           <div class="toolbar glass">
             <button id="threeRefresh" class="primary">Refresh visualiser</button>

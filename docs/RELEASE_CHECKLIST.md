@@ -37,6 +37,20 @@ npm run check:frontend
 - [ ] Password auth remains optional and password hashes are salted.
 - [ ] Mutating POST routes still require CSRF when auth is enabled.
 - [ ] Backups and audit logs are still written for admin memory mutations.
+- [ ] Provider `base_url` parameters validated against allowlist (SSRF protection).
+- [ ] POST endpoints reject non-JSON content types (415).
+- [ ] Regex patterns limited to 100 chars (ReDoS protection).
+- [ ] Rate limiting persists across server restarts.
+
+## Multi-Provider (v0.2.0)
+
+- [ ] All 4 provider adapters have unit tests with mocked dependencies.
+- [ ] `/api/providers` returns correct structure for all active providers.
+- [ ] `/api/search` cross-provider search works with provider filtering.
+- [ ] `/api/timeline` unified timeline merges data from all providers.
+- [ ] Frontend provider tabs render correctly for each active provider.
+- [ ] Peer visualiser toggle only shown when Honcho is active.
+- [ ] Cross-platform path resolution works on macOS, Linux, and Windows.
 
 ## Git Hygiene
 

@@ -26,13 +26,23 @@ export function createCanvasConstellationVisualiser({
   }
 
   function constellationInspectorDefault(){
-    const neural = constellationScene.visualiserMode === 'neural';
-    $('#constellationInspector').innerHTML = neural
+    const mode = constellationScene.visualiserMode;
+    const peer = mode === 'peer';
+    const neural = mode === 'neural';
+    $('#constellationInspector').innerHTML = peer
+      ? `<div class="inspector-kicker">Peer inspector</div><h3>Nothing selected</h3><p class="muted">Pick a peer to inspect its metadata and connections.</p>`
+      : neural
       ? `<div class="inspector-kicker">Neural inspector</div><h3>Nothing selected</h3><p class="muted">Pick a neuron hub, memory soma, or synapse to inspect the underlying read-only source.</p>`
       : `<div class="inspector-kicker">Constellation inspector</div><h3>Nothing selected</h3><p class="muted">Pick a star, memory, or link to inspect the underlying read-only source.</p>`;
   }
   function inspectConstellationNode(node){
     constellationScene.selectedNodeId = node.id;
+    if(node.kind === 'peer'){
+      const meta = node.metadata || {};
+      const metaHtml = Object.keys(meta).length ? `<dl class="peer-meta">${Object.entries(meta).slice(0,6).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(String(v).slice(0,80))}</dd>`).join('')}</dl>` : '<p class="muted">No metadata</p>';
+      $('#constellationInspector').innerHTML = `<div class="inspector-kicker">Peer</div><h3>${esc(node.label)}</h3><p class="muted">Created ${esc(node.created_at || 'unknown')}</p>${metaHtml}`;
+      return;
+    }
     $('#constellationInspector').innerHTML = `<div class="inspector-kicker">${esc(node.kind || 'entity')}</div><h3>${esc(node.label)}</h3><p class="muted">${esc(node.category || 'Other')} · ${Number(node.count || 0).toLocaleString()} signal(s) · weight ${Number(node.weight || 0).toFixed(2)}</p>${node.preview ? `<p>${esc(node.preview)}</p>` : ''}<div class="inspector-actions">${node.memory_id ? '<button id="constellationMemory" class="primary tiny">Open memory</button>' : ''}<button id="constellationSearch" class="tiny">Search this</button></div>`;
     if(node.memory_id) $('#constellationMemory').onclick = () => openMemoryDetail(node.memory_id);
     $('#constellationSearch').onclick = () => { $('#memoryQuery').value = node.label.replace(/^memory:/,''); switchTab('memories'); };
@@ -376,34 +386,130 @@ export function createCanvasConstellationVisualiser({
     const light = document.documentElement.dataset.theme === 'light';
     return light ? { light:true, bg:'#f7f0e7', core:'rgba(24,128,107,.18)', mid:'rgba(185,54,46,.12)', star:'#087f73', memory:'#c63e35', text:'#252220', synapse:'rgba(18,116,100,.34)', synapseHot:'rgba(8,126,106,.62)', memorySynapse:'rgba(190,54,46,.58)' } : { light:false, bg:'#06100f', core:'rgba(34,130,111,.28)', mid:'rgba(95,31,29,.40)', star:'#66e8c6', memory:'#ff5f57', text:'#f6fbf7', synapse:'rgba(82,214,181,.22)', synapseHot:'rgba(90,238,196,.52)', memorySynapse:'rgba(255,95,87,.58)' };
   }
+
+  // ── Peer mode (Honcho) ─────────────────────────────────────────────
+  async function loadPeerData(){
+    try {
+      const [peersRes, graphRes] = await Promise.all([
+        fetch('/api/honcho/peers?limit=100'),
+        fetch('/api/honcho/graph?limit=500')
+      ]);
+      const peers = await peersRes.json();
+      const graph = await graphRes.json();
+      buildPeerScene(peers.memories || [], graph.graph || []);
+      drawVisualiserFrame(0);
+    } catch (err) {
+      console.warn('Peer data load failed, falling back to constellation:', err);
+      switchVisualiserMode('constellation');
+    }
+  }
+
+  function buildPeerScene(peers, edges){
+    const nodes = peers.map((p, i) => {
+      const angle = (i / Math.max(peers.length, 1)) * Math.PI * 2;
+      const radius = 150 + (i % 3) * 40;
+      return {
+        id: p.id,
+        label: p.name || p.id,
+        kind: 'peer',
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+        size: 12 + (p.metadata ? Object.keys(p.metadata).length * 2 : 0),
+        metadata: p.metadata || {},
+        created_at: p.created_at || '',
+      };
+    });
+    constellationScene.nodes = nodes;
+    constellationScene.edges = (edges || []).filter(e => nodes.some(n => n.id === e.source) && nodes.some(n => n.id === e.target)).slice(0,200);
+    constellationScene.byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+    constellationScene.data = { nodes, edges };
+  }
+
+  function drawPeerFrame(t=0){
+    const canvas = $('#constellationCanvas');
+    if(!canvas) return;
+    const wrap = canvas.parentElement;
+    const w = Math.max(320, wrap.clientWidth || canvas.clientWidth || 1000);
+    const h = Math.max(430, wrap.clientHeight || canvas.clientHeight || 680);
+    const dpr = window.devicePixelRatio || 1;
+    if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){ canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,w,h);
+    // Background
+    ctx.fillStyle = document.documentElement.dataset.theme === 'light' ? '#fbf8f3' : '#050711';
+    ctx.fillRect(0,0,w,h);
+    // Draw edges
+    ctx.strokeStyle = 'rgba(236, 72, 153, 0.3)';
+    ctx.lineWidth = 1;
+    constellationScene.edges.forEach(e => {
+      const a = constellationScene.byId[e.source];
+      const b = constellationScene.byId[e.target];
+      if(!a || !b) return;
+      ctx.beginPath();
+      ctx.moveTo(w/2 + a.x, h/2 + a.y);
+      ctx.lineTo(w/2 + b.x, h/2 + b.y);
+      ctx.stroke();
+    });
+    // Draw nodes
+    constellationScene.nodes.forEach(n => {
+      const x = w/2 + n.x;
+      const y = h/2 + n.y;
+      ctx.beginPath();
+      ctx.arc(x, y, n.size, 0, Math.PI * 2);
+      ctx.fillStyle = '#ec4899';
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label.slice(0, 15), x, y + n.size + 12);
+    });
+  }
   function updateVisualiserModeUI(){
-    const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
+    const mode = constellationScene.visualiserMode;
     $$('.visualiser-tabs button[data-visualiser]').forEach(b => { const active = b.dataset.visualiser === mode; b.classList.toggle('active', active); b.setAttribute('aria-selected', String(active)); });
     const wrap = $('#constellationCanvas')?.parentElement;
     if(wrap) wrap.dataset.visualiser = mode;
     const legend = $('.constellation-legend');
     if(legend) legend.innerHTML = mode === 'neural'
       ? '<span><i class="legend-dot entity"></i>Neuron hub</span><span><i class="legend-dot memory"></i>Memory soma</span><span><i class="legend-line"></i>Synapse</span>'
+      : mode === 'peer'
+      ? '<span><i class="legend-dot peer"></i>Peer</span><span><i class="legend-line"></i>Representation</span>'
       : '<span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span>';
     const help = $('#visualiserHelp');
-    if(help) help.textContent = mode === 'neural' ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron.' : 'Drag to orbit the neural cloud · Pan mode/Shift-drag to pan · wheel/pinch to zoom.') : 'Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.';
+    if(help) help.textContent = mode === 'neural' ? (window.matchMedia('(max-width: 760px)').matches ? 'Drag to orbit · Pan mode to move · pinch to zoom · tap a neuron.' : 'Drag to orbit the neural cloud · Pan mode/Shift-drag to pan · wheel/pinch to zoom.') : mode === 'peer' ? 'Click a peer to inspect. Drag to pan, wheel to zoom.' : 'Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom.';
     const pause = $('#constellationPause');
-    if(pause){ pause.style.display = ''; pause.textContent = constellationScene.paused ? (mode === 'neural' ? 'Resume drift' : 'Resume rotation') : (mode === 'neural' ? 'Pause drift' : 'Pause rotation'); }
+    if(pause){ pause.style.display = mode === 'peer' ? 'none' : ''; pause.textContent = constellationScene.paused ? (mode === 'neural' ? 'Resume drift' : 'Resume rotation') : (mode === 'neural' ? 'Pause drift' : 'Pause rotation'); }
     const pan = $('#constellationPanMode');
     if(pan) pan.textContent = constellationScene.mode === 'pan' ? (mode === 'neural' ? 'Orbit mode' : 'Rotate mode') : 'Pan mode';
   }
   function switchVisualiserMode(mode){
-    constellationScene.visualiserMode = mode === 'neural' ? 'neural' : 'constellation';
+    if (mode === 'peer') {
+      constellationScene.visualiserMode = 'peer';
+    } else if (mode === 'neural') {
+      constellationScene.visualiserMode = 'neural';
+    } else {
+      constellationScene.visualiserMode = 'constellation';
+    }
     localStorage.setItem(VISUALISER_MODE_KEY, constellationScene.visualiserMode);
     constellationScene.drag = null;
     constellationScene.pointers.clear();
-    Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', lastFrameTime:0, renderLastTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', lastFrameTime:0, renderLastTime:0 });
+    if (constellationScene.visualiserMode === 'peer') {
+      // Static layout for peers - no rotation
+      Object.assign(constellationScene, { rotation: 0, tilt: 0, zoom: 1, panX: 0, panY: 0, mode: 'rotate', lastFrameTime: 0, renderLastTime: 0 });
+      loadPeerData();
+    } else if (constellationScene.visualiserMode === 'neural') {
+      Object.assign(constellationScene, { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', lastFrameTime:0, renderLastTime:0 });
+    } else {
+      Object.assign(constellationScene, { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', lastFrameTime:0, renderLastTime:0 });
+    }
     updateVisualiserModeUI();
     if(constellationScene.data) drawConstellation(constellationScene.data);
   }
   function drawVisualiserFrame(t=0){
     if(!isActive()){ stopCanvasVisualiserLoop(); return; }
-    const mode = constellationScene.visualiserMode === 'neural' ? 'neural' : 'constellation';
+    const mode = constellationScene.visualiserMode;
+    if (mode === 'peer') { drawPeerFrame(t); return; }
     const interval = 16;
     if(t && constellationScene.renderLastTime && t - constellationScene.renderLastTime < interval){
       constellationScene.frame = isActive() && !document.hidden ? requestAnimationFrame(drawVisualiserFrame) : 0;
@@ -568,8 +674,10 @@ export function createCanvasConstellationVisualiser({
     constellationScene.panY = Math.max(-panLimitY, Math.min(panLimitY, Number.isFinite(constellationScene.panY) ? constellationScene.panY : 0));
   }
   function resetConstellationView(){
-    Object.assign(constellationScene, constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', drag:null, lastFrameTime:0, renderLastTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', drag:null, lastFrameTime:0, renderLastTime:0 });
+    const peer = constellationScene.visualiserMode === 'peer';
+    Object.assign(constellationScene, peer ? { rotation:0, tilt:0, zoom:1, panX:0, panY:0, mode:'rotate', drag:null, lastFrameTime:0, renderLastTime:0 } : constellationScene.visualiserMode === 'neural' ? { rotation:.34, tilt:.38, zoom:1, panX:0, panY:0, mode:'rotate', drag:null, lastFrameTime:0, renderLastTime:0 } : { ...CONSTELLATION_DEFAULT_CAMERA, mode:'rotate', drag:null, lastFrameTime:0, renderLastTime:0 });
     constellationScene.pointers.clear();
+    if(peer){ loadPeerData(); return; }
     updateConstellationPauseButton();
     updateConstellationPanButton();
     updateVisualiserModeUI();
@@ -736,6 +844,7 @@ export function createCanvasConstellationVisualiser({
     if(constellationScene.frame) cancelAnimationFrame(constellationScene.frame);
     constellationScene.frame = 0;
     constellationScene.renderLastTime = 0;
+    if(constellationScene.visualiserMode === 'peer'){ loadPeerData(); return; }
     if(constellationScene.visualiserMode === 'neural') buildNeuralMapScene(data); else buildConstellationScene(data);
     updateVisualiserModeUI();
     const canvas = $('#constellationCanvas');

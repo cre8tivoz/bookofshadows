@@ -43,6 +43,53 @@ http://127.0.0.1:8765/
 
 The database is opened read-only for browsing. Admin memory actions are disabled unless explicitly enabled in Settings.
 
+## Multi-Provider Setup (v0.2.0)
+
+Book of Shadows now supports multiple memory providers. Each auto-detects its configuration:
+
+### Mnemosyne
+- **Config:** `~/.hermes/mnemosyne/data/mnemosyne.db` (or `MNEMOSYNE_DB_PATH` env var)
+- **No additional setup required** if you're already running Hermes with Mnemosyne
+
+### MemPalace
+- **Config:** `~/.mempalace/config.json` (or `MEMPALACE_DIR` env var)
+- **Setup:** Install MemPalace and create a palace structure
+
+### Mem0
+- **Config:** `MEM0_API_KEY` from env, `$HERMES_HOME/.env`, or `$HERMES_HOME/mem0.json`
+- **Setup:**
+  ```bash
+  # Option 1: Environment variable
+  export MEM0_API_KEY="sk-..."
+  
+  # Option 2: Hermes env file
+  echo "MEM0_API_KEY=sk-..." >> ~/.hermes/.env
+  
+  # Option 3: Config file
+  echo '{"api_key": "sk-...", "user_id": "..."}' > ~/.hermes/mem0.json
+  ```
+
+### Honcho
+- **Config:** `HONCHO_API_KEY` from env, `~/.hermes/honcho.json`, or `~/.honcho/config.json`
+- **Setup:**
+  ```bash
+  # Option 1: Environment variable
+  export HONCHO_API_KEY="..."
+  
+  # Option 2: Hermes config file
+  echo '{"api_key": "..."}' > ~/.hermes/honcho.json
+  ```
+
+### Verifying Provider Detection
+
+Check which providers are active:
+
+```bash
+curl http://127.0.0.1:8765/api/providers
+```
+
+This returns a JSON object with each active provider's capabilities and health status.
+
 ## Environment Overrides
 
 Useful variables:
