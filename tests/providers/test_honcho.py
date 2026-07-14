@@ -169,7 +169,8 @@ class TestDetect:
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
         mock_module = _mock_honcho_module()
         with patch.dict("sys.modules", {"honcho": mock_module}):
-            assert HonchoProvider.detect() is False
+            with patch("providers.honcho.Path.home", return_value=tmp_path):
+                assert HonchoProvider.detect() is False
 
     def test_detect_no_package_returns_false(self, monkeypatch):
         monkeypatch.setenv("HONCHO_API_KEY", "sk-test-key")
@@ -325,4 +326,5 @@ class TestResolveApiKey:
     def test_no_key_returns_none(self, monkeypatch, tmp_path):
         monkeypatch.delenv("HONCHO_API_KEY", raising=False)
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-        assert _resolve_api_key() is None
+        with patch("providers.honcho.Path.home", return_value=tmp_path):
+            assert _resolve_api_key() is None
