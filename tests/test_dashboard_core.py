@@ -75,9 +75,9 @@ def make_db(path: Path):
 
 
 def test_release_version_is_consistent():
-    pyproject = tomllib.loads((ROOT / 'pyproject.toml').read_text())
+    pyproject = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
     project_version = pyproject['project']['version']
-    plugin_text = (ROOT / 'plugin.yaml').read_text()
+    plugin_text = (ROOT / 'plugin.yaml').read_text(encoding='utf-8')
 
     assert project_version == '0.14.0'
     assert f'version: "{project_version}"' in plugin_text
@@ -782,9 +782,9 @@ def test_static_ui_boot_error_diagnostics_and_history_alias_are_present():
 
 
 def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
-    html = (ROOT / 'static' / 'index.html').read_text()
-    js = "\n".join(path.read_text() for path in sorted((ROOT / 'static' / 'src').rglob('*.js')))
-    css = (ROOT / 'static' / 'style.css').read_text()
+    html = (ROOT / 'static' / 'index.html').read_text(encoding='utf-8')
+    js = "\n".join(path.read_text(encoding='utf-8') for path in sorted((ROOT / 'static' / 'src').rglob('*.js')))
+    css = (ROOT / 'static' / 'style.css').read_text(encoding='utf-8')
 
     assert 'id="veracityBreakdown"' in html
     assert 'id="degradationBreakdown"' in html
@@ -1174,10 +1174,10 @@ def test_static_ui_exposes_v23_trust_and_lifecycle_controls():
     assert 'contextLabel' in js
     assert "'Temporary context':'Short-term notes'" in js
     assert "'Project context':'Project notes'" in js
-    assert 'Short-term notes' in (ROOT / 'dashboard_core.py').read_text()
-    assert 'Project notes' in (ROOT / 'dashboard_core.py').read_text()
-    assert 'Temporary context' not in (ROOT / 'dashboard_core.py').read_text()
-    assert 'Project context' not in (ROOT / 'dashboard_core.py').read_text()
+    assert 'Short-term notes' in (ROOT / 'dashboard_core.py').read_text(encoding='utf-8')
+    assert 'Project notes' in (ROOT / 'dashboard_core.py').read_text(encoding='utf-8')
+    assert 'Temporary context' not in (ROOT / 'dashboard_core.py').read_text(encoding='utf-8')
+    assert 'Project context' not in (ROOT / 'dashboard_core.py').read_text(encoding='utf-8')
     assert '.menu-search{display:flex' in css
     assert '.menu-search{display:none' not in css
     assert '#today > .cards' in css
