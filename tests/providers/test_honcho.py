@@ -123,9 +123,17 @@ def _make_mock_client():
     client.representations.list.side_effect = mock_representations_list
 
     # conclusions - return different values based on peer_id
-    def mock_conclusions_list(peer_id):
+    def mock_conclusions_list(peer_id=None):
         if peer_id == "peer-1":
             return [_make_conclusion(id="conc-1", target_id="peer-2", content="Bob prefers tea")]
+        elif peer_id is None:
+            # Batch call for workspace conclusions
+            mock_page = MagicMock()
+            mock_page.total = 1
+            mock_page.items = [_make_conclusion(id="conc-1", target_id="peer-2", content="Bob prefers tea")]
+            # Support iterator protocol if fallback is used
+            mock_page.__iter__.return_value = iter(mock_page.items)
+            return mock_page
         return []
     client.conclusions.list.side_effect = mock_conclusions_list
 

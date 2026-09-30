@@ -27,6 +27,7 @@ def _validate_base_url(base_url: str | None, provider: str, allowed: tuple[str, 
         return None
     try:
         from urllib.parse import urlparse
+
         parsed = urlparse(base_url)
         hostname = parsed.hostname or ""
         if hostname in ("localhost", "127.0.0.1", "::1"):
@@ -123,9 +124,7 @@ class HonchoProvider(PeerProvider):
             msg = f"{total} peers" if total else "connected, no peers"
             return ProviderHealth("ok", total, msg)
         except ImportError:
-            return ProviderHealth(
-                "error", 0, "honcho package not installed — run `pip install honcho`"
-            )
+            return ProviderHealth("error", 0, "honcho package not installed — run `pip install honcho`")
         except Exception as e:
             return ProviderHealth("error", 0, str(e))
 
@@ -141,10 +140,20 @@ class HonchoProvider(PeerProvider):
         try:
             peers = self.get_peers(limit=1000)
             sessions = self.get_sessions(limit=1000)
-            # Count conclusions across all peers
-            conclusion_count = 0
-            for peer in peers:
-                conclusion_count += len(self.get_conclusions(peer.id))
+
+            # Count conclusions across all peers in a single API request if possible
+            if self._client is None:
+                raise RuntimeError("HonchoProvider not initialized — call initialize() first")
+
+            # `self._client.conclusions.list()` fetches workspace conclusions in batch.
+            # Using limit/size kwargs isn't officially supported in older Honcho <2.5,
+            # so we just iterate the paginator or convert to list to count them.
+            conclusions = self._client.conclusions.list()
+            # If the response supports a .total attribute, use it, else measure length.
+            conclusion_count = getattr(conclusions, "total", None)
+            if conclusion_count is None:
+                conclusion_count = sum(1 for _ in conclusions)
+
             return {
                 "peers": len(peers),
                 "sessions": len(sessions),
