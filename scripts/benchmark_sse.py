@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 import shutil
 import sys
-import time
 import threading
+import time
 import urllib.request
 from pathlib import Path
 
@@ -13,9 +12,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from test_dashboard_core import make_db  # noqa: E402
-import server as server_module  # noqa: E402
+
+from dashboard_core import DashboardStore  # noqa: E402
 from server import Handler, ThreadingHTTPServer  # noqa: E402
-from dashboard_core import DashboardStore
 
 
 def run_benchmark():
