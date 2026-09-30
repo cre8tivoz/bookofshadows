@@ -85,8 +85,9 @@ def test_release_version_is_consistent():
 
 
 def test_quote_identifier_prevents_sql_injection():
-    from dashboard_core import _quote_identifier
     import pytest
+
+    from dashboard_core import _quote_identifier
 
     assert _quote_identifier("working_memory") == '"working_memory"'
     assert _quote_identifier("valid_col_1") == '"valid_col_1"'
