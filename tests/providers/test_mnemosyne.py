@@ -4,9 +4,7 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 # Ensure the project root is on sys.path so `providers` is importable
 ROOT = Path(__file__).resolve().parents[1]
