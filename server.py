@@ -166,6 +166,8 @@ def _interruptible_sleep(sock: socket.socket | None, total_seconds: float = 2.0,
                     peek = sock.recv(1, socket.MSG_PEEK)
                     if not peek:
                         return True
+                    # Unread bytes on socket: sleep wait_time to prevent tight CPU spin
+                    time.sleep(wait_time)
             except (BrokenPipeError, ConnectionResetError):
                 return True
             except OSError:
