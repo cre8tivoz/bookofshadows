@@ -65,6 +65,51 @@ def _truthy(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_optional_float(value: float | str | None) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_degradation_tier(value: int | str | None) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        tier_val = int(value)
+    except (TypeError, ValueError):
+        return None
+    return tier_val if tier_val in DEGRADATION_LABELS else None
+
+
+def _parse_status(value: str) -> str:
+    status = (value or "active").strip().lower()
+    return status if status in {"active", "expired", "superseded", "all"} else "active"
+
+
+def _parse_veracity(value: str) -> str:
+    veracity = (value or "").strip().lower()
+    return veracity if veracity in VERACITY_WEIGHTS else ""
+
+
+def _parse_limit(value: int | str | None, default: int = 100, max_val: int = 10000) -> int:
+    try:
+        val = int(value or default)
+    except (TypeError, ValueError):
+        val = default
+    return max(1, min(val, max_val))
+
+
+def _parse_offset(value: int | str | None) -> int:
+    try:
+        val = int(value or 0)
+    except (TypeError, ValueError):
+        val = 0
+    return max(0, val)
+
+
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -125,22 +170,6 @@ class MemoryQuery:
         due_for_degradation: bool | str = False,
         min_importance: float | str | None = None,
     ) -> MemoryQuery:
-        normalised_status = (status or "active").strip().lower()
-        if normalised_status not in {"active", "expired", "superseded", "all"}:
-            normalised_status = "active"
-        normalised_veracity = (veracity or "").strip().lower()
-        if normalised_veracity and normalised_veracity not in VERACITY_WEIGHTS:
-            normalised_veracity = ""
-        try:
-            min_importance_value = float(min_importance) if min_importance not in (None, "") else None
-        except (TypeError, ValueError):
-            min_importance_value = None
-        try:
-            degradation_tier_value = int(degradation_tier) if degradation_tier not in (None, "") else None
-        except (TypeError, ValueError):
-            degradation_tier_value = None
-        if degradation_tier_value not in DEGRADATION_LABELS:
-            degradation_tier_value = None
         return cls(
             kind=kind,
             q=(q or "").strip(),
@@ -148,15 +177,15 @@ class MemoryQuery:
             scope=(scope or "").strip(),
             session_id=(session_id or "").strip(),
             sort=(sort or "recent").strip(),
-            limit=max(1, min(int(limit or 100), 10000)),
-            offset=max(0, int(offset or 0)),
-            status=normalised_status,
-            veracity=normalised_veracity,
-            degradation_tier=degradation_tier_value,
+            limit=_parse_limit(limit, default=100, max_val=10000),
+            offset=_parse_offset(offset),
+            status=_parse_status(status),
+            veracity=_parse_veracity(veracity),
+            degradation_tier=_parse_degradation_tier(degradation_tier),
             contaminated_only=_truthy(contaminated_only),
             degraded_only=_truthy(degraded_only),
             due_for_degradation=_truthy(due_for_degradation),
-            min_importance=min_importance_value,
+            min_importance=_parse_optional_float(min_importance),
         )
 
 
@@ -801,10 +830,7 @@ class DashboardStore:
         }
         if queue not in queue_defs:
             queue = "contaminated"
-        try:
-            min_importance_value = float(min_importance) if min_importance not in (None, "") else None
-        except (TypeError, ValueError):
-            min_importance_value = None
+        min_importance_value = _parse_optional_float(min_importance)
 
         def args_for(key: str, *, page: bool = False) -> dict[str, Any]:
             args = dict(queue_defs[key]["args"])
