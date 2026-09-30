@@ -7,27 +7,8 @@ from pathlib import Path
 from providers.mempalace import MemPalaceProvider
 
 
-def make_palace(root: Path) -> Path:
-    """Create a minimal MemPalace v3.x ChromaDB structure for testing.
-
-    Returns the mempalace config dir (parent of config.json).
-    """
-    mp_dir = root / "mempalace"
-    mp_dir.mkdir(parents=True, exist_ok=True)
-
-    palace_dir = mp_dir / "palace"
-    palace_dir.mkdir(parents=True, exist_ok=True)
-
-    # config.json with palace_path
-    (mp_dir / "config.json").write_text(
-        json.dumps({
-            "palace_path": str(palace_dir),
-            "collection_name": "mempalace_drawers",
-        }),
-        encoding="utf-8",
-    )
-
-    # ChromaDB SQLite with the real schema
+def _create_chroma_db(palace_dir: Path) -> None:
+    """Create a ChromaDB SQLite database populated with test embeddings and metadata."""
     chroma_db = palace_dir / "chroma.sqlite3"
     with sqlite3.connect(chroma_db) as con:
         con.executescript("""
@@ -118,7 +99,9 @@ def make_palace(root: Path) -> Path:
                     (i, key, val),
                 )
 
-    # Knowledge graph SQLite
+
+def _create_knowledge_graph_db(mp_dir: Path) -> None:
+    """Create a knowledge graph SQLite database populated with test entities and triples."""
     kg_db = mp_dir / "knowledge_graph.sqlite3"
     with sqlite3.connect(kg_db) as con:
         con.executescript("""
@@ -164,6 +147,30 @@ def make_palace(root: Path) -> Path:
                 0.95,
             ),
         )
+
+
+def make_palace(root: Path) -> Path:
+    """Create a minimal MemPalace v3.x ChromaDB structure for testing.
+
+    Returns the mempalace config dir (parent of config.json).
+    """
+    mp_dir = root / "mempalace"
+    mp_dir.mkdir(parents=True, exist_ok=True)
+
+    palace_dir = mp_dir / "palace"
+    palace_dir.mkdir(parents=True, exist_ok=True)
+
+    # config.json with palace_path
+    (mp_dir / "config.json").write_text(
+        json.dumps({
+            "palace_path": str(palace_dir),
+            "collection_name": "mempalace_drawers",
+        }),
+        encoding="utf-8",
+    )
+
+    _create_chroma_db(palace_dir)
+    _create_knowledge_graph_db(mp_dir)
 
     return mp_dir
 
