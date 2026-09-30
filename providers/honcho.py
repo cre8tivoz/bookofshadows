@@ -27,6 +27,7 @@ def _validate_base_url(base_url: str | None, provider: str, allowed: tuple[str, 
         return None
     try:
         from urllib.parse import urlparse
+
         parsed = urlparse(base_url)
         hostname = parsed.hostname or ""
         if hostname in ("localhost", "127.0.0.1", "::1"):
@@ -123,9 +124,7 @@ class HonchoProvider(PeerProvider):
             msg = f"{total} peers" if total else "connected, no peers"
             return ProviderHealth("ok", total, msg)
         except ImportError:
-            return ProviderHealth(
-                "error", 0, "honcho package not installed — run `pip install honcho`"
-            )
+            return ProviderHealth("error", 0, "honcho package not installed — run `pip install honcho`")
         except Exception as e:
             return ProviderHealth("error", 0, str(e))
 
