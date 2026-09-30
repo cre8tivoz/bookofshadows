@@ -46,11 +46,7 @@ def write_mock_audit_log(hermes_home: Path) -> Path:
     return path
 
 
-def make_mock_db(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        path.unlink()
-    con = sqlite3.connect(path)
+def _create_schema(con: sqlite3.Connection) -> None:
     con.executescript(
         """
         CREATE TABLE working_memory (
@@ -82,6 +78,9 @@ def make_mock_db(path: Path) -> None:
         );
         """
     )
+
+
+def _insert_working_memory(con: sqlite3.Connection) -> None:
     working = [
         (
             "wm-001",
@@ -148,6 +147,9 @@ def make_mock_db(path: Path) -> None:
         "INSERT INTO working_memory(id,content,source,timestamp,session_id,importance,scope,recall_count) VALUES (?,?,?,?,?,?,?,?)",
         working,
     )
+
+
+def _insert_episodic_memory(con: sqlite3.Connection) -> None:
     episodic = [
         (
             "em-001",
@@ -198,6 +200,9 @@ def make_mock_db(path: Path) -> None:
         "INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,summary_of,recall_count) VALUES (?,?,?,?,?,?,?,?,?)",
         episodic,
     )
+
+
+def _insert_triples(con: sqlite3.Connection) -> None:
     triples = [
         ("Mnemosyne Dashboard", "reads", "SQLite memory store", _recent_day(2), "architecture", 0.98),
         ("Mnemosyne Dashboard", "serves", "local web UI", _recent_day(4), "architecture", 0.96),
@@ -214,6 +219,9 @@ def make_mock_db(path: Path) -> None:
         "INSERT INTO triples(subject,predicate,object,valid_from,source,confidence) VALUES (?,?,?,?,?,?)",
         triples,
     )
+
+
+def _insert_consolidations(con: sqlite3.Connection) -> None:
     consolidations = [
         ("release_hardening_20260503", 8, "Repository publication checklist: README, CI, security headers, path traversal tests."),
         ("mobile_layout_20260504", 14, "Mobile layout fixes for overview cards, top bar, timeline headers, and landscape mode."),
@@ -224,5 +232,19 @@ def make_mock_db(path: Path) -> None:
         "INSERT INTO consolidation_log(session_id,items_consolidated,summary_preview) VALUES (?,?,?)",
         consolidations,
     )
+
+
+def make_mock_db(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.unlink()
+    con = sqlite3.connect(path)
+
+    _create_schema(con)
+    _insert_working_memory(con)
+    _insert_episodic_memory(con)
+    _insert_triples(con)
+    _insert_consolidations(con)
+
     con.commit()
     con.close()
