@@ -6,6 +6,8 @@ import json
 import mimetypes
 import os
 import re
+import select
+import socket
 import subprocess
 import threading
 import time
@@ -108,6 +110,70 @@ def _clear_login_attempts(client_ip: str) -> None:
         state = _load_rate_limit_state()
         state.pop(client_ip, None)
         _save_rate_limit_state(state)
+
+
+def _db_mtime_ns(db_path: Path) -> int:
+    """Get max modification time in nanoseconds for SQLite DB and journal/WAL files."""
+    try:
+        if not db_path.exists():
+            return 0
+        mtime = db_path.stat().st_mtime_ns
+        wal = db_path.with_name(db_path.name + "-wal")
+        if wal.exists():
+            mtime = max(mtime, wal.stat().st_mtime_ns)
+        return mtime
+    except Exception:
+        return -1
+
+
+def _is_ssl_socket(sock: Any) -> bool:
+    return hasattr(sock, "cipher") or hasattr(sock, "_sslobj")
+
+
+def _socket_disconnected(sock: socket.socket | None) -> bool:
+    """Check if the client socket is closed or disconnected."""
+    if sock is None or _is_ssl_socket(sock):
+        return False
+    try:
+        r, _, _ = select.select([sock], [], [], 0)
+        if r:
+            peek = sock.recv(1, socket.MSG_PEEK)
+            if not peek:
+                return True
+    except (BrokenPipeError, ConnectionResetError):
+        return True
+    except OSError:
+        pass
+    return False
+
+
+def _interruptible_sleep(sock: socket.socket | None, total_seconds: float = 2.0, step: float = 0.25) -> bool:
+    """Sleep for total_seconds in step intervals, checking for socket disconnect.
+    Returns True if disconnected, False if sleep completed normally.
+    """
+    end_time = time.time() + total_seconds
+    is_ssl = _is_ssl_socket(sock)
+    while True:
+        now = time.time()
+        remaining = end_time - now
+        if remaining <= 0:
+            return False
+        wait_time = min(remaining, step)
+        if sock is not None and not is_ssl:
+            try:
+                r, _, _ = select.select([sock], [], [], wait_time)
+                if r:
+                    peek = sock.recv(1, socket.MSG_PEEK)
+                    if not peek:
+                        return True
+                    # Unread bytes on socket: sleep wait_time to prevent tight CPU spin
+                    time.sleep(wait_time)
+            except (BrokenPipeError, ConnectionResetError):
+                return True
+            except OSError:
+                time.sleep(wait_time)
+        else:
+            time.sleep(wait_time)
 
 
 def _json_bytes(obj: Any) -> bytes:
@@ -310,6 +376,8 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(f"event: {name}\ndata: {payload}\n\n".encode())
             self.wfile.flush()
 
+        sock = getattr(self, "connection", None)
+
         try:
             status = self.store.realtime_status()
             write_event("status", status)
@@ -320,16 +388,28 @@ class Handler(BaseHTTPRequestHandler):
                 if memory_id:
                     seen_ids[memory_id] = str(event.get("live_signature") or "")
                 write_event("memory", event)
+
+            last_mtime: int | None = None
+
             for tick in range(900):
-                for event in self.store.realtime_event_delta(seen_ids=seen_ids, limit=poll_limit):
-                    memory_id = str(event.get("memory_id") or "")
-                    if memory_id:
-                        seen_ids[memory_id] = str(event.get("live_signature") or "")
-                    write_event("memory", event)
+                if _socket_disconnected(sock):
+                    return
+
+                current_mtime = _db_mtime_ns(self.store.db_path)
+                if last_mtime is None or current_mtime != last_mtime:
+                    for event in self.store.realtime_event_delta(seen_ids=seen_ids, limit=poll_limit):
+                        memory_id = str(event.get("memory_id") or "")
+                        if memory_id:
+                            seen_ids[memory_id] = str(event.get("live_signature") or "")
+                        write_event("memory", event)
+                    last_mtime = current_mtime
+
                 if tick % 8 == 0:
                     write_event("heartbeat", {"ok": True, "ts": time.time()})
-                time.sleep(2)
-        except (BrokenPipeError, ConnectionResetError):
+
+                if _interruptible_sleep(sock, 2.0, step=0.25):
+                    return
+        except (BrokenPipeError, ConnectionResetError, OSError):
             return
 
     def _send_file(self, path: Path):

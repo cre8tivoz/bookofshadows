@@ -16,3 +16,4 @@ uv.lock
 server.pid
 runtime.json
 server.log
+tmp_bench/
