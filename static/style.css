@@ -1399,9 +1399,10 @@ button[aria-busy="true"]{cursor:progress;opacity:.72}
   .section-head{align-items:flex-end;margin-bottom:8px}
   .section-head h2{font-size:20px}
   .section-head span{font-size:9px}
-  .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:10px}
+  .cards, #overview > .cards, #today > .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-bottom:10px}
   .card{min-height:68px;padding:10px;border-radius:var(--r-sm)}
   .card .num{font-size:24px}
+  .card .label{white-space:normal;overflow-wrap:break-word;word-break:break-word}
   .breakdowns{display:none}
   .memory-grid{grid-template-columns:1fr;gap:6px}
   .item{min-height:auto;border-radius:var(--r-sm);padding:10px}
@@ -1438,7 +1439,7 @@ button[aria-busy="true"]{cursor:progress;opacity:.72}
   .review-actions{justify-content:flex-start}
   .lifecycle-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   /* Fix cards overflowing on mobile */
-  .item,.review-memory-wrap,.memory-grid>*{min-width:0;max-width:100%;overflow-wrap:break-word;word-break:break-word}
+  .item,.card,.review-card,.lifecycle-card,.memory-card,.provider-card,.state-card,.status-card,.breakdown-card,.insight-action-card,.settings-card,.context-card,.review-memory-wrap,.cards>*,#overview > .cards>*,#today > .cards>*,.memory-grid>*{min-width:0;max-width:100%;overflow-wrap:break-word;word-break:break-word}
   .item .content,.item pre,.item code{word-break:break-all;overflow-wrap:break-word;white-space:pre-wrap}
   /* Spacing between review queues so headings don't collide */
   .review-queue+.review-queue{margin-top:16px}
@@ -1542,7 +1543,7 @@ button[aria-busy="true"]{cursor:progress;opacity:.72}
 @media(max-width:380px){
   nav{grid-template-columns:1fr}
   .hero h1{font-size:18px}
-  .cards{grid-template-columns:1fr}
+  .cards, #overview > .cards, #today > .cards{grid-template-columns:1fr}
   .mobile-topbar{height:50px}
   .compact-brand .brand-name{font-size:13px}
 }
