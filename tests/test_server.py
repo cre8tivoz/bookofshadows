@@ -406,3 +406,24 @@ def test_login_rate_limit_resets_after_success(tmp_path, monkeypatch):
             assert status == 403
     finally:
         server.close()
+
+
+def test_realtime_events_sse_non_blocking_and_disconnect(tmp_path, monkeypatch):
+    import time
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        req = urllib.request.Request(f"{server.base}/api/realtime/events")
+        resp = urllib.request.urlopen(req)
+        # Read event status and first event
+        status_line = resp.readline().decode()
+        assert status_line.startswith("event: status")
+        _data_line = resp.readline()
+        _empty_line = resp.readline()
+
+        t0 = time.time()
+        resp.close()
+        # Ensure client disconnect is recognized quickly without blocking thread
+        time.sleep(0.3)
+        assert time.time() - t0 < 1.0
+    finally:
+        server.close()
