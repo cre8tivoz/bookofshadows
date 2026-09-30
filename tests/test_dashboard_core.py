@@ -84,6 +84,28 @@ def test_release_version_is_consistent():
     assert Handler.server_version == f'MnemosyneDashboard/{project_version}'
 
 
+def test_quote_identifier_prevents_sql_injection():
+    import pytest
+
+    from dashboard_core import _quote_identifier
+
+    assert _quote_identifier("working_memory") == '"working_memory"'
+    assert _quote_identifier("valid_col_1") == '"valid_col_1"'
+
+    invalid_identifiers = [
+        'working_memory; DROP TABLE working_memory--',
+        'table"name',
+        'table name',
+        '123table',
+        '',
+        'table-name',
+        "table'name",
+    ]
+    for invalid in invalid_identifiers:
+        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+            _quote_identifier(invalid)
+
+
 def test_stats_counts_memory_tables(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
@@ -92,6 +114,17 @@ def test_stats_counts_memory_tables(tmp_path):
     assert stats['counts']['episodic_memory'] == 2
     assert stats['counts']['triples'] == 3
     assert stats['counts']['consolidation_log'] == 1
+
+
+def test_memoria_table_rejects_invalid_table_names(tmp_path):
+    import pytest
+
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        store._memoria_table("working_memory; DROP TABLE working_memory--")
 
 
 def test_stats_exposes_v23_trust_and_degradation_mix(tmp_path):

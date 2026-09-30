@@ -65,6 +65,15 @@ def _truthy(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _quote_identifier(name: str) -> str:
+    if not isinstance(name, str) or not _IDENTIFIER_RE.match(name):
+        raise ValueError(f"Invalid SQL identifier: {name!r}")
+    return f'"{name}"'
+
+
 def default_db_path() -> Path:
     home = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
     return home / "mnemosyne" / "data" / "mnemosyne.db"
@@ -181,7 +190,7 @@ class DashboardStore:
 
     @staticmethod
     def _columns(con: sqlite3.Connection, table: str) -> set[str]:
-        return {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        return {r[1] for r in con.execute(f"PRAGMA table_info({_quote_identifier(table)})")}
 
     @staticmethod
     def _memory_select_columns(columns: set[str], memory_kind: str) -> str:
@@ -364,7 +373,7 @@ class DashboardStore:
                            {importance_expr} AS importance, {veracity_expr} AS veracity,
                            {recall_expr} AS recall_count, {last_recalled_expr} AS last_recalled,
                            {valid_until_expr}, {superseded_expr}, {summary_expr}
-                    FROM {table}
+                    FROM {_quote_identifier(table)}
                     WHERE {where}
                     ORDER BY timestamp DESC
                     LIMIT ?
@@ -451,7 +460,7 @@ class DashboardStore:
                 for table in tables:
                     if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", table):
                         try:
-                            info["table_counts"][table] = int(con.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+                            info["table_counts"][table] = int(con.execute(f"SELECT count(*) FROM {_quote_identifier(table)}").fetchone()[0])
                         except Exception as exc:
                             info["table_errors"][table] = str(exc)
                 required = {"working_memory", "episodic_memory", "triples", "consolidation_log"}
@@ -467,7 +476,7 @@ class DashboardStore:
             counts: dict[str, int] = {}
             for table in ["working_memory", "episodic_memory", "memories", "triples", "consolidation_log", "scratchpad"]:
                 if table in tables:
-                    counts[table] = int(con.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
+                    counts[table] = int(con.execute(f"SELECT count(*) FROM {_quote_identifier(table)}").fetchone()[0])
                 else:
                     counts[table] = 0
 
@@ -496,16 +505,16 @@ class DashboardStore:
                     continue
                 columns = self._columns(con, table)
                 by_source_raw += [dict(r, tier=memory_kind, memory_kind=memory_kind) for r in con.execute(
-                    f"SELECT COALESCE(source,'') AS source, count(*) AS count FROM {table} GROUP BY source ORDER BY count DESC LIMIT 20"
+                    f"SELECT COALESCE(source,'') AS source, count(*) AS count FROM {_quote_identifier(table)} GROUP BY source ORDER BY count DESC LIMIT 20"
                 )]
                 by_scope_raw += [dict(r, tier=memory_kind, memory_kind=memory_kind) for r in con.execute(
-                    f"SELECT COALESCE(scope,'') AS scope, count(*) AS count FROM {table} GROUP BY scope ORDER BY count DESC"
+                    f"SELECT COALESCE(scope,'') AS scope, count(*) AS count FROM {_quote_identifier(table)} GROUP BY scope ORDER BY count DESC"
                 )]
                 by_session_raw += [dict(r, tier=memory_kind, memory_kind=memory_kind) for r in con.execute(
-                    f"SELECT COALESCE(session_id,'') AS session_id, count(*) AS count FROM {table} GROUP BY session_id ORDER BY count DESC LIMIT 20"
+                    f"SELECT COALESCE(session_id,'') AS session_id, count(*) AS count FROM {_quote_identifier(table)} GROUP BY session_id ORDER BY count DESC LIMIT 20"
                 )]
                 veracity_expr = "COALESCE(veracity, 'unknown')" if "veracity" in columns else "'unknown'"
-                for row in con.execute(f"SELECT {veracity_expr} AS veracity, COUNT(*) AS count FROM {table} GROUP BY veracity"):
+                for row in con.execute(f"SELECT {veracity_expr} AS veracity, COUNT(*) AS count FROM {_quote_identifier(table)} GROUP BY veracity"):
                     veracity = str(row["veracity"] or "unknown").lower()
                     if veracity not in VERACITY_WEIGHTS:
                         veracity = "unknown"
@@ -515,7 +524,7 @@ class DashboardStore:
                         contaminated_total += count
                 contaminated_clause = f"{veracity_expr} IN ('inferred','tool','imported','unknown')"
                 contaminated_high += int(con.execute(
-                    f"SELECT COUNT(*) FROM {table} WHERE {contaminated_clause} AND COALESCE(importance, 0) > 0.5"
+                    f"SELECT COUNT(*) FROM {_quote_identifier(table)} WHERE {contaminated_clause} AND COALESCE(importance, 0) > 0.5"
                 ).fetchone()[0])
                 if table == "episodic_memory":
                     tier_expr = "COALESCE(tier, 1)" if "tier" in columns else "1"
@@ -648,7 +657,7 @@ class DashboardStore:
                 select_cols = self._memory_select_columns(columns, memory_kind)
                 sql = f"""
                     SELECT {select_cols}
-                    FROM {table}
+                    FROM {_quote_identifier(table)}
                     {clause}
                     ORDER BY {sql_order}
                     LIMIT ? OFFSET 0
@@ -738,7 +747,7 @@ class DashboardStore:
                 columns = self._columns(con, table)
                 where, params = self._memory_where(query, memory_kind, columns, now, tier2_ts, tier3_ts)
                 clause = "WHERE " + " AND ".join(where) if where else ""
-                total += int(con.execute(f"SELECT COUNT(*) FROM {table} {clause}", params).fetchone()[0] or 0)
+                total += int(con.execute(f"SELECT COUNT(*) FROM {_quote_identifier(table)} {clause}", params).fetchone()[0] or 0)
         return total
 
     def get_memory(self, memory_id: str) -> dict[str, Any] | None:
@@ -747,7 +756,7 @@ class DashboardStore:
             for table, memory_kind in [("working_memory", "working"), ("episodic_memory", "episodic")]:
                 if table not in tables:
                     continue
-                row = con.execute(f"SELECT * FROM {table} WHERE id = ?", (memory_id,)).fetchone()
+                row = con.execute(f"SELECT * FROM {_quote_identifier(table)} WHERE id = ?", (memory_id,)).fetchone()
                 if row:
                     return self._enrich_memory(self._dict(row), memory_kind)
         return None
@@ -1088,7 +1097,7 @@ class DashboardStore:
             updated = 0
             for table in ("working_memory", "episodic_memory"):
                 if table in self._tables(con):
-                    cur = con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = NULL WHERE id = ?", (now, target))
+                    cur = con.execute(f"UPDATE {_quote_identifier(table)} SET valid_until = ?, superseded_by = NULL WHERE id = ?", (now, target))
                     updated += cur.rowcount
             if "memories" in self._tables(con):
                 cols = {r[1] for r in con.execute("PRAGMA table_info(memories)")}
@@ -1109,9 +1118,9 @@ class DashboardStore:
             updated = 0
             for table in ("working_memory", "episodic_memory", "memories"):
                 if table in self._tables(con):
-                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({_quote_identifier(table)})")}
                     if "importance" in cols:
-                        cur = con.execute(f"UPDATE {table} SET importance = ? WHERE id = ?", (importance, target))
+                        cur = con.execute(f"UPDATE {_quote_identifier(table)} SET importance = ? WHERE id = ?", (importance, target))
                         updated += cur.rowcount
             return updated
 
@@ -1128,9 +1137,9 @@ class DashboardStore:
             updated = 0
             for table in ("working_memory", "episodic_memory", "memories"):
                 if table in self._tables(con):
-                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({_quote_identifier(table)})")}
                     if "veracity" in cols:
-                        cur = con.execute(f"UPDATE {table} SET veracity = ? WHERE id = ?", (veracity, target))
+                        cur = con.execute(f"UPDATE {_quote_identifier(table)} SET veracity = ? WHERE id = ?", (veracity, target))
                         updated += cur.rowcount
             return updated
 
@@ -1151,9 +1160,9 @@ class DashboardStore:
             updated = 0
             for table in ("working_memory", "episodic_memory", "memories"):
                 if table in self._tables(con):
-                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+                    cols = {r[1] for r in con.execute(f"PRAGMA table_info({_quote_identifier(table)})")}
                     if "valid_until" in cols:
-                        cur = con.execute(f"UPDATE {table} SET valid_until = ? WHERE id = ?", (value, target))
+                        cur = con.execute(f"UPDATE {_quote_identifier(table)} SET valid_until = ? WHERE id = ?", (value, target))
                         updated += cur.rowcount
             return updated
 
@@ -1201,7 +1210,7 @@ class DashboardStore:
             ))
             for table in ("working_memory", "episodic_memory"):
                 if table in tables:
-                    con.execute(f"UPDATE {table} SET valid_until = ?, superseded_by = ? WHERE id = ?", (now, replacement_id, target))
+                    con.execute(f"UPDATE {_quote_identifier(table)} SET valid_until = ?, superseded_by = ? WHERE id = ?", (now, replacement_id, target))
             if "memories" in tables:
                 cols = {r[1] for r in con.execute("PRAGMA table_info(memories)")}
                 if {"id", "content"} <= cols:
@@ -1713,7 +1722,7 @@ class DashboardStore:
                             ELSE '10+'
                         END AS bucket,
                         COUNT(*) AS count
-                    FROM {table}
+                    FROM {_quote_identifier(table)}
                     WHERE COALESCE(superseded_by, '') = ''
                       AND (valid_until IS NULL OR valid_until = '' OR valid_until > ?)
                     GROUP BY bucket
@@ -2095,7 +2104,7 @@ class DashboardStore:
                 if tbl in tables:
                     cols = self._columns(con, tbl)
                     stats["tables"][tbl] = {
-                        "count": int(con.execute(f"SELECT count(*) FROM {tbl}").fetchone()[0]),
+                        "count": int(con.execute(f"SELECT count(*) FROM {_quote_identifier(tbl)}").fetchone()[0]),
                         "columns": sorted(cols),
                     }
                 else:
@@ -2104,7 +2113,7 @@ class DashboardStore:
             all_sessions: Counter[str] = Counter()
             for tbl in ["memoria_facts", "memoria_timelines", "memoria_instructions", "memoria_preferences"]:
                 if tbl in tables and "session_id" in self._columns(con, tbl):
-                    for row in con.execute(f"SELECT session_id, count(*) AS c FROM {tbl} GROUP BY session_id ORDER BY c DESC LIMIT 10"):
+                    for row in con.execute(f"SELECT session_id, count(*) AS c FROM {_quote_identifier(tbl)} GROUP BY session_id ORDER BY c DESC LIMIT 10"):
                         all_sessions[str(row["session_id"] or "default")] += int(row["c"] or 0)
             stats["top_sessions"] = [{"session_id": k, "count": v} for k, v in all_sessions.most_common(10)]
             return stats
@@ -2114,25 +2123,27 @@ class DashboardStore:
         limit = max(1, min(int(limit or 200), 1000))
         offset = max(0, int(offset or 0))
         q = (q or "").strip()
+        quoted_table = _quote_identifier(table)
         with self.connect() as con:
             tables = self._tables(con)
             if table not in tables:
                 return []
             cols = self._columns(con, table)
-            select = ", ".join(cols) if cols else "*"
+            select = ", ".join(_quote_identifier(c) for c in cols) if cols else "*"
             # Primary key name differs per table
             pk = "event_id" if table == "memoria_timelines" else "id"
+            quoted_pk = _quote_identifier(pk)
             where = "1=1"
             params: list[Any] = []
             if q:
                 # Search across text columns
                 text_cols = [c for c in cols if c in ("key", "value", "subject", "predicate", "object", "preference", "instruction", "description", "topic", "context_snippet")]
                 if text_cols:
-                    conditions = [f"COALESCE({c},'') LIKE ?" for c in text_cols]
+                    conditions = [f"COALESCE({_quote_identifier(c)},'') LIKE ?" for c in text_cols]
                     where = f"({' OR '.join(conditions)})"
                     params = [f"%{q}%"] * len(text_cols)
             rows = con.execute(
-                f"SELECT {select} FROM {table} WHERE {where} ORDER BY {pk} DESC LIMIT ? OFFSET ?",
+                f"SELECT {select} FROM {quoted_table} WHERE {where} ORDER BY {quoted_pk} DESC LIMIT ? OFFSET ?",
                 params + [limit, offset],
             ).fetchall()
             return [dict(r) for r in rows]
