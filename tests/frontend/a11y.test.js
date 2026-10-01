@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { focusableElements, trapFocus } from "../../static/src/utils/a11y.js";
@@ -90,5 +92,32 @@ describe("a11y focus trap", () => {
     release({ restoreFocus: false });
 
     expect(document.activeElement).toBe(inside);
+  });
+});
+
+describe("index.html form control accessibility", () => {
+  test("all input and select elements in index.html have an accessible name or label", () => {
+    const htmlPath = path.resolve(__dirname, "../../static/index.html");
+    const rawHtml = fs.readFileSync(htmlPath, "utf-8");
+    const html = rawHtml.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<link[\s\S]*?>/gi, "");
+    document.body.innerHTML = html;
+
+    const controls = Array.from(document.querySelectorAll("input, select"));
+    const unlabelled = controls.filter((el) => {
+      const hasAriaLabel = Boolean(el.getAttribute("aria-label") || el.getAttribute("aria-labelledby"));
+      if (hasAriaLabel) return false;
+
+      const hasWrappingLabel = Boolean(el.closest("label"));
+      if (hasWrappingLabel) return false;
+
+      if (el.id) {
+        const hasAssociatedLabel = Boolean(document.querySelector(`label[for="${el.id}"]`));
+        if (hasAssociatedLabel) return false;
+      }
+
+      return true;
+    });
+
+    expect(unlabelled.map((el) => el.id || el.outerHTML)).toEqual([]);
   });
 });

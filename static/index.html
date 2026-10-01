@@ -37,7 +37,7 @@
         </div>
       </button>
       <div class="menu-search glass-mini">
-        <input id="menuSearchQuery" placeholder="Search memory…" />
+        <input id="menuSearchQuery" placeholder="Search memory…" aria-label="Search memory" />
         <button id="menuSearchButton" class="primary" aria-label="Search memory">⌕</button>
       </div>
       <nav role="tablist" aria-label="Primary navigation">
@@ -164,7 +164,7 @@
           <div class="toolbar glass review-selector-bar">
             <label for="reviewQueueSelect" class="muted">Review queue</label>
             <select id="reviewQueueSelect"></select>
-            <input id="reviewSearchQuery" placeholder="Search this queue…" />
+            <input id="reviewSearchQuery" placeholder="Search this queue…" aria-label="Search review queue" />
             <label class="range-filter" for="reviewMinImportance"><span>Min importance</span> <strong class="range-filter-value" id="reviewMinImportanceValue">any</strong></label>
             <input id="reviewMinImportance" type="range" min="0" max="1" step="0.05" value="0" />
             <button id="reviewApplyFilters" class="primary">Apply filters</button>
@@ -262,7 +262,7 @@
           <div class="toolbar glass">
             <button id="palaceRefresh" class="primary">Refresh palace</button>
             <button id="palaceReset">Reset diver</button>
-            <input id="palaceSearchQuery" placeholder="Beacon search…" />
+            <input id="palaceSearchQuery" placeholder="Beacon search…" aria-label="Beacon search" />
             <button id="palaceSearchButton">Set beacon</button>
             <button id="palaceFullscreen">Fullscreen</button>
             <span class="muted">WASD to move · drag to look · tap relics · artifact rooms · Memory Diver + Hammy drone</span>
@@ -307,34 +307,34 @@
           </div>
           <div id="memoriaFacts" class="subpanel">
             <div class="section-head mini"><h2>MEMORIA Facts</h2><span>extracted fact triples from conversations</span></div>
-            <div class="toolbar glass"><input id="memoriaFactsQuery" placeholder="Search facts…" /><button id="memoriaFactsSearch" class="primary">Search</button><span id="memoriaFactsCount" class="muted"></span></div>
+            <div class="toolbar glass"><input id="memoriaFactsQuery" placeholder="Search facts…" aria-label="Search facts" /><button id="memoriaFactsSearch" class="primary">Search</button><span id="memoriaFactsCount" class="muted"></span></div>
             <div id="memoriaFactsList" class="list timeline"></div>
           </div>
           <div id="memoriaTimelines" class="subpanel">
             <div class="section-head mini"><h2>MEMORIA Timelines</h2><span>temporal event sequences</span></div>
-            <div class="toolbar glass"><input id="memoriaTimelinesQuery" placeholder="Search timelines…" /><button id="memoriaTimelinesSearch" class="primary">Search</button><span id="memoriaTimelinesCount" class="muted"></span></div>
+            <div class="toolbar glass"><input id="memoriaTimelinesQuery" placeholder="Search timelines…" aria-label="Search timelines" /><button id="memoriaTimelinesSearch" class="primary">Search</button><span id="memoriaTimelinesCount" class="muted"></span></div>
             <div id="memoriaTimelinesList" class="list timeline"></div>
           </div>
           <div id="memoriaInstructions" class="subpanel">
             <div class="section-head mini"><h2>MEMORIA Instructions</h2><span>extracted instructions and guidelines</span></div>
-            <div class="toolbar glass"><input id="memoriaInstructionsQuery" placeholder="Search instructions…" /><button id="memoriaInstructionsSearch" class="primary">Search</button><span id="memoriaInstructionsCount" class="muted"></span></div>
+            <div class="toolbar glass"><input id="memoriaInstructionsQuery" placeholder="Search instructions…" aria-label="Search instructions" /><button id="memoriaInstructionsSearch" class="primary">Search</button><span id="memoriaInstructionsCount" class="muted"></span></div>
             <div id="memoriaInstructionsList" class="list timeline"></div>
           </div>
           <div id="memoriaKg" class="subpanel">
             <div class="section-head mini"><h2>MEMORIA KG</h2><span>knowledge graph triples</span></div>
-            <div class="toolbar glass"><input id="memoriaKgQuery" placeholder="Search KG…" /><button id="memoriaKgSearch" class="primary">Search</button><span id="memoriaKgCount" class="muted"></span></div>
+            <div class="toolbar glass"><input id="memoriaKgQuery" placeholder="Search KG…" aria-label="Search knowledge graph facts" /><button id="memoriaKgSearch" class="primary">Search</button><span id="memoriaKgCount" class="muted"></span></div>
             <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th></tr></thead><tbody id="memoriaKgRows"></tbody></table></div>
           </div>
           <div id="memoriaPreferences" class="subpanel">
             <div class="section-head mini"><h2>MEMORIA Preferences</h2><span>extracted user preferences</span></div>
-            <div class="toolbar glass"><input id="memoriaPreferencesQuery" placeholder="Search preferences…" /><button id="memoriaPreferencesSearch" class="primary">Search</button><span id="memoriaPreferencesCount" class="muted"></span></div>
+            <div class="toolbar glass"><input id="memoriaPreferencesQuery" placeholder="Search preferences…" aria-label="Search preferences" /><button id="memoriaPreferencesSearch" class="primary">Search</button><span id="memoriaPreferencesCount" class="muted"></span></div>
             <div id="memoriaPreferencesList" class="list timeline"></div>
           </div>
         </section>
 
         <section id="search" class="tab">
           <div class="section-head"><h2>Search</h2><span>results from memories, triples, and consolidations</span></div>
-          <div class="toolbar glass"><input id="globalSearchQuery" placeholder="Search everything…" /><button id="globalSearchButton" class="primary">Search</button></div>
+          <div class="toolbar glass"><input id="globalSearchQuery" placeholder="Search everything…" aria-label="Search everything" /><button id="globalSearchButton" class="primary">Search</button></div>
           <div id="globalSearchResults" class="search-results"></div>
         </section>
 
@@ -356,16 +356,16 @@
               <button type="button" class="tiny" data-memory-preset="unknown-trust">Unknown trust</button>
             </div>
             <div class="toolbar glass">
-              <input id="memoryQuery" placeholder="Search memory content…" />
-              <select id="memoryKind"><option value="all">all tiers</option><option value="working">working</option><option value="episodic">episodic</option></select>
-              <select id="memorySource"><option value="">all sources</option></select>
-              <select id="memoryScope"><option value="">all scopes</option></select>
-              <select id="memorySession"><option value="">all sessions</option></select>
-              <select id="memoryVeracity"><option value="">all trust levels</option><option value="stated">stated</option><option value="inferred">inferred</option><option value="tool">tool</option><option value="imported">imported</option><option value="unknown">unknown</option></select>
-              <select id="memoryDegradation"><option value="">all lifecycle tiers</option><option value="1">hot · full detail</option><option value="2">warm · compressed</option><option value="3">cold · key signal</option></select>
-              <select id="memoryTrustPreset"><option value="">all confidence</option><option value="contaminated">needs review</option><option value="degraded">degraded only</option><option value="due">due for degradation</option></select>
-              <select id="memoryStatus"><option value="active">active</option><option value="all">all statuses</option><option value="expired">expired</option><option value="superseded">superseded</option></select>
-              <select id="memorySort"><option value="recent">newest</option><option value="oldest">oldest</option><option value="importance">importance</option><option value="recall">recall count</option></select>
+              <input id="memoryQuery" placeholder="Search memory content…" aria-label="Search memory content" />
+              <select id="memoryKind" aria-label="Filter by memory tier"><option value="all">all tiers</option><option value="working">working</option><option value="episodic">episodic</option></select>
+              <select id="memorySource" aria-label="Filter by memory source"><option value="">all sources</option></select>
+              <select id="memoryScope" aria-label="Filter by memory scope"><option value="">all scopes</option></select>
+              <select id="memorySession" aria-label="Filter by session"><option value="">all sessions</option></select>
+              <select id="memoryVeracity" aria-label="Filter by trust level"><option value="">all trust levels</option><option value="stated">stated</option><option value="inferred">inferred</option><option value="tool">tool</option><option value="imported">imported</option><option value="unknown">unknown</option></select>
+              <select id="memoryDegradation" aria-label="Filter by lifecycle tier"><option value="">all lifecycle tiers</option><option value="1">hot · full detail</option><option value="2">warm · compressed</option><option value="3">cold · key signal</option></select>
+              <select id="memoryTrustPreset" aria-label="Filter by confidence preset"><option value="">all confidence</option><option value="contaminated">needs review</option><option value="degraded">degraded only</option><option value="due">due for degradation</option></select>
+              <select id="memoryStatus" aria-label="Filter by memory status"><option value="active">active</option><option value="all">all statuses</option><option value="expired">expired</option><option value="superseded">superseded</option></select>
+              <select id="memorySort" aria-label="Sort memories by"><option value="recent">newest</option><option value="oldest">oldest</option><option value="importance">importance</option><option value="recall">recall count</option></select>
               <button id="memorySearch" class="primary">Search</button>
               <button id="memoryClear">Clear</button>
               <span id="memoryListCount" class="muted">0 listed</span>
@@ -386,7 +386,7 @@
           </div>
           <div id="exploreRecall" class="subpanel">
             <div class="section-head mini"><h2>Recall debugger</h2><span>why memories rank</span></div>
-            <div class="toolbar glass"><input id="recallQuery" placeholder="Type a recall query…" /><button id="recallButton" class="primary">Debug recall</button></div>
+            <div class="toolbar glass"><input id="recallQuery" placeholder="Type a recall query…" aria-label="Recall query" /><button id="recallButton" class="primary">Debug recall</button></div>
             <div id="recallNote" class="muted"></div>
             <div id="recallResults" class="list memory-grid"></div>
           </div>
@@ -401,8 +401,8 @@
           <div id="activityTimeline" class="subpanel active">
             <div class="section-head mini"><h2>Timeline</h2><span>day / session stream</span></div>
             <div class="toolbar glass">
-              <input id="timelineQuery" placeholder="Filter timeline…" />
-              <select id="timelineGroup"><option value="day">group by day</option><option value="session">group by session</option></select>
+              <input id="timelineQuery" placeholder="Filter timeline…" aria-label="Filter timeline" />
+              <select id="timelineGroup" aria-label="Group timeline by"><option value="day">group by day</option><option value="session">group by session</option></select>
               <button id="timelineButton" class="primary">Load timeline</button>
             </div>
             <div id="timelineResults" class="timeline-groups"></div>
@@ -410,7 +410,7 @@
           <div id="activityConsolidations" class="subpanel">
             <div class="section-head mini"><h2>Consolidations</h2><span>click entries to inspect</span></div>
             <div class="toolbar glass">
-              <input id="consolidationQuery" placeholder="Filter summaries / sessions…" />
+              <input id="consolidationQuery" placeholder="Filter summaries / sessions…" aria-label="Filter consolidations" />
               <button id="consolidationClear">Clear</button>
               <span class="muted">Each run shows compressed-memory previews and session actions.</span>
             </div>
@@ -427,7 +427,7 @@
           <div id="graphGraph" class="subpanel active">
             <div class="section-head mini"><h2>Relationship graph</h2><span>click nodes / edges to inspect</span></div>
             <div class="toolbar glass">
-              <input id="graphQuery" placeholder="Filter graph by subject / predicate / object…" />
+              <input id="graphQuery" placeholder="Filter graph by subject / predicate / object…" aria-label="Filter graph" />
               <button id="graphRefresh" class="primary">Refresh graph</button>
               <button id="graphClear">Clear</button>
               <button id="graphResetView">Reset view</button>
@@ -444,7 +444,7 @@
           </div>
           <div id="graphTriples" class="subpanel">
             <div class="section-head mini"><h2>Triples</h2><span>knowledge graph facts</span></div>
-            <div class="toolbar glass"><input id="tripleQuery" placeholder="Search subject / predicate / object…" /><button id="tripleSearch" class="primary">Search</button></div>
+            <div class="toolbar glass"><input id="tripleQuery" placeholder="Search subject / predicate / object…" aria-label="Search triples" /><button id="tripleSearch" class="primary">Search</button></div>
             <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th></tr></thead><tbody id="tripleRows"></tbody></table></div>
           </div>
         </section>
@@ -521,7 +521,7 @@
               <div class="breakdown-title">Password auth</div>
               <p class="muted">Optional. If enabled, users must enter the password before API data loads. Required for memory admin mode when the dashboard is exposed on LAN/non-local hosts.</p>
               <label class="check-row"><input id="authEnabled" type="checkbox" /> Enable password</label>
-              <input id="authPassword" type="password" placeholder="Set / change password" />
+              <input id="authPassword" type="password" placeholder="Set / change password" aria-label="Set or change password" />
               <div class="item-actions"><button id="saveAuth" class="primary">Save auth settings</button><button id="clearAuth">Disable + clear password</button><button id="logoutAuth">Logout</button></div>
               <p id="authStatus" class="muted"></p>
             </div>
@@ -581,7 +581,7 @@
       <div class="brand compact-brand"><div class="brand-mark">W</div><div><div class="brand-name">Book of Shadows</div><div class="brand-sub">Mnemosyne · Witch Daddy Labs</div></div></div>
       <h2 id="loginHeading">Password required</h2>
       <p class="muted">This dashboard has optional password auth enabled.</p>
-      <input id="loginPassword" type="password" placeholder="Password" />
+      <input id="loginPassword" type="password" placeholder="Password" aria-label="Password" />
       <button id="loginButton" class="primary">Unlock</button>
       <p id="loginError" class="muted"></p>
     </div>
