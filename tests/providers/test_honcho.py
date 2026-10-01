@@ -268,7 +268,35 @@ class TestGetCounts:
             counts = provider.get_counts()
         assert counts["peers"] == 2
         assert counts["sessions"] == 2
-        assert counts["conclusions"] == 1  # 1 conclusion for peer-1, peer-2 has none
+        assert counts["conclusions"] == 1
+
+    def test_get_counts_iterator_fallback(self):
+        mock_client = _make_mock_client()
+        mock_client.conclusions.list.side_effect = None
+        # Mock conclusions.list to return an object without .total attribute
+        mock_conclusions_obj = MagicMock(spec=["__iter__"])
+        del mock_conclusions_obj.total
+        mock_conclusions_obj.__iter__.return_value = iter([_make_conclusion("c1"), _make_conclusion("c2")])
+        mock_client.conclusions.list.return_value = mock_conclusions_obj
+
+        mock_module = _mock_honcho_module(mock_client)
+        with patch.dict("sys.modules", {"honcho": mock_module}):
+            provider = HonchoProvider(api_key="sk-test")
+            provider._client = mock_client
+            counts = provider.get_counts()
+        assert counts["peers"] == 2
+        assert counts["sessions"] == 2
+        assert counts["conclusions"] == 2
+
+    def test_get_counts_exception_returns_zeros(self):
+        mock_client = _make_mock_client()
+        mock_client.peers.list.side_effect = Exception("API Error")
+        mock_module = _mock_honcho_module(mock_client)
+        with patch.dict("sys.modules", {"honcho": mock_module}):
+            provider = HonchoProvider(api_key="sk-test")
+            provider._client = mock_client
+            counts = provider.get_counts()
+        assert counts == {"peers": 0, "sessions": 0, "conclusions": 0}
 
 
 class TestPeerProvider:
