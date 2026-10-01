@@ -817,6 +817,30 @@ class DashboardStore:
                     return self._enrich_memory(self._dict(row), memory_kind)
         return None
 
+    @staticmethod
+    def _build_review_queue_args(
+        queue_key: str,
+        *,
+        q: str = "",
+        min_importance: float | None = None,
+        limit: int = 10000,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        meta = REVIEW_QUEUE_DEFS.get(queue_key)
+        if not meta:
+            return {}
+        args = dict(meta["args"])
+        if q:
+            args["q"] = q
+        base_min = args.get("min_importance")
+        if min_importance is not None:
+            args["min_importance"] = max(float(base_min or 0), min_importance)
+        elif base_min is not None:
+            args["min_importance"] = base_min
+        args["limit"] = limit
+        args["offset"] = offset
+        return args
+
     def review_queues(
         self,
         limit: int = 50,
@@ -829,26 +853,18 @@ class DashboardStore:
         limit = max(1, min(int(limit or 50), 500))
         offset = max(0, int(offset or 0))
         queue = (queue or "").strip() or "contaminated"
-        queue_defs = REVIEW_QUEUE_DEFS
-        if queue not in queue_defs:
+        if queue not in REVIEW_QUEUE_DEFS:
             queue = "contaminated"
         min_importance_value = _parse_optional_float(min_importance)
 
-        def args_for(key: str, *, page: bool = False) -> dict[str, Any]:
-            args = dict(queue_defs[key]["args"])
-            if q:
-                args["q"] = q
-            base_min = args.get("min_importance")
-            if min_importance_value is not None:
-                args["min_importance"] = max(float(base_min or 0), min_importance_value)
-            elif base_min is not None:
-                args["min_importance"] = base_min
-            args["limit"] = limit if page else 10000
-            args["offset"] = offset if page else 0
-            return args
-
-        totals = {key: len(self.list_memories(**args_for(key))) for key in queue_defs}
-        page_items = self.list_memories(**args_for(queue, page=True))
+        totals = {
+            key: len(self.list_memories(**self._build_review_queue_args(key, q=q, min_importance=min_importance_value)))
+            for key in REVIEW_QUEUE_DEFS
+        }
+        page_args = self._build_review_queue_args(
+            queue, q=q, min_importance=min_importance_value, limit=limit, offset=offset
+        )
+        page_items = self.list_memories(**page_args)
         queues = {
             key: {
                 "title": meta["title"],
@@ -856,11 +872,11 @@ class DashboardStore:
                 "filter": meta["filter"],
                 "items": page_items if key == queue else [],
             }
-            for key, meta in queue_defs.items()
+            for key, meta in REVIEW_QUEUE_DEFS.items()
         }
         cards = [
             {"key": key, "title": meta["title"], "count": totals[key], "description": meta["description"]}
-            for key, meta in queue_defs.items()
+            for key, meta in REVIEW_QUEUE_DEFS.items()
         ]
         next_offset = offset + limit if offset + len(page_items) < totals[queue] else None
         return {
