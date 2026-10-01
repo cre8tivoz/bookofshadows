@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -164,10 +165,14 @@ class HonchoProvider(PeerProvider):
         try:
             edges: list[Edge] = []
             peers = self.get_peers(limit=limit)
-            for peer in peers:
+            if not peers:
+                return edges
+
+            def _fetch_peer_edges(peer: PeerCard) -> list[Edge]:
+                peer_edges: list[Edge] = []
                 representations = self.get_representations(peer.id)
                 for rep in representations:
-                    edges.append(
+                    peer_edges.append(
                         Edge(
                             source=peer.id,
                             predicate="represents",
@@ -175,6 +180,14 @@ class HonchoProvider(PeerProvider):
                             confidence=rep.confidence,
                         )
                     )
+                return peer_edges
+
+            max_workers = min(32, len(peers))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                results = executor.map(_fetch_peer_edges, peers)
+                for peer_edges in results:
+                    edges.extend(peer_edges)
+
             return edges
         except Exception:
             return None
