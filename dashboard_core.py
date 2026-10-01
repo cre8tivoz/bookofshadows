@@ -51,6 +51,33 @@ VERACITY_WEIGHTS = {
 }
 CONTAMINATED_VERACITIES = {"inferred", "tool", "imported", "unknown"}
 
+REVIEW_QUEUE_DEFS = {
+    "contaminated": {
+        "title": "Needs review",
+        "description": "Memories not directly stated by you: inferred, tool-generated, imported, or unknown.",
+        "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance"},
+        "filter": {"contaminated_only": "1", "sort": "importance"},
+    },
+    "high_importance_contaminated": {
+        "title": "Important memories needing review",
+        "description": "Important memories that were inferred, tool-generated, imported, or unknown.",
+        "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance", "min_importance": 0.500001},
+        "filter": {"contaminated_only": "1", "sort": "importance"},
+    },
+    "degraded": {
+        "title": "Degraded",
+        "description": "Episodic memories that have moved down the lifecycle and may carry reduced recall weight.",
+        "args": {"kind": "episodic", "status": "active", "degraded_only": True, "sort": "recent"},
+        "filter": {"kind": "episodic", "degraded_only": "1", "sort": "recent"},
+    },
+    "due_for_degradation": {
+        "title": "Due for degradation",
+        "description": "Hot or warm episodic memories old enough to be compressed into the next lifecycle tier.",
+        "args": {"kind": "episodic", "status": "active", "due_for_degradation": True, "sort": "oldest"},
+        "filter": {"kind": "episodic", "due_for_degradation": "1", "sort": "oldest"},
+    },
+}
+
 
 def _degradation_label(value: object) -> str:
     try:
@@ -802,32 +829,7 @@ class DashboardStore:
         limit = max(1, min(int(limit or 50), 500))
         offset = max(0, int(offset or 0))
         queue = (queue or "").strip() or "contaminated"
-        queue_defs = {
-            "contaminated": {
-                "title": "Needs review",
-                "description": "Memories not directly stated by you: inferred, tool-generated, imported, or unknown.",
-                "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance"},
-                "filter": {"contaminated_only": "1", "sort": "importance"},
-            },
-            "high_importance_contaminated": {
-                "title": "Important memories needing review",
-                "description": "Important memories that were inferred, tool-generated, imported, or unknown.",
-                "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance", "min_importance": 0.500001},
-                "filter": {"contaminated_only": "1", "sort": "importance"},
-            },
-            "degraded": {
-                "title": "Degraded",
-                "description": "Episodic memories that have moved down the lifecycle and may carry reduced recall weight.",
-                "args": {"kind": "episodic", "status": "active", "degraded_only": True, "sort": "recent"},
-                "filter": {"kind": "episodic", "degraded_only": "1", "sort": "recent"},
-            },
-            "due_for_degradation": {
-                "title": "Due for degradation",
-                "description": "Hot or warm episodic memories old enough to be compressed into the next lifecycle tier.",
-                "args": {"kind": "episodic", "status": "active", "due_for_degradation": True, "sort": "oldest"},
-                "filter": {"kind": "episodic", "due_for_degradation": "1", "sort": "oldest"},
-            },
-        }
+        queue_defs = REVIEW_QUEUE_DEFS
         if queue not in queue_defs:
             queue = "contaminated"
         min_importance_value = _parse_optional_float(min_importance)
