@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -93,15 +93,15 @@ def run_benchmark(num_peers: int = 100, simulated_latency_sec: float = 0.002):
     optimized_calls = client_optimized.conclusions.list.call_count
 
     print(f"Benchmark Results for N = {num_peers} peers (simulated latency {simulated_latency_sec*1000:.1f}ms per API call):")
-    print(f"  Baseline (N+1 queries):")
+    print("  Baseline (N+1 queries):")
     print(f"    - API conclusions call count: {baseline_calls}")
     print(f"    - Execution time: {baseline_time:.4f} seconds")
     print(f"    - Result: {res_baseline}")
-    print(f"  Optimized (Batch query):")
+    print("  Optimized (Batch query):")
     print(f"    - API conclusions call count: {optimized_calls}")
     print(f"    - Execution time: {optimized_time:.4f} seconds")
     print(f"    - Result: {res_optimized}")
-    print(f"  Improvement:")
+    print("  Improvement:")
     print(f"    - Call count reduction: {baseline_calls - optimized_calls} calls ({(1 - optimized_calls/baseline_calls)*100:.1f}%)")
     print(f"    - Time saved: {baseline_time - optimized_time:.4f} seconds ({baseline_time / optimized_time:.1f}x speedup)")
 
