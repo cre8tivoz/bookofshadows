@@ -136,20 +136,17 @@ class HonchoProvider(PeerProvider):
         return [self._to_row(r) for r in results]
 
     def get_counts(self) -> dict[str, int]:
-        """Return counts of peers, sessions, and conclusions."""
+        """Return counts of peers, sessions, and conclusions using batch workspace query."""
         try:
             peers = self.get_peers(limit=1000)
             sessions = self.get_sessions(limit=1000)
 
-            # Count conclusions across all peers in a single API request if possible
             if self._client is None:
                 raise RuntimeError("HonchoProvider not initialized — call initialize() first")
 
-            # `self._client.conclusions.list()` fetches workspace conclusions in batch.
-            # Using limit/size kwargs isn't officially supported in older Honcho <2.5,
-            # so we just iterate the paginator or convert to list to count them.
+            # Fetch workspace conclusions in a single batch API request instead of N+1 per-peer calls
             conclusions = self._client.conclusions.list()
-            # If the response supports a .total attribute, use it, else measure length.
+            # If the response supports a .total attribute (e.g. SyncPage), use it directly.
             conclusion_count = getattr(conclusions, "total", None)
             if conclusion_count is None:
                 conclusion_count = sum(1 for _ in conclusions)
