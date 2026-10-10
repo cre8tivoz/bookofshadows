@@ -1,7 +1,8 @@
 import { esc } from "../utils/escape.js";
 
 export function renderToast({ tone = "info", title, body = "", actionLabel = "" }) {
-  return `<div class="toast toast-${esc(tone)}" role="status">
+  const role = ["error", "warn", "warning", "danger"].includes(String(tone || "").toLowerCase()) ? "alert" : "status";
+  return `<div class="toast toast-${esc(tone)}" role="${role}">
     <strong>${esc(title || "Notice")}</strong>
     ${body ? `<p>${esc(body)}</p>` : ""}
     ${actionLabel ? `<button type="button" class="toast-action">${esc(actionLabel)}</button>` : ""}

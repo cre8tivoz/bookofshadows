@@ -49,7 +49,7 @@ describe("memory rendering", () => {
     expect(html).toContain("session_…123456");
   });
 
-  test("renders memory cards with role badges, escaped content, and selectable state", () => {
+  test("renders memory cards with role badges, escaped content, and selectable state with aria-label", () => {
     const selected = new Set(["wm-001"]);
     const html = memoryItem(item, { selectable: true, selectedSet: selected, checkClass: "review-check" });
 
@@ -59,6 +59,7 @@ describe("memory rendering", () => {
     expect(html).not.toContain("[USER]");
     expect(html).toContain('class="review-check"');
     expect(html).toContain("checked");
+    expect(html).toContain('aria-label="Select memory wm-001"');
   });
 
   test("maps live event badges", () => {
