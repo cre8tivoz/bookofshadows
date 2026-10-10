@@ -54,3 +54,27 @@ def test_mempalace_config_path_env_var(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMPALACE_CONFIG", str(cfg))
     from paths import mempalace_config_path
     assert mempalace_config_path() == cfg
+
+
+def test_mempalace_config_path_dir_env_var(tmp_path, monkeypatch):
+    monkeypatch.delenv("MEMPALACE_CONFIG", raising=False)
+    mempalace_dir = tmp_path / "custom_mempalace"
+    monkeypatch.setenv("MEMPALACE_DIR", str(mempalace_dir))
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == mempalace_dir / "config.json"
+
+
+def test_mempalace_config_path_precedence(tmp_path, monkeypatch):
+    cfg = tmp_path / "override.json"
+    mempalace_dir = tmp_path / "custom_mempalace"
+    monkeypatch.setenv("MEMPALACE_CONFIG", str(cfg))
+    monkeypatch.setenv("MEMPALACE_DIR", str(mempalace_dir))
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == cfg
+
+
+def test_mempalace_config_path_expanduser(monkeypatch):
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+    monkeypatch.setenv("MEMPALACE_CONFIG", "~/mempalace.json")
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == Path.home() / "mempalace.json"
