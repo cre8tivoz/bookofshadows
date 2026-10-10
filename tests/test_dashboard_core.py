@@ -287,6 +287,18 @@ def test_search_uses_token_prefix_not_mid_word_substring(tmp_path):
     assert [r['object'] for r in search['triples']] == ['Diana']
 
 
+def test_global_search_empty_query_returns_empty_structure(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+
+    expected = {"query": "", "memories": [], "triples": [], "consolidations": []}
+
+    assert store.global_search(q="") == expected
+    assert store.global_search(q="   ") == expected
+    assert store.global_search(q=None) == expected
+
+
 def test_list_memories_filters_and_sorts_by_importance(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
