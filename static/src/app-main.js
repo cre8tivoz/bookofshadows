@@ -290,7 +290,7 @@ function modalTemplate(){
         <h2 id="actionModalTitle">Confirm action</h2>
         <p id="actionModalDescription" class="muted"></p>
         <div id="actionModalBody"></div>
-        <p id="actionModalError" class="modal-error" role="alert" aria-live="assertive"></p>
+        <p id="actionModalError" class="modal-error" role="alert"></p>
         <div class="modal-actions">
           <button id="actionModalCancel">Cancel</button>
           <button id="actionModalConfirm" class="primary">Confirm</button>

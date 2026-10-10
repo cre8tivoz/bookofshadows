@@ -148,7 +148,7 @@
 
   // static/src/ui/feedback.js
   function renderToast({ tone = "info", title, body = "", actionLabel = "" }) {
-    const role = ["error", "warn", "warning", "danger"].includes(String(tone).toLowerCase()) ? "alert" : "status";
+    const role = ["error", "warn", "warning", "danger"].includes(String(tone || "").toLowerCase()) ? "alert" : "status";
     return `<div class="toast toast-${esc(tone)}" role="${role}">
     <strong>${esc(title || "Notice")}</strong>
     ${body ? `<p>${esc(body)}</p>` : ""}
@@ -5361,7 +5361,7 @@
         <h2 id="actionModalTitle">Confirm action</h2>
         <p id="actionModalDescription" class="muted"></p>
         <div id="actionModalBody"></div>
-        <p id="actionModalError" class="modal-error" role="alert" aria-live="assertive"></p>
+        <p id="actionModalError" class="modal-error" role="alert"></p>
         <div class="modal-actions">
           <button id="actionModalCancel">Cancel</button>
           <button id="actionModalConfirm" class="primary">Confirm</button>
