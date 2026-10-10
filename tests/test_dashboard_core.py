@@ -8,6 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from decimal import Decimal
+import pytest
+
 from config import default_db_path, effective_config, load_config, public_config, save_config
 from dashboard_core import DashboardStore, _truthy
 from server import Handler
@@ -74,47 +77,111 @@ def make_db(path: Path):
     con.close()
 
 
-def test_truthy_edge_cases():
-    # Booleans
-    assert _truthy(True) is True
-    assert _truthy(False) is False
+@pytest.mark.parametrize(
+    "val",
+    [
+        # Booleans
+        True,
+        # Exact truthy strings
+        "1",
+        "true",
+        "yes",
+        "on",
+        # Case variations
+        "TRUE",
+        "True",
+        "YES",
+        "Yes",
+        "ON",
+        "On",
+        "tRuE",
+        "yEs",
+        # Whitespace variations (leading, trailing, tabs, newlines, non-breaking space)
+        "  true  ",
+        "\ton\n",
+        "\r\nyes\t",
+        " 1 ",
+        "\xa0yes\xa0",
+        # Integer 1 & Decimal("1") (str(x) -> "1")
+        1,
+        Decimal("1"),
+        # Custom object with truthy string representation
+        type("CustomTruthy", (), {"__str__": lambda self: "true"})(),
+        type("CustomYes", (), {"__str__": lambda self: "YES"})(),
+        type("CustomOne", (), {"__str__": lambda self: " 1 "})(),
+    ],
+)
+def test_truthy_returns_true_for_valid_inputs(val):
+    assert _truthy(val) is True, f"Expected _truthy({val!r}) to be True"
 
-    # Truthy string representations (case-insensitive, whitespace trimmed)
-    for val in ["1", "true", "yes", "on", "TRUE", "Yes", "ON", "  true  ", "\ton\n", " 1 "]:
-        assert _truthy(val) is True, f"Expected _truthy({val!r}) to be True"
 
-    # Falsy string representations
-    for val in ["0", "false", "no", "off", "FALSE", "No", "OFF", "random", "2", "undefined", "null"]:
-        assert _truthy(val) is False, f"Expected _truthy({val!r}) to be False"
-
-    # Numeric non-bool types
-    assert _truthy(1) is True
-    assert _truthy(0) is False
-    assert _truthy(2) is False
-    assert _truthy(-1) is False
-    assert _truthy(1.0) is False
-    assert _truthy(0.0) is False
-
-    # None, empty string, and whitespace
-    assert _truthy(None) is False
-    assert _truthy("") is False
-    assert _truthy("   ") is False
-
-    # Containers and objects
-    assert _truthy([]) is False
-    assert _truthy({}) is False
-    assert _truthy([1]) is False
-
-    class CustomTruthy:
-        def __str__(self):
-            return "true"
-
-    class CustomFalsy:
-        def __str__(self):
-            return "something else"
-
-    assert _truthy(CustomTruthy()) is True
-    assert _truthy(CustomFalsy()) is False
+@pytest.mark.parametrize(
+    "val",
+    [
+        # Booleans
+        False,
+        # Falsy string representations
+        "0",
+        "false",
+        "no",
+        "off",
+        "FALSE",
+        "No",
+        "OFF",
+        "random",
+        "2",
+        "-1",
+        "undefined",
+        "null",
+        "true story",
+        "not true",
+        "10",
+        "yes sir",
+        "online",
+        "0.0",
+        "1.0",
+        # Empty string, None, and pure whitespace
+        "",
+        "   ",
+        "\t\n\r",
+        "\xa0",
+        None,
+        # Numbers (non-bool) that do not stringify to "1"
+        0,
+        2,
+        -1,
+        10,
+        0.0,
+        1.0,  # str(1.0) is "1.0", not "1"
+        -1.0,
+        float("nan"),
+        float("inf"),
+        Decimal("0"),
+        Decimal("2"),
+        complex(1, 0),
+        # Byte strings (str(b"1") is "b'1'")
+        b"1",
+        b"true",
+        b"yes",
+        bytearray(b"1"),
+        # Containers (empty and non-empty)
+        [],
+        [1],
+        ["true"],
+        {},
+        {"1": 1},
+        set(),
+        {1},
+        (1,),
+        # Custom objects
+        type("CustomFalsy", (), {"__str__": lambda self: "something else"})(),
+        type("CustomFalseStr", (), {"__str__": lambda self: "false"})(),
+        # Object whose __bool__ returns False (evaluates to "" via `value or ""` in _truthy)
+        type("CustomBoolFalseWithTrueStr", (), {"__bool__": lambda self: False, "__str__": lambda self: "true"})(),
+    ],
+)
+def test_truthy_returns_false_for_invalid_inputs(val):
+    assert _truthy(val) is False, f"Expected _truthy({val!r}) to be False"
 
 
 def test_release_version_is_consistent():
