@@ -80,11 +80,11 @@ def test_truthy_edge_cases():
     assert _truthy(False) is False
 
     # Truthy string representations (case-insensitive, whitespace trimmed)
-    for val in ["1", "true", "yes", "on", "TRUE", "Yes", "ON", "  true  ", "\ton\n", " 1 "]:
+    for val in ["1", "true", "yes", "on", "TRUE", "Yes", "ON", "  true  ", "\ton\n", " 1 ", "  YES\t", "\nON\n"]:
         assert _truthy(val) is True, f"Expected _truthy({val!r}) to be True"
 
     # Falsy string representations
-    for val in ["0", "false", "no", "off", "FALSE", "No", "OFF", "random", "2", "undefined", "null"]:
+    for val in ["0", "false", "no", "off", "FALSE", "No", "OFF", "random", "2", "undefined", "null", "1.0", "trueish", "yes!", "01", "+1", "-1"]:
         assert _truthy(val) is False, f"Expected _truthy({val!r}) to be False"
 
     # Numeric non-bool types
@@ -94,15 +94,25 @@ def test_truthy_edge_cases():
     assert _truthy(-1) is False
     assert _truthy(1.0) is False
     assert _truthy(0.0) is False
+    assert _truthy(float("nan")) is False
+    assert _truthy(float("inf")) is False
+    assert _truthy(-float("inf")) is False
+
+    # Bytes and bytearray
+    assert _truthy(b"true") is False
+    assert _truthy(b"1") is False
+    assert _truthy(bytearray(b"true")) is False
 
     # None, empty string, and whitespace
     assert _truthy(None) is False
     assert _truthy("") is False
     assert _truthy("   ") is False
+    assert _truthy("\t\n") is False
 
     # Containers and objects
     assert _truthy([]) is False
     assert _truthy({}) is False
+    assert _truthy(()) is False
     assert _truthy([1]) is False
 
     class CustomTruthy:
@@ -113,8 +123,16 @@ def test_truthy_edge_cases():
         def __str__(self):
             return "something else"
 
+    class CustomBoolFalsyStrTruthy:
+        def __bool__(self):
+            return False
+
+        def __str__(self):
+            return "true"
+
     assert _truthy(CustomTruthy()) is True
     assert _truthy(CustomFalsy()) is False
+    assert _truthy(CustomBoolFalsyStrTruthy()) is False
 
 
 def test_release_version_is_consistent():
