@@ -425,6 +425,28 @@ def test_triple_search_matches_terms_across_subject_predicate_object(tmp_path):
     assert [(r['subject'], r['predicate'], r['object']) for r in rows] == [('YC', 'knows', 'Diana')]
 
 
+def test_backup_database_raises_filenotfounderror_when_db_missing_and_succeeds_when_present(tmp_path, monkeypatch):
+    import re
+
+    import pytest
+
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    missing_db = tmp_path / 'nonexistent.db'
+    store_missing = DashboardStore(missing_db)
+
+    with pytest.raises(FileNotFoundError, match=re.escape(f"Mnemosyne DB not found: {missing_db}")):
+        store_missing.backup_database()
+
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    store = DashboardStore(db)
+    res = store.backup_database()
+
+    assert res['size_bytes'] > 0
+    assert 'created_at' in res
+    assert Path(res['path']).exists()
+
+
 def test_diagnostics_reports_database_health(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
