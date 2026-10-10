@@ -148,7 +148,8 @@
 
   // static/src/ui/feedback.js
   function renderToast({ tone = "info", title, body = "", actionLabel = "" }) {
-    return `<div class="toast toast-${esc(tone)}" role="status">
+    const role = ["error", "warn", "warning", "danger"].includes(String(tone).toLowerCase()) ? "alert" : "status";
+    return `<div class="toast toast-${esc(tone)}" role="${role}">
     <strong>${esc(title || "Notice")}</strong>
     ${body ? `<p>${esc(body)}</p>` : ""}
     ${actionLabel ? `<button type="button" class="toast-action">${esc(actionLabel)}</button>` : ""}
@@ -648,7 +649,7 @@
     const roleBadge = role ? `<span class="chip chip-role-${role}">${role}</span>` : "";
     const selectedSet = opts.selectedSet || /* @__PURE__ */ new Set();
     const checkClass = opts.checkClass || "memory-check";
-    const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="${esc(checkClass)}" data-id="${esc(item.id)}" ${selectedSet.has(item.id) ? "checked" : ""} /></label>` : "";
+    const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="${esc(checkClass)}" data-id="${esc(item.id)}" ${selectedSet.has(item.id) ? "checked" : ""} aria-label="Select memory ${esc(shortId(item.id))}" /></label>` : "";
     const [liveClass, liveLabel] = liveEventMeta(item);
     const liveBadge = liveLabel ? `<span class="chip chip-live-${esc(liveClass)}">${esc(liveLabel)}</span>` : "";
     const displayContent = cleanContent(item.content);
@@ -5360,7 +5361,7 @@
         <h2 id="actionModalTitle">Confirm action</h2>
         <p id="actionModalDescription" class="muted"></p>
         <div id="actionModalBody"></div>
-        <p id="actionModalError" class="modal-error"></p>
+        <p id="actionModalError" class="modal-error" role="alert" aria-live="assertive"></p>
         <div class="modal-actions">
           <button id="actionModalCancel">Cancel</button>
           <button id="actionModalConfirm" class="primary">Confirm</button>
