@@ -426,13 +426,15 @@ def test_triple_search_matches_terms_across_subject_predicate_object(tmp_path):
 
 
 def test_backup_database_raises_filenotfounderror_when_db_missing_and_succeeds_when_present(tmp_path, monkeypatch):
+    import re
+
     import pytest
 
     monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
     missing_db = tmp_path / 'nonexistent.db'
     store_missing = DashboardStore(missing_db)
 
-    with pytest.raises(FileNotFoundError, match=f"Mnemosyne DB not found: {missing_db}"):
+    with pytest.raises(FileNotFoundError, match=re.escape(f"Mnemosyne DB not found: {missing_db}")):
         store_missing.backup_database()
 
     db = tmp_path / 'mnemosyne.db'
