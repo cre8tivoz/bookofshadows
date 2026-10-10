@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from decimal import Decimal
+
 import pytest
 
 from config import default_db_path, effective_config, load_config, public_config, save_config
