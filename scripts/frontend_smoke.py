@@ -20,12 +20,16 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
 from mock_data import make_mock_db, write_mock_audit_log
 
 try:
     import websocket
-except ImportError as exc:
-    raise SystemExit("websocket-client is required to run the browser smoke check") from exc
+except ImportError:
+    websocket = None
 
 ROOT = Path(__file__).resolve().parents[1]
 TMP_DIR = Path("/tmp/mnemosyne-dashboard-smoke")
@@ -264,6 +268,8 @@ def run_chrome_back_forward(base_url: str) -> float:
 
 
 def run() -> None:
+    if websocket is None:
+        raise SystemExit("websocket-client is required to run the browser smoke check")
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     db_path = TMP_DIR / "mock-mnemosyne.db"
     hermes_home = TMP_DIR / "hermes-home"
