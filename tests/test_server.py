@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 from test_dashboard_core import make_db  # noqa: E402
 
 import server as server_module  # noqa: E402
-from server import Handler, ThreadingHTTPServer  # noqa: E402
+from server import Handler, ThreadingHTTPServer, _safe_int  # noqa: E402
 
 
 def _request(url: str, method: str = "GET", body: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
@@ -406,6 +406,43 @@ def test_login_rate_limit_resets_after_success(tmp_path, monkeypatch):
             assert status == 403
     finally:
         server.close()
+
+
+def test_safe_int_fallback_and_bounds():
+    # Valid conversions
+    assert _safe_int("50", default=10) == 50
+    assert _safe_int("1", default=10) == 1
+    assert _safe_int("1000", default=10) == 1000
+
+    # None and empty string fallback
+    assert _safe_int(None, default=25) == 25
+    assert _safe_int("", default=15) == 15
+
+    # Invalid string input (ValueError)
+    assert _safe_int("abc", default=10) == 10
+    assert _safe_int("12.34", default=10) == 10
+    assert _safe_int("   ", default=10) == 10
+
+    # Invalid types (TypeError)
+    assert _safe_int([], default=10) == 10  # type: ignore[arg-type]
+    assert _safe_int({}, default=10) == 10  # type: ignore[arg-type]
+
+    # Clamping below minimum
+    assert _safe_int("0", default=10, minimum=1) == 1
+    assert _safe_int("-100", default=10, minimum=5) == 5
+
+    # Clamping above maximum
+    assert _safe_int("2000", default=10, maximum=1000) == 1000
+    assert _safe_int("500", default=10, maximum=100) == 100
+
+    # Custom boundaries
+    assert _safe_int("15", default=5, minimum=10, maximum=20) == 15
+    assert _safe_int("5", default=5, minimum=10, maximum=20) == 10
+    assert _safe_int("25", default=5, minimum=10, maximum=20) == 20
+
+    # Fallback to default with clamping when default is outside minimum/maximum
+    assert _safe_int("invalid", default=0, minimum=5, maximum=50) == 5
+    assert _safe_int("invalid", default=100, minimum=5, maximum=50) == 50
 
 
 def test_realtime_events_sse_non_blocking_and_disconnect(tmp_path, monkeypatch):
