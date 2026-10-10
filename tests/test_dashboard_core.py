@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from config import default_db_path, effective_config, load_config, public_config, save_config
-from dashboard_core import DashboardStore
+from dashboard_core import DashboardStore, _truthy
 from server import Handler
 
 
@@ -72,6 +72,49 @@ def make_db(path: Path):
     con.execute("UPDATE episodic_memory SET veracity = 'imported', tier = 3, degraded_at = '2026-05-05T01:00:00' WHERE id = 'e2'")
     con.commit()
     con.close()
+
+
+def test_truthy_edge_cases():
+    # Booleans
+    assert _truthy(True) is True
+    assert _truthy(False) is False
+
+    # Truthy string representations (case-insensitive, whitespace trimmed)
+    for val in ["1", "true", "yes", "on", "TRUE", "Yes", "ON", "  true  ", "\ton\n", " 1 "]:
+        assert _truthy(val) is True, f"Expected _truthy({val!r}) to be True"
+
+    # Falsy string representations
+    for val in ["0", "false", "no", "off", "FALSE", "No", "OFF", "random", "2", "undefined", "null"]:
+        assert _truthy(val) is False, f"Expected _truthy({val!r}) to be False"
+
+    # Numeric non-bool types
+    assert _truthy(1) is True
+    assert _truthy(0) is False
+    assert _truthy(2) is False
+    assert _truthy(-1) is False
+    assert _truthy(1.0) is False
+    assert _truthy(0.0) is False
+
+    # None, empty string, and whitespace
+    assert _truthy(None) is False
+    assert _truthy("") is False
+    assert _truthy("   ") is False
+
+    # Containers and objects
+    assert _truthy([]) is False
+    assert _truthy({}) is False
+    assert _truthy([1]) is False
+
+    class CustomTruthy:
+        def __str__(self):
+            return "true"
+
+    class CustomFalsy:
+        def __str__(self):
+            return "something else"
+
+    assert _truthy(CustomTruthy()) is True
+    assert _truthy(CustomFalsy()) is False
 
 
 def test_release_version_is_consistent():
