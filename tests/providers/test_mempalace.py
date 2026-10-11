@@ -249,3 +249,50 @@ def test_timeline_from_valid_from(tmp_path, monkeypatch):
     entry = timeline[0]
     assert entry.timestamp == "2026-01-01T00:00:00"
     assert "YC" in entry.content
+
+
+def test_invalid_mempalace_config_nonexistent(tmp_path, monkeypatch):
+    nonexistent = tmp_path / "nonexistent.json"
+    monkeypatch.setenv("MEMPALACE_CONFIG", str(nonexistent))
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "empty_home"))
+
+    assert MemPalaceProvider.detect() is False
+
+    provider = MemPalaceProvider()
+    health = provider.initialize()
+    assert health.status == "error"
+    assert "MemPalace config not found" in health.message
+
+
+def test_invalid_mempalace_config_corrupt_json(tmp_path, monkeypatch):
+    corrupt_cfg = tmp_path / "corrupt_config.json"
+    corrupt_cfg.write_text("{ invalid json content ...", encoding="utf-8")
+
+    monkeypatch.setenv("MEMPALACE_CONFIG", str(corrupt_cfg))
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+
+    assert MemPalaceProvider.detect() is True
+
+    provider = MemPalaceProvider()
+    health = provider.initialize()
+    assert health.status == "error"
+    assert "unreadable" in health.message
+
+
+def test_invalid_mempalace_config_missing_chroma(tmp_path, monkeypatch):
+    empty_palace = tmp_path / "empty_palace"
+    empty_palace.mkdir(parents=True, exist_ok=True)
+    cfg = tmp_path / "valid_config.json"
+    cfg.write_text(
+        json.dumps({"palace_path": str(empty_palace)}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("MEMPALACE_CONFIG", str(cfg))
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+
+    provider = MemPalaceProvider()
+    health = provider.initialize()
+    assert health.status == "error"
+    assert "ChromaDB not found" in health.message

@@ -78,3 +78,17 @@ def test_mempalace_config_path_expanduser(monkeypatch):
     monkeypatch.setenv("MEMPALACE_CONFIG", "~/mempalace.json")
     from paths import mempalace_config_path
     assert mempalace_config_path() == Path.home() / "mempalace.json"
+
+
+def test_mempalace_config_path_nonexistent_file(tmp_path, monkeypatch):
+    nonexistent = tmp_path / "nonexistent_dir" / "config.json"
+    monkeypatch.setenv("MEMPALACE_CONFIG", str(nonexistent))
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == nonexistent
+
+
+def test_mempalace_config_path_empty_env_var(monkeypatch):
+    monkeypatch.setenv("MEMPALACE_CONFIG", "")
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == Path.home() / ".mempalace" / "config.json"
