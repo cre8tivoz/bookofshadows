@@ -39,7 +39,7 @@ export function memoryItem(item, opts = {}) {
   const roleBadge = role ? `<span class="chip chip-role-${role}">${role}</span>` : "";
   const selectedSet = opts.selectedSet || new Set();
   const checkClass = opts.checkClass || "memory-check";
-  const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="${esc(checkClass)}" data-id="${esc(item.id)}" ${selectedSet.has(item.id) ? "checked" : ""} /></label>` : "";
+  const selectable = opts.selectable ? `<label class="memory-select" title="Select memory"><input type="checkbox" class="${esc(checkClass)}" data-id="${esc(item.id)}" ${selectedSet.has(item.id) ? "checked" : ""} aria-label="Select memory ${esc(shortId(item.id))}" /></label>` : "";
   const [liveClass, liveLabel] = liveEventMeta(item);
   const liveBadge = liveLabel ? `<span class="chip chip-live-${esc(liveClass)}">${esc(liveLabel)}</span>` : "";
   const displayContent = cleanContent(item.content);

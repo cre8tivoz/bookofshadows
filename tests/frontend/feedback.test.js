@@ -22,9 +22,18 @@ describe("feedback helpers", () => {
     });
 
     expect(html).toContain("toast-success");
+    expect(html).toContain('role="status"');
     expect(html).toContain("Saved &lt;auth&gt;");
     expect(html).toContain("Restart &lt;later&gt;");
     expect(html).toContain("Undo");
+  });
+
+  test("uses role='alert' for error and warning toasts", () => {
+    const errorHtml = renderToast({ tone: "error", title: "Failed" });
+    const warnHtml = renderToast({ tone: "warn", title: "Warning" });
+
+    expect(errorHtml).toContain('role="alert"');
+    expect(warnHtml).toContain('role="alert"');
   });
 
   test("summarises successful and failed bulk actions", () => {
