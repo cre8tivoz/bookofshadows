@@ -3,14 +3,13 @@ import sqlite3
 import sys
 import tomllib
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-
-from decimal import Decimal
-
-import pytest
 
 from config import default_db_path, effective_config, load_config, public_config, save_config
 from dashboard_core import DashboardStore, _truthy
