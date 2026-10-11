@@ -38,7 +38,7 @@
       </button>
       <div class="menu-search glass-mini">
         <input id="menuSearchQuery" placeholder="Search memory…" aria-label="Search memory" />
-        <button id="menuSearchButton" class="primary" aria-label="Search memory">⌕</button>
+        <button id="menuSearchButton" class="primary" aria-label="Search memory" title="Search memory">⌕</button>
       </div>
       <nav role="tablist" aria-label="Primary navigation">
         <button role="tab" aria-selected="true" data-tab="overview" class="active"><span>OV</span>Overview</button>
@@ -167,8 +167,8 @@
             <input id="reviewSearchQuery" placeholder="Search this queue…" aria-label="Search review queue" />
             <label class="range-filter" for="reviewMinImportance"><span>Min importance</span> <strong class="range-filter-value" id="reviewMinImportanceValue">any</strong></label>
             <input id="reviewMinImportance" type="range" min="0" max="1" step="0.05" value="0" />
-            <button id="reviewApplyFilters" class="primary">Apply filters</button>
-            <button id="reviewClearFilters">Clear</button>
+            <button id="reviewApplyFilters" class="primary" title="Apply review filters">Apply filters</button>
+            <button id="reviewClearFilters" title="Clear review filters">Clear</button>
             <span id="reviewQueueCount" class="muted">0 listed</span>
           </div>
           <div id="reviewBulkBar" class="bulk-bar review-bulk-bar glass hidden">
@@ -209,7 +209,7 @@
             <span id="visualiserHelp" class="muted">Drag to rotate · Pan mode/Shift-drag to pan · wheel/pinch to zoom · focus canvas for keyboard controls.</span>
           </div>
           <div class="constellation-layout">
-            <div class="constellation-wrap"><canvas id="constellationCanvas" tabindex="0" role="application" aria-label="Interactive 3D memory constellation. Use arrow keys to move between visible nodes, Enter to open a node, R to reset, P to pause or resume, and plus or minus to zoom. An equivalent keyboard list is below." aria-describedby="visualiserHelp constellationInspector constellationDataHeading"></canvas><button id="constellationExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
+            <div class="constellation-wrap"><canvas id="constellationCanvas" tabindex="0" role="application" aria-label="Interactive 3D memory constellation. Use arrow keys to move between visible nodes, Enter to open a node, R to reset, P to pause or resume, and plus or minus to zoom. An equivalent keyboard list is below." aria-describedby="visualiserHelp constellationInspector constellationDataHeading"></canvas><button id="constellationExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen" title="Exit fullscreen">×</button><div class="constellation-legend" aria-label="Constellation legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div></div>
             <aside id="constellationInspector" class="graph-inspector glass">
               <div class="inspector-kicker">Constellation inspector</div>
               <h3>Nothing selected</h3>
@@ -240,7 +240,7 @@
           </div>
           <div class="three-layout">
             <div id="threeViewport" class="three-viewport glass" tabindex="0" role="application" aria-label="Interactive 3D memory visualiser. Use arrow keys to rotate or pan, plus and minus to zoom, R to reset, and P to pause or resume. An equivalent keyboard list is below." aria-describedby="threeHelp threeInspector threeDataHeading">
-              <button id="threeExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
+              <button id="threeExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen" title="Exit fullscreen">×</button>
               <div id="threeLabels" class="three-labels"></div>
               <div id="threeLegend" class="constellation-legend three-legend"><span><i class="legend-dot entity"></i>Entity/topic</span><span><i class="legend-dot memory"></i>Memory</span><span><i class="legend-line"></i>Link</span></div>
             </div>
@@ -269,7 +269,7 @@
           </div>
           <div class="palace-layout">
             <div id="palaceViewport" class="palace-viewport glass" data-theme="labyrinth" tabindex="0" role="application" aria-label="First-person Mnemosyne Labyrinth explorer. Use W A S D or arrow keys to move, Shift to move faster, drag to look, and tap or click a nearby relic to scan it. An equivalent keyboard list is below." aria-describedby="palaceDataHeading palaceInspector">
-              <button id="palaceExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen">×</button>
+              <button id="palaceExitFullscreen" class="fullscreen-exit" aria-label="Exit fullscreen" title="Exit fullscreen">×</button>
               <div id="palaceLabels" class="three-labels palace-labels"></div>
               <div class="palace-reticle" aria-hidden="true"></div>
               <div class="palace-hud"><strong>Memory Diver</strong><span class="palace-zone-badge">The Archive Gate</span><span id="palaceHudStatus">loading labyrinth…</span><span>Hammy drone online</span><span class="palace-build">LAB v22</span></div>
@@ -334,7 +334,7 @@
 
         <section id="search" class="tab">
           <div class="section-head"><h2>Search</h2><span>results from memories, triples, and consolidations</span></div>
-          <div class="toolbar glass"><input id="globalSearchQuery" placeholder="Search everything…" aria-label="Search everything" /><button id="globalSearchButton" class="primary">Search</button></div>
+          <div class="toolbar glass"><input id="globalSearchQuery" placeholder="Search everything…" aria-label="Search everything" /><button id="globalSearchButton" class="primary" title="Search everything">Search</button></div>
           <div id="globalSearchResults" class="search-results"></div>
         </section>
 
@@ -366,8 +366,8 @@
               <select id="memoryTrustPreset" aria-label="Filter by confidence preset"><option value="">all confidence</option><option value="contaminated">needs review</option><option value="degraded">degraded only</option><option value="due">due for degradation</option></select>
               <select id="memoryStatus" aria-label="Filter by memory status"><option value="active">active</option><option value="all">all statuses</option><option value="expired">expired</option><option value="superseded">superseded</option></select>
               <select id="memorySort" aria-label="Sort memories by"><option value="recent">newest</option><option value="oldest">oldest</option><option value="importance">importance</option><option value="recall">recall count</option></select>
-              <button id="memorySearch" class="primary">Search</button>
-              <button id="memoryClear">Clear</button>
+              <button id="memorySearch" class="primary" title="Search memory content">Search</button>
+              <button id="memoryClear" title="Clear filters">Clear</button>
               <span id="memoryListCount" class="muted">0 listed</span>
             </div>
             <div id="bulkMemoryBar" class="bulk-bar glass hidden">
@@ -587,7 +587,7 @@
     </div>
   </div>
 
-  <div id="detail" class="drawer hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle" tabindex="-1"><button id="closeDetail" aria-label="Close detail">×</button><div class="drawer-title" id="detailTitle">Detail</div><pre id="detailBody"></pre></div>
+  <div id="detail" class="drawer hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle" tabindex="-1"><button id="closeDetail" aria-label="Close detail" title="Close detail">×</button><div class="drawer-title" id="detailTitle">Detail</div><pre id="detailBody"></pre></div>
   <script src="/static/app.js?v=stream-v2"></script>
 </body>
 </html>

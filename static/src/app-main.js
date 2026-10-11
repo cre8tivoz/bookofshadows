@@ -384,7 +384,7 @@ async function openCommandSearch(){
 function openShortcutHelp(){
   openActionModal({
     title: 'Keyboard shortcuts',
-    description: 'Fast paths for the dashboard.',
+    description: 'Fast paths and navigation controls for the dashboard.',
     kicker: 'Command map',
     confirmText: 'Done',
     bodyHtml: `<div class="shortcut-grid">
