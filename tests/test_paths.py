@@ -92,3 +92,27 @@ def test_mempalace_config_path_empty_env_var(monkeypatch):
     monkeypatch.delenv("MEMPALACE_DIR", raising=False)
     from paths import mempalace_config_path
     assert mempalace_config_path() == Path.home() / ".mempalace" / "config.json"
+
+
+def test_mempalace_config_path_relative_path(monkeypatch):
+    rel_path = "relative/dir/mempalace.json"
+    monkeypatch.setenv("MEMPALACE_CONFIG", rel_path)
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == Path(rel_path)
+
+
+def test_mempalace_config_path_invalid_path(monkeypatch):
+    invalid_path = "/nonexistent_root_dir/invalid_mempalace_config.json"
+    monkeypatch.setenv("MEMPALACE_CONFIG", invalid_path)
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == Path(invalid_path)
+
+
+def test_mempalace_config_path_dir_override_with_invalid_path(monkeypatch):
+    monkeypatch.delenv("MEMPALACE_CONFIG", raising=False)
+    invalid_dir = "/nonexistent_root_dir/mempalace_dir"
+    monkeypatch.setenv("MEMPALACE_DIR", invalid_dir)
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == Path(invalid_dir) / "config.json"
