@@ -464,3 +464,29 @@ def test_realtime_events_sse_non_blocking_and_disconnect(tmp_path, monkeypatch):
         assert time.time() - t0 < 1.0
     finally:
         server.close()
+
+
+def test_json_body_invalid_content_length_rejected(tmp_path, monkeypatch):
+    server = ServerHarness(tmp_path, monkeypatch)
+    try:
+        # Negative Content-Length header should return HTTP 500 error cleanly without hanging
+        status, _headers, body = _request(
+            f"{server.base}/api/auth/login",
+            method="POST",
+            body={"password": "test"},
+            headers={"Content-Length": "-1"},
+        )
+        assert status == 500
+        assert b"invalid Content-Length header" in body
+
+        # Non-numeric Content-Length header should return HTTP 500 error cleanly
+        status, _headers, body = _request(
+            f"{server.base}/api/auth/login",
+            method="POST",
+            body={"password": "test"},
+            headers={"Content-Length": "not-a-number"},
+        )
+        assert status == 500
+        assert b"invalid Content-Length header" in body
+    finally:
+        server.close()
