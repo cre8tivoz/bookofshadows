@@ -116,3 +116,11 @@ def test_mempalace_config_path_dir_override_with_invalid_path(monkeypatch):
     monkeypatch.setenv("MEMPALACE_DIR", invalid_dir)
     from paths import mempalace_config_path
     assert mempalace_config_path() == Path(invalid_dir) / "config.json"
+
+
+def test_mempalace_config_path_invalid_config_env(monkeypatch):
+    invalid_config = "/invalid/path/to/mem_config.json"
+    monkeypatch.setenv("MEMPALACE_CONFIG", invalid_config)
+    monkeypatch.delenv("MEMPALACE_DIR", raising=False)
+    from paths import mempalace_config_path
+    assert mempalace_config_path() == Path(invalid_config)
