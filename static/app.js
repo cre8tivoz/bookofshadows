@@ -89,6 +89,7 @@
     const menuToggle = $("#mobileMenuToggle");
     if (menuToggle) {
       menuToggle.setAttribute("aria-expanded", "false");
+      menuToggle.setAttribute("aria-label", "Open menu");
       menuToggle.textContent = "☰";
     }
   }
@@ -202,7 +203,7 @@
   function skeletonHtml(title = "Loading", rows = 3) {
     const count = Math.max(1, Number(rows || 1));
     const lines = Array.from({ length: count }, (_, index) => `<span class="skeleton-line skeleton-line-${index + 1}"></span>`).join("");
-    return `<div class="state-card state-skeleton" aria-busy="true">
+    return `<div class="state-card state-skeleton" aria-busy="true" aria-live="polite">
     <strong>${esc(title)}</strong>
     <div class="skeleton-lines">${lines}</div>
   </div>`;
@@ -629,7 +630,7 @@
     if (lifecycle) pills.push(`<span class="chip chip-lifecycle-${esc(item.degradation_label)}" title="degradation tier: ${esc(item.degradation_tier)} · recall weight ${Number(item.degradation_weight ?? 1).toFixed(2)}">${esc(lifecycle)}</span>`);
     if (importance > 0) pills.push(`<span class="chip chip-importance" title="importance: ${importance.toFixed(2)}">${importance.toFixed(2)}</span>`);
     if (scope && scope !== "session") pills.push(`<span class="chip chip-neutral" title="scope: ${esc(scope)}">${esc(scope)}</span>`);
-    if (opts.sessionLink !== false && session && session !== "default") pills.push(`<button type="button" class="chip chip-session" data-session="${esc(session)}" title="Open session: ${esc(session)}" aria-label="Open session ${esc(session)}">${esc(shortId(session))}</button>`);
+    if (opts.sessionLink !== false && session && session !== "default") pills.push(`<button type="button" class="chip chip-session session-link" data-session="${esc(session)}" title="Open session: ${esc(session)}" aria-label="Open session ${esc(session)}">${esc(shortId(session))}</button>`);
     if (timeLabel) pills.push(`<span class="meta-time" title="${esc(rawTime)}">${esc(timeLabel)}</span>`);
     return `<div class="meta">${pills.join("")}</div>`;
   }
@@ -6543,6 +6544,7 @@
     const isOpen = document.body.classList.contains("mobile-menu-open");
     $("#mobileMenuToggle").textContent = isOpen ? "×" : "☰";
     $("#mobileMenuToggle").setAttribute("aria-expanded", String(isOpen));
+    $("#mobileMenuToggle").setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
   };
   window.addEventListener("resize", closeMobileMenuForViewportChange, { passive: true });
   window.addEventListener("orientationchange", closeMobileMenuForViewportChange, { passive: true });

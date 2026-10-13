@@ -47,6 +47,7 @@ describe("memory rendering", () => {
     expect(html).toContain("hot · T1");
     expect(html).toContain("0.92");
     expect(html).toContain("session_…123456");
+    expect(html).toContain('class="chip chip-session session-link"');
     expect(html).toContain('aria-label="Open session session_abcdef123456"');
   });
 

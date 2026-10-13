@@ -1335,6 +1335,7 @@ $('#mobileMenuToggle').onclick = () => {
   const isOpen = document.body.classList.contains('mobile-menu-open');
   $('#mobileMenuToggle').textContent = isOpen ? '×' : '☰';
   $('#mobileMenuToggle').setAttribute('aria-expanded', String(isOpen));
+  $('#mobileMenuToggle').setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
 };
 window.addEventListener('resize', closeMobileMenuForViewportChange, { passive: true });
 window.addEventListener('orientationchange', closeMobileMenuForViewportChange, { passive: true });

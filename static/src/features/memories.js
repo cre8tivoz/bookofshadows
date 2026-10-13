@@ -17,7 +17,7 @@ export function meta(item, opts = {}) {
   if (lifecycle) pills.push(`<span class="chip chip-lifecycle-${esc(item.degradation_label)}" title="degradation tier: ${esc(item.degradation_tier)} · recall weight ${Number(item.degradation_weight ?? 1).toFixed(2)}">${esc(lifecycle)}</span>`);
   if (importance > 0) pills.push(`<span class="chip chip-importance" title="importance: ${importance.toFixed(2)}">${importance.toFixed(2)}</span>`);
   if (scope && scope !== "session") pills.push(`<span class="chip chip-neutral" title="scope: ${esc(scope)}">${esc(scope)}</span>`);
-  if (opts.sessionLink !== false && session && session !== "default") pills.push(`<button type="button" class="chip chip-session" data-session="${esc(session)}" title="Open session: ${esc(session)}" aria-label="Open session ${esc(session)}">${esc(shortId(session))}</button>`);
+  if (opts.sessionLink !== false && session && session !== "default") pills.push(`<button type="button" class="chip chip-session session-link" data-session="${esc(session)}" title="Open session: ${esc(session)}" aria-label="Open session ${esc(session)}">${esc(shortId(session))}</button>`);
   if (timeLabel) pills.push(`<span class="meta-time" title="${esc(rawTime)}">${esc(timeLabel)}</span>`);
   return `<div class="meta">${pills.join("")}</div>`;
 }
