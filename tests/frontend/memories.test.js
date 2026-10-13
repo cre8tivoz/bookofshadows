@@ -47,6 +47,7 @@ describe("memory rendering", () => {
     expect(html).toContain("hot · T1");
     expect(html).toContain("0.92");
     expect(html).toContain("session_…123456");
+    expect(html).toContain('aria-label="Open session session_abcdef123456"');
   });
 
   test("renders memory cards with role badges, escaped content, and selectable state with aria-label", () => {
