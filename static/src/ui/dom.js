@@ -17,6 +17,7 @@ export function closeMobileMenu() {
   const menuToggle = $("#mobileMenuToggle");
   if (menuToggle) {
     menuToggle.setAttribute("aria-expanded", "false");
+    menuToggle.setAttribute("aria-label", "Open menu");
     menuToggle.textContent = "☰";
   }
 }

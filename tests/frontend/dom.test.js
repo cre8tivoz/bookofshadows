@@ -68,12 +68,13 @@ describe("DOM helpers", () => {
 
   test("closes the mobile menu and updates the toggle", () => {
     document.body.classList.add("mobile-menu-open");
-    document.body.innerHTML = '<button id="mobileMenuToggle" aria-expanded="true">x</button>';
+    document.body.innerHTML = '<button id="mobileMenuToggle" aria-expanded="true" aria-label="Close menu">x</button>';
 
     closeMobileMenu();
 
     expect(document.body.classList.contains("mobile-menu-open")).toBe(false);
     expect($("#mobileMenuToggle").getAttribute("aria-expanded")).toBe("false");
+    expect($("#mobileMenuToggle").getAttribute("aria-label")).toBe("Open menu");
     expect($("#mobileMenuToggle").textContent).toBe("☰");
   });
 
