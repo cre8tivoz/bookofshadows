@@ -68,12 +68,12 @@ describe("feedback helpers", () => {
     expect(keyboardActionForEvent({ key: "/", target: document.getElementById("q") })).toBe("");
   });
 
-  test("renders skeleton rows for loading states with aria-live", () => {
+  test("renders skeleton rows for loading states with role='status'", () => {
     const html = skeletonHtml("Loading memories", 2);
     document.body.innerHTML = html;
 
     expect(html).toContain("state-skeleton");
-    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('role="status"');
     expect(html).toContain("Loading memories");
     expect(document.querySelectorAll(".skeleton-line")).toHaveLength(2);
   });

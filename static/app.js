@@ -203,7 +203,7 @@
   function skeletonHtml(title = "Loading", rows = 3) {
     const count = Math.max(1, Number(rows || 1));
     const lines = Array.from({ length: count }, (_, index) => `<span class="skeleton-line skeleton-line-${index + 1}"></span>`).join("");
-    return `<div class="state-card state-skeleton" aria-busy="true" aria-live="polite">
+    return `<div class="state-card state-skeleton" role="status" aria-busy="true">
     <strong>${esc(title)}</strong>
     <div class="skeleton-lines">${lines}</div>
   </div>`;
