@@ -435,7 +435,12 @@ class Handler(BaseHTTPRequestHandler):
         content_type = self.headers.get("Content-Type", "")
         if content_type and not content_type.startswith("application/json"):
             raise ValueError("Content-Type must be application/json")
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid Content-Length header") from exc
+        if length < 0:
+            raise ValueError("invalid Content-Length header")
         if not length:
             return {}
         if length > MAX_JSON_BODY_BYTES:
