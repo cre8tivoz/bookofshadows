@@ -36,7 +36,14 @@ export function createReviewController({
   let latestReviewData = null;
   let latestReviewItems = [];
 
+  function updateReadOnlyNotice() {
+    const notice = $('#reviewReadOnlyNotice');
+    if (!notice) return;
+    notice.classList.toggle('hidden', canAdmin());
+  }
+
   function updateBulkBar() {
+    updateReadOnlyNotice();
     const bar = $('#reviewBulkBar');
     if (!bar) return;
     const admin = canAdmin();
@@ -232,6 +239,7 @@ export function createReviewController({
   }
 
   function bindGlobalControls() {
+    updateReadOnlyNotice();
     $('#reviewSelectAll').onchange = () => {
       const checked = $('#reviewSelectAll').checked;
       latestReviewItems.forEach((item) => checked ? reviewSelection.add(item.id) : reviewSelection.delete(item.id));

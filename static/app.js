@@ -715,10 +715,16 @@
   }
 
   // static/src/features/review.js
+  function reviewVeracityReason(item = {}) {
+    const veracity = String(item.veracity || "unknown").toLowerCase();
+    const label = veracity || "unknown";
+    const source = String(item.source || "").trim();
+    return source ? `${label} · ${source}` : label;
+  }
   function reviewReasonBadges(key, item = {}) {
     const reasons = [];
-    if (key === "contaminated" || item.veracity && item.veracity !== "stated") reasons.push("Needs review");
-    if (key === "important_contaminated" || Number(item.importance || 0) >= 0.75) reasons.push("High importance");
+    if (key === "contaminated" || item.veracity && item.veracity !== "stated") reasons.push(reviewVeracityReason(item));
+    if (key === "important_contaminated" || Number(item.importance || 0) > 0.5) reasons.push("High importance");
     if (key === "degraded" || Number(item.degradation_tier || 1) > 1) reasons.push("Degraded");
     if (key === "due_degradation") reasons.push("Due for degradation");
     return [...new Set(reasons)].map((reason) => `<span>${esc(reason)}</span>`).join("");
@@ -784,7 +790,13 @@
     let reviewOffset = 0;
     let latestReviewData = null;
     let latestReviewItems = [];
+    function updateReadOnlyNotice() {
+      const notice = $2("#reviewReadOnlyNotice");
+      if (!notice) return;
+      notice.classList.toggle("hidden", canAdmin2());
+    }
     function updateBulkBar2() {
+      updateReadOnlyNotice();
       const bar = $2("#reviewBulkBar");
       if (!bar) return;
       const admin = canAdmin2();
@@ -972,6 +984,7 @@
       });
     }
     function bindGlobalControls() {
+      updateReadOnlyNotice();
       $2("#reviewSelectAll").onchange = () => {
         const checked = $2("#reviewSelectAll").checked;
         latestReviewItems.forEach((item) => checked ? reviewSelection.add(item.id) : reviewSelection.delete(item.id));

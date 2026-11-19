@@ -61,7 +61,7 @@ REVIEW_QUEUE_DEFS = {
     },
     "high_importance_contaminated": {
         "title": "Important memories needing review",
-        "description": "Important memories that were inferred, tool-generated, imported, or unknown.",
+        "description": "Important memories not directly stated by you: inferred, tool-generated, imported, or unknown.",
         "args": {"kind": "all", "status": "active", "contaminated_only": True, "sort": "importance", "min_importance": 0.500001},
         "filter": {"contaminated_only": "1", "sort": "importance"},
     },
@@ -1767,7 +1767,6 @@ class DashboardStore:
                 veracity_expr = "LOWER(COALESCE(veracity, 'unknown'))" if "veracity" in cols else "'unknown'"
                 importance_expr = "COALESCE(importance, 0)" if "importance" in cols else "0"
                 degraded_at_expr = "COALESCE(degraded_at, '')" if "degraded_at" in cols else "''"
-                tier_expr = "COALESCE(tier, 1)" if "tier" in cols else "COALESCE(degradation_tier, 1)" if "degradation_tier" in cols else "1"
                 superseded_where = "COALESCE(superseded_by, '') = ''" if "superseded_by" in cols else "1=1"
                 valid_until_where = "(valid_until IS NULL OR valid_until = '' OR valid_until > ?)" if "valid_until" in cols else "1=1"
 
@@ -1775,8 +1774,8 @@ class DashboardStore:
                     SELECT
                         substr(COALESCE(timestamp, created_at, ''), 1, 10) AS day,
                         {veracity_expr} IN ('inferred','tool','imported','unknown') AS is_contaminated,
-                        ({veracity_expr} IN ('inferred','tool','imported','unknown') AND {importance_expr} >= 0.7) AS is_high_value,
-                        ({degraded_at_expr} != '' OR {tier_expr} >= 3) AS is_degraded
+                        ({veracity_expr} IN ('inferred','tool','imported','unknown') AND {importance_expr} > 0.5) AS is_high_value,
+                        ({degraded_at_expr} != '') AS is_degraded
                     FROM {_quote_identifier(table)}
                     WHERE {superseded_where}
                       AND {valid_until_where}

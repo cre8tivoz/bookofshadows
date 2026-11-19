@@ -8,6 +8,7 @@ import {
   reviewFilterParams,
   reviewQueueHtml,
   reviewReasonBadges,
+  reviewVeracityReason,
 } from "../../static/src/features/review.js";
 
 describe("review queue helpers", () => {
@@ -20,10 +21,34 @@ describe("review queue helpers", () => {
     degradation_tier: 2,
   };
 
-  test("renders unique escaped review reasons", () => {
+  test("renders unique escaped review reasons with the actual veracity label", () => {
     expect(reviewReasonBadges("important_contaminated", activeItem)).toBe(
-      "<span>Needs review</span><span>High importance</span><span>Degraded</span>",
+      "<span>inferred</span><span>High importance</span><span>Degraded</span>",
     );
+  });
+
+  test("explains a flag with the veracity label and source when present", () => {
+    expect(reviewVeracityReason({ veracity: "inferred", source: "preference" })).toBe("inferred · preference");
+    expect(reviewVeracityReason({ veracity: "tool", source: "  " })).toBe("tool");
+    expect(reviewVeracityReason({})).toBe("unknown");
+    expect(reviewReasonBadges("contaminated", { veracity: "imported", source: "onboarding" })).toBe(
+      "<span>imported · onboarding</span>",
+    );
+  });
+
+  test("escapes veracity and source text in flag reasons", () => {
+    expect(reviewReasonBadges("contaminated", { veracity: "<tool>", source: "<script>" })).toBe(
+      "<span>&lt;tool&gt; · &lt;script&gt;</span>",
+    );
+  });
+
+  test("does not flag memories stated by the user", () => {
+    expect(reviewReasonBadges("degraded", { veracity: "stated", degradation_tier: 3 })).toBe("<span>Degraded</span>");
+  });
+
+  test("high-importance chip matches the queue threshold (> 0.5)", () => {
+    expect(reviewReasonBadges("contaminated", { veracity: "inferred", importance: 0.5 })).toBe("<span>inferred</span>");
+    expect(reviewReasonBadges("contaminated", { veracity: "inferred", importance: 0.6 })).toBe("<span>inferred</span><span>High importance</span>");
   });
 
   test("renders triage queues with selectable memory cards from an injected selection", () => {
