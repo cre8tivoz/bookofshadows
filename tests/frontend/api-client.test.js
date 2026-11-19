@@ -172,7 +172,7 @@ describe("endpoint map", () => {
     expect(endpoints.config()).toBe("/api/config");
     expect(endpoints.diagnostics()).toBe("/api/diagnostics");
     expect(endpoints.lifecycle()).toBe("/api/lifecycle?limit=80");
-    expect(endpoints.search("shadow pact", 30)).toBe("/api/search?q=shadow+pact&limit=30");
+    expect(endpoints.search("shadow pact", 30)).toBe("/api/memory-search?q=shadow+pact&limit=30");
   });
 
   test("exposes ApiError for UI-level error handling", () => {
