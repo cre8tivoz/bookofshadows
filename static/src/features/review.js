@@ -2,10 +2,18 @@ import { selectedMutableIds, memoryItem } from './memories.js';
 import { stateHtml } from '../ui/render.js';
 import { esc } from '../utils/escape.js';
 
+// Human-readable label for why a memory is flagged, e.g. "inferred · preference".
+export function reviewVeracityReason(item = {}) {
+  const veracity = String(item.veracity || 'unknown').toLowerCase();
+  const label = veracity || 'unknown';
+  const source = String(item.source || '').trim();
+  return source ? `${label} · ${source}` : label;
+}
+
 export function reviewReasonBadges(key, item = {}) {
   const reasons = [];
-  if (key === 'contaminated' || (item.veracity && item.veracity !== 'stated')) reasons.push('Needs review');
-  if (key === 'important_contaminated' || Number(item.importance || 0) >= 0.75) reasons.push('High importance');
+  if (key === 'contaminated' || (item.veracity && item.veracity !== 'stated')) reasons.push(reviewVeracityReason(item));
+  if (key === 'important_contaminated' || Number(item.importance || 0) > 0.5) reasons.push('High importance');
   if (key === 'degraded' || Number(item.degradation_tier || 1) > 1) reasons.push('Degraded');
   if (key === 'due_degradation') reasons.push('Due for degradation');
   return [...new Set(reasons)].map(reason => `<span>${esc(reason)}</span>`).join('');
