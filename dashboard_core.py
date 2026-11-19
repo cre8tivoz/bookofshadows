@@ -437,7 +437,8 @@ class DashboardStore:
         if not terms:
             return r"a^"
         lookaheads = "".join(rf"(?=.*(?:^|[^\w]){re.escape(term)})" for term in terms)
-        return lookaheads + r".*"
+        # Check each line once, rather than retrying the lookaheads at every character.
+        return r"(?m)^" + lookaheads
 
     def realtime_status(self) -> dict[str, Any]:
         """Feature-detect read-only realtime capabilities for the dashboard UI."""

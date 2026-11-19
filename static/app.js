@@ -222,7 +222,8 @@
     realtimeStatus: () => "/api/realtime/status",
     patterns: (limit = 10) => `/api/patterns?${query({ limit: String(limit) })}`,
     profile: (limit = 10) => `/api/profile/inferred?${query({ limit: String(limit) })}`,
-    search: (q = "", limit = 30) => `/api/search?${query({ q, limit: String(limit) })}`,
+    search: (q = "", limit = 30) => `/api/memory-search?${query({ q, limit: String(limit) })}`,
+    history: (q = "", group = "day", limit = 300) => `/api/history?${query({ q, group, limit: String(limit) })}`,
     memories: (params = {}) => `/api/memories?${new URLSearchParams(params).toString()}`,
     graph: (q = "", limit = 300) => `/api/graph?${query({ q, limit: String(limit) })}`,
     review: (params = {}) => `/api/review?${new URLSearchParams(params).toString()}`,
@@ -5618,7 +5619,7 @@
     if (name === "triples") loadTriples();
     if (name === "consolidations") loadConsolidations();
     if (name === "memories") loadMemories();
-    if (name === "search") loadGlobalSearch();
+    if (name === "search") return loadGlobalSearch();
     if (name === "recall") loadRecallDebug();
     if (name === "timelineView" || section === "activity") loadTimeline();
     if (section === "today") loadTodayDigest();
@@ -6063,8 +6064,7 @@
     const q = $(inputId)?.value.trim() || "";
     if (!q) return;
     $("#globalSearchQuery").value = q;
-    switchTab("search");
-    await loadGlobalSearch();
+    return switchTab("search");
   }
   async function menuSearch() {
     await runSearchFromInput("#menuSearchQuery");
@@ -6126,7 +6126,7 @@
     const group = $("#timelineGroup")?.value || "day";
     $("#timelineResults").innerHTML = skeletonHtml("Loading timeline", 4);
     try {
-      const data = await api(`/api/timeline?q=${encodeURIComponent(q)}&group=${encodeURIComponent(group)}&limit=300`, { requestKey: "timeline" });
+      const data = await api(endpoints.history(q, group), { requestKey: "timeline" });
       $("#timelineResults").innerHTML = data.groups.map((g) => `<div class="timeline-group"><div class="section-head mini"><h2>${esc(g.key)}</h2><span>${g.count} events</span>${group === "session" && g.key !== "no session" ? `<button class="tiny open-session" data-session="${esc(g.key)}">Open session</button>` : ""}</div><div class="timeline">${g.events.map(timelineEvent).join("")}</div></div>`).join("") || '<p class="muted">No timeline events.</p>';
       bindJsonCards($("#timelineResults"), "Timeline event detail");
       $$("#timelineResults .session-chip").forEach((btn) => btn.onclick = (e) => {

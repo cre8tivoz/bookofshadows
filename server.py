@@ -549,6 +549,7 @@ class Handler(BaseHTTPRequestHandler):
                 "runtime", "realtime", "admin", "stats", "digest",
                 "insights", "review", "lifecycle", "profile", "patterns",
                 "constellation", "search", "recall-debug", "timeline",
+                "memory-search", "history",
                 "memories", "memory", "session", "triples", "graph",
                 "consolidations", "memoria",
             }
@@ -660,11 +661,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(self.store.pattern_insights(limit=_safe_int(q.get("limit"), 10, maximum=30)))
             if path == "/api/constellation":
                 return self._send_json(self.store.constellation(limit=_safe_int(q.get("limit"), 240, minimum=40, maximum=600)))
-            if path == "/api/search":
+            if path == "/api/memory-search":
                 return self._send_json(self.store.global_search(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 30, maximum=100)))
             if path == "/api/recall-debug":
                 return self._send_json(self.store.recall_debug(q=q.get("q", ""), limit=_safe_int(q.get("limit"), 20, maximum=100)))
-            if path == "/api/timeline":
+            if path == "/api/history":
                 return self._send_json(self.store.timeline(q=q.get("q", ""), group=q.get("group", "day"), limit=_safe_int(q.get("limit"), 300, maximum=1000)))
             if path == "/api/memories":
                 query = MemoryQuery.from_raw(
