@@ -2,7 +2,7 @@ import importlib.metadata as md
 import sqlite3
 import sys
 import tomllib
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -612,11 +612,13 @@ def test_default_db_path_detects_existing_mnemosyne_database(tmp_path, monkeypat
     assert load_config(create=True).db_path == str(db)
 
 
-def test_memory_intelligence_read_only_views(tmp_path):
+def test_memory_intelligence_read_only_views(tmp_path, monkeypatch):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
     store = DashboardStore(db)
 
+    bounds = store._local_day_utc_bounds
+    monkeypatch.setattr(store, '_local_day_utc_bounds', lambda day: bounds(day, tz=UTC))
     digest = store.today_digest(day='2026-05-04')
     assert digest['read_only'] is True
     assert digest['counts']['memories_added'] == 2
@@ -1378,3 +1380,169 @@ def test_clear_password_keeps_localhost_admin_mode_allowed(tmp_path, monkeypatch
     assert cfg.auth_enabled is False
     assert cfg.has_password is False
     assert cfg.memory_admin_enabled is True
+
+
+# ── Today digest: local-day boundary regression ─────────────────────
+LOCAL_DAY = '2026-05-05'
+LOCAL_DAY_TZ = timezone(timedelta(hours=10))  # fixed UTC+10, no DST, portable across hosts
+
+
+def _local_day_bounds(day=LOCAL_DAY):
+    return DashboardStore._local_day_utc_bounds(day, tz=LOCAL_DAY_TZ)
+
+
+def make_local_day_db(path: Path) -> None:
+    """Synthetic store for local 2026-05-05 at UTC+10: [05-04T14:00Z, 05-05T14:00Z)."""
+    con = sqlite3.connect(path)
+    con.executescript("""
+    CREATE TABLE working_memory (
+        id TEXT PRIMARY KEY, content TEXT, source TEXT, timestamp TEXT,
+        session_id TEXT DEFAULT 'default', importance REAL DEFAULT 0.5,
+        metadata_json TEXT, created_at TEXT, recall_count INTEGER DEFAULT 0,
+        last_recalled TEXT, valid_until TEXT, superseded_by TEXT,
+        scope TEXT DEFAULT 'global', veracity TEXT DEFAULT 'unknown'
+    );
+    CREATE TABLE episodic_memory (
+        id TEXT PRIMARY KEY, content TEXT, source TEXT, timestamp TEXT,
+        session_id TEXT DEFAULT 'default', importance REAL DEFAULT 0.5,
+        metadata_json TEXT, created_at TEXT, recall_count INTEGER DEFAULT 0,
+        last_recalled TEXT, valid_until TEXT, superseded_by TEXT,
+        scope TEXT DEFAULT 'global', veracity TEXT DEFAULT 'unknown',
+        tier INTEGER DEFAULT 1, degraded_at TEXT
+    );
+    CREATE TABLE triples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, subject TEXT, predicate TEXT, object TEXT,
+        valid_from TEXT, valid_until TEXT, source TEXT, confidence REAL DEFAULT 1.0,
+        created_at TEXT
+    );
+    CREATE TABLE consolidation_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, items_consolidated INTEGER,
+        summary_preview TEXT, created_at TEXT
+    );
+    """)
+    # Inside the local day, stored with mixed formats. The old substr() filter
+    # used the UTC date prefix and dropped every row whose UTC date was 05-04.
+    memories = [
+        ('wm_utc', 'wm naive UTC boundary', 'preference', '2026-05-04T14:30:00', None),
+        ('wm_z', 'wm Z suffix', 'task', '2026-05-04T15:30:00Z', None),
+        ('wm_offset', 'wm explicit offset', 'health', '2026-05-05T09:00:00+10:00', None),
+        ('wm_space', 'wm sqlite space format', 'log', '2026-05-04 20:00:00', None),
+        ('wm_before', 'wm before local midnight', 'note', '2026-05-04T13:59:59Z', None),
+        ('wm_after', 'wm after local midnight', 'note', '2026-05-05T14:00:00Z', None),
+        ('wm_recall_utc', 'wm recalled inside', 'note', '2026-01-01T00:00:00', '2026-05-04T14:30:00Z'),
+        ('wm_recall_after', 'wm recalled outside', 'note', '2026-01-01T00:00:00', '2026-05-05T15:00:00Z'),
+    ]
+    con.executemany(
+        "INSERT INTO working_memory(id,content,source,timestamp,last_recalled) VALUES (?,?,?,?,?)",
+        memories,
+    )
+    con.executemany(
+        "INSERT INTO episodic_memory(id,content,source,timestamp) VALUES (?,?,?,?)",
+        [
+            ('ep_utc', 'ep inside via UTC boundary', 'task', '2026-05-04T18:00:00Z'),
+            ('ep_after', 'ep after local midnight', 'task', '2026-05-05T16:00:00Z'),
+        ],
+    )
+    con.executemany(
+        "INSERT INTO triples(subject,predicate,object,valid_from,created_at) VALUES (?,?,?,?,?)",
+        [
+            ('LOCAL_INSIDE_UTC', 'seen', 'inside', '2026-01-01', '2026-05-04T14:30:00Z'),
+            ('LOCAL_FALLBACK', 'seen', 'valid-from fallback', '2026-05-04T20:00:00Z', None),
+            ('LOCAL_AFTER_UTC', 'seen', 'after', '2026-01-01', '2026-05-05T15:00:00Z'),
+        ],
+    )
+    con.executemany(
+        "INSERT INTO consolidation_log(session_id,items_consolidated,summary_preview,created_at) VALUES (?,?,?,?)",
+        [
+            ('local-inside', 1, 'inside', '2026-05-04T14:30:00Z'),
+            ('local-after', 1, 'after', '2026-05-05T15:00:00Z'),
+        ],
+    )
+    con.commit()
+    con.close()
+
+
+def test_local_day_utc_bounds_are_half_open_and_offset_aware():
+    start, end = _local_day_bounds()
+    assert datetime.fromtimestamp(start, UTC).isoformat() == '2026-05-04T14:00:00+00:00'
+    assert datetime.fromtimestamp(end, UTC).isoformat() == '2026-05-05T14:00:00+00:00'
+    next_start, _ = _local_day_bounds('2026-05-06')
+    assert end == next_start  # consecutive days chain exactly, including on DST days
+
+    class _Shift(tzinfo):
+        def utcoffset(self, dt):
+            return timedelta(hours=10 if dt.day < 5 else 11)
+
+        def dst(self, dt):
+            return timedelta(0)
+
+    shift_start, shift_end = DashboardStore._local_day_utc_bounds('2026-10-04', tz=_Shift())
+    assert shift_end - shift_start == 23 * 3600  # offset changes between the two midnights
+
+
+def test_today_digest_filters_all_four_queries_by_local_day(tmp_path, monkeypatch):
+    db = tmp_path / 'local-day.db'
+    make_local_day_db(db)
+    real_bounds = DashboardStore._local_day_utc_bounds
+    monkeypatch.setattr(
+        DashboardStore,
+        '_local_day_utc_bounds',
+        staticmethod(lambda day: real_bounds(day, tz=LOCAL_DAY_TZ)),
+    )
+    digest = DashboardStore(db).today_digest(day=LOCAL_DAY, limit=80)
+
+    assert digest['day'] == LOCAL_DAY
+    assert digest['read_only'] is True
+    assert digest['counts']['memories_added'] == 5
+    assert digest['counts']['memories_recalled'] == 1
+    assert digest['counts']['triples_added'] == 2
+    assert digest['counts']['consolidations'] == 1
+    assert {m['id'] for m in digest['memories_added']} == {
+        'wm_utc', 'wm_z', 'wm_offset', 'wm_space', 'ep_utc',
+    }
+    assert {m['id'] for m in digest['memories_recalled']} == {'wm_recall_utc'}
+    assert {t['subject'] for t in digest['triples_added']} == {'LOCAL_INSIDE_UTC', 'LOCAL_FALLBACK'}
+    assert {c['session_id'] for c in digest['consolidations']} == {'local-inside'}
+
+    limited = DashboardStore(db).today_digest(day=LOCAL_DAY, limit=1)
+    assert [len(limited[key]) for key in (
+        'memories_added', 'memories_recalled', 'triples_added', 'consolidations',
+    )] == [1, 1, 1, 1]
+
+
+def test_today_digest_api_serves_local_day(tmp_path, monkeypatch):
+    import json as _json
+    import threading as _threading
+    import urllib.request as _urlopen
+
+    import server as server_module
+
+    db = tmp_path / 'local-day.db'
+    make_local_day_db(db)
+    real_bounds = DashboardStore._local_day_utc_bounds
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'hermes'))
+    monkeypatch.setattr(DashboardStore, '_today_key', staticmethod(lambda: LOCAL_DAY))
+    monkeypatch.setattr(
+        DashboardStore,
+        '_local_day_utc_bounds',
+        staticmethod(lambda day: real_bounds(day, tz=LOCAL_DAY_TZ)),
+    )
+    httpd = server_module.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    httpd.db_path = db
+    thread = _threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{httpd.server_address[1]}/api/digest/today"
+        with _urlopen.urlopen(url, timeout=5) as resp:
+            assert resp.status == 200
+            payload = _json.loads(resp.read())
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload['day'] == LOCAL_DAY
+    assert payload['counts']['memories_added'] == 5
+    assert {m['id'] for m in payload['memories_added']} == {
+        'wm_utc', 'wm_z', 'wm_offset', 'wm_space', 'ep_utc',
+    }

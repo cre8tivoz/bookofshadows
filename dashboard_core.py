@@ -11,7 +11,7 @@ import uuid
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -1407,6 +1407,38 @@ class DashboardStore:
         return datetime.now().astimezone().date().isoformat()
 
     @staticmethod
+    def _local_day_utc_bounds(day: str, tz: tzinfo | None = None) -> tuple[int, int]:
+        """Half-open UTC epoch bounds [start, end) for a local calendar day.
+
+        Stored timestamps are UTC (naive or carrying an explicit offset), so a
+        local day has to be converted to UTC instants; matching the raw date
+        prefix used the UTC date and broke after local midnight. With no `tz`
+        the host zone is used, which is DST-aware and needs no hard-coded zone.
+        Tests inject a fixed tzinfo for deterministic cross-platform bounds.
+        """
+        def midnight(value: date) -> datetime:
+            wall = datetime.combine(value, time.min)
+            aware = wall.astimezone() if tz is None else wall.replace(tzinfo=tz)
+            return aware.astimezone(UTC)
+
+        try:
+            local_day = date.fromisoformat(day[:10])
+            next_day = local_day + timedelta(days=1)
+            return int(midnight(local_day).timestamp()), int(midnight(next_day).timestamp())
+        except (ValueError, OverflowError, OSError):
+            return 0, 0  # an invalid or unsupported day matches nothing
+
+    @staticmethod
+    def _utc_epoch_sql(expr: str) -> str:
+        """Epoch-second SQL for a timestamp expression, or NULL if unparseable.
+
+        No SQLite 'utc' modifier: it treats naive stamps as local time and
+        would shift by the host offset. Plain strftime('%s') keeps naive
+        values as UTC and honours explicit Z/offset suffixes on any platform.
+        """
+        return f"CAST(strftime('%s', {expr}) AS INTEGER)"
+
+    @staticmethod
     def _entity_terms(*values: object, limit: int = 20) -> list[str]:
         counter: Counter[str] = Counter()
         for value in values:
@@ -1452,6 +1484,7 @@ class DashboardStore:
     def today_digest(self, day: str = "", limit: int = 80) -> dict[str, Any]:
         day = (day or self._today_key())[:10]
         limit = max(1, min(int(limit or 80), 300))
+        start, end = self._local_day_utc_bounds(day)
         memories_today: list[dict[str, Any]] = []
         recalled_today: list[dict[str, Any]] = []
         with self.connect() as con:
@@ -1461,25 +1494,41 @@ class DashboardStore:
                     continue
                 cols = self._columns(con, table)
                 select_cols = self._memory_select_columns(cols, tier)
-                created_sql = f"SELECT {select_cols} FROM {table} WHERE substr(COALESCE(timestamp, created_at, ''), 1, 10) = ? ORDER BY COALESCE(timestamp, created_at) DESC LIMIT ?"
-                for row in con.execute(created_sql, (day, limit)):
+                created_epoch = self._utc_epoch_sql("COALESCE(timestamp, created_at, '')")
+                created_sql = (
+                    f"SELECT {select_cols} FROM {table} "
+                    f"WHERE {created_epoch} >= ? AND {created_epoch} < ? "
+                    f"ORDER BY COALESCE(timestamp, created_at) DESC LIMIT ?"
+                )
+                for row in con.execute(created_sql, (start, end, limit)):
                     memories_today.append(self._enrich_memory(self._dict(row), tier))
                 if "last_recalled" in cols:
-                    recalled_sql = f"SELECT {select_cols} FROM {table} WHERE substr(COALESCE(last_recalled, ''), 1, 10) = ? ORDER BY last_recalled DESC LIMIT ?"
-                    for row in con.execute(recalled_sql, (day, limit)):
+                    recalled_epoch = self._utc_epoch_sql("COALESCE(last_recalled, '')")
+                    recalled_sql = (
+                        f"SELECT {select_cols} FROM {table} "
+                        f"WHERE {recalled_epoch} >= ? AND {recalled_epoch} < ? "
+                        f"ORDER BY last_recalled DESC LIMIT ?"
+                    )
+                    for row in con.execute(recalled_sql, (start, end, limit)):
                         recalled_today.append(self._enrich_memory(self._dict(row), tier))
 
             triples_today = []
             if "triples" in tables:
+                triples_epoch = self._utc_epoch_sql("COALESCE(created_at, valid_from, '')")
                 triples_today = [dict(r) for r in con.execute(
-                    "SELECT id, subject, predicate, object, valid_from, valid_until, source, confidence, created_at FROM triples WHERE substr(COALESCE(created_at, valid_from, ''), 1, 10) = ? ORDER BY COALESCE(created_at, valid_from) DESC LIMIT ?",
-                    (day, limit),
+                    "SELECT id, subject, predicate, object, valid_from, valid_until, source, confidence, created_at FROM triples "
+                    f"WHERE {triples_epoch} >= ? AND {triples_epoch} < ? "
+                    "ORDER BY COALESCE(created_at, valid_from) DESC LIMIT ?",
+                    (start, end, limit),
                 )]
             consolidations_today = []
             if "consolidation_log" in tables:
+                consol_epoch = self._utc_epoch_sql("COALESCE(created_at, '')")
                 consolidations_today = [dict(r) for r in con.execute(
-                    "SELECT id, session_id, items_consolidated, summary_preview, created_at FROM consolidation_log WHERE substr(COALESCE(created_at, ''), 1, 10) = ? ORDER BY created_at DESC LIMIT ?",
-                    (day, limit),
+                    "SELECT id, session_id, items_consolidated, summary_preview, created_at FROM consolidation_log "
+                    f"WHERE {consol_epoch} >= ? AND {consol_epoch} < ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (start, end, limit),
                 )]
 
         memories_today.sort(key=lambda r: r.get("timestamp") or r.get("created_at") or "", reverse=True)
