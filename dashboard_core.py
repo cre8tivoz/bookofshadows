@@ -801,6 +801,7 @@ class DashboardStore:
             "oldest": "COALESCE(timestamp, created_at) ASC",
             "importance": "importance DESC, COALESCE(timestamp, created_at) DESC",
             "recall": "recall_count DESC, COALESCE(last_recalled, timestamp, created_at) DESC",
+            "degraded": "COALESCE(degraded_at, timestamp, created_at) DESC",
         }.get(query.sort, "COALESCE(timestamp, created_at) DESC")
         wanted = []
         if query.kind in ("all", "working"):
@@ -828,9 +829,16 @@ class DashboardStore:
                 for row in con.execute(sql, [*params, query.limit + query.offset]):
                     d = self._enrich_memory(self._dict(row), memory_kind)
                     rows.append(d)
-        rows.sort(key=lambda r: (
-            float(r.get("importance") or 0) if query.sort == "importance" else int(r.get("recall_count") or 0) if query.sort == "recall" else (r.get("timestamp") or r.get("created_at") or "")
-        ), reverse=query.sort != "oldest")
+        def sort_key(r: dict[str, Any]) -> Any:
+            if query.sort == "importance":
+                return float(r.get("importance") or 0)
+            if query.sort == "recall":
+                return int(r.get("recall_count") or 0)
+            if query.sort == "degraded":
+                return r.get("degraded_at") or r.get("timestamp") or r.get("created_at") or ""
+            return r.get("timestamp") or r.get("created_at") or ""
+
+        rows.sort(key=sort_key, reverse=query.sort != "oldest")
         return rows[query.offset:query.offset + query.limit]
 
     def _memory_where(self, query: MemoryQuery, memory_kind: str, columns: set[str], now: str, tier2_ts: str, tier3_ts: str) -> tuple[list[str], list[Any]]:
@@ -1020,8 +1028,11 @@ class DashboardStore:
         warm = self.list_memories(kind="episodic", status="active", degradation_tier=2, sort="oldest", limit=limit)
         cold = self.list_memories(kind="episodic", status="active", degradation_tier=3, sort="oldest", limit=limit)
         due = self.list_memories(kind="episodic", status="active", due_for_degradation=True, sort="oldest", limit=limit)
-        recently_degraded = self.list_memories(kind="episodic", status="active", degraded_only=True, sort="recent", limit=limit)
+        recently_degraded = self.list_memories(kind="episodic", status="active", degraded_only=True, sort="degraded", limit=limit)
         high_importance_degraded = [m for m in recently_degraded if float(m.get("importance") or 0) > 0.5][:limit]
+        high_importance_count = self.count_memories(MemoryQuery(
+            kind="episodic", status="active", degraded_only=True, min_importance=0.500001,
+        ))
         stats = self.stats()
         degradation_counts = {row["degradation_label"]: int(row["count"] or 0) for row in stats.get("by_degradation", [])}
         counts = {
@@ -1030,7 +1041,7 @@ class DashboardStore:
             "cold": degradation_counts.get("cold", len(cold)),
             "due_for_degradation": int(stats.get("degradation", {}).get("due_tier2") or 0) + int(stats.get("degradation", {}).get("due_tier3") or 0),
             "recently_degraded": int(stats.get("degradation", {}).get("degraded") or len(recently_degraded)),
-            "high_importance_degraded": len(high_importance_degraded),
+            "high_importance_degraded": high_importance_count,
         }
         queues = {
             "hot": {"title": "Hot memories", "description": "Tier 1 episodic memories retain full detail and full lifecycle weight.", "filter": {"kind": "episodic", "degradation_tier": "1", "sort": "oldest"}, "items": hot},
@@ -1052,31 +1063,44 @@ class DashboardStore:
 
     def triples(self, q: str = "", subject: str = "", predicate: str = "", object_: str = "", limit: int = 200) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit or 200), 1000))
-        where = []
-        params: list[Any] = []
-        if q:
-            pattern = self._prefix_pattern(q)
-            where.append("(COALESCE(subject, '') || ' ' || COALESCE(predicate, '') || ' ' || COALESCE(object, '') || ' ' || COALESCE(source, '')) REGEXP ?")
-            params.append(pattern)
-        for col, value in [("subject", subject), ("predicate", predicate), ("object", object_)]:
-            if value:
-                where.append(f"{col} REGEXP ?")
-                params.append(self._prefix_pattern(value))
-        clause = "WHERE " + " AND ".join(where) if where else ""
+        q_pattern = self._prefix_pattern(q) if q else ""
+        column_filters = [("subject", subject), ("predicate", predicate), ("object", object_)]
+
+        def build_clause(search_columns: str, params: list[Any]) -> str:
+            where: list[str] = []
+            if q_pattern:
+                where.append(f"({search_columns}) REGEXP ?")
+                params.append(q_pattern)
+            for col, value in column_filters:
+                if value:
+                    where.append(f"{col} REGEXP ?")
+                    params.append(self._prefix_pattern(value))
+            return "WHERE " + " AND ".join(where) if where else ""
+
         with self.connect() as con:
-            # Try triples table first
-            if "triples" in self._tables(con):
+            tables = self._tables(con)
+            # Live stores keep triples in `facts`; the legacy `triples` table may
+            # still hold a stale row or two. Prefer facts whenever they match.
+            if "facts" in tables:
+                params: list[Any] = []
+                facts_clause = build_clause(
+                    "COALESCE(subject, '') || ' ' || COALESCE(predicate, '') || ' ' || COALESCE(object, '') || ' ' || COALESCE(session_id, '')",
+                    params,
+                )
                 results = [dict(r) for r in con.execute(
-                    f"SELECT id, subject, predicate, object, valid_from, valid_until, source, confidence, created_at FROM triples {clause} ORDER BY created_at DESC LIMIT ?",
+                    f"SELECT rowid as id, subject, predicate, object, timestamp as valid_from, NULL as valid_until, session_id as source, confidence, created_at FROM facts {facts_clause} ORDER BY created_at DESC LIMIT ?",
                     [*params, limit],
                 )]
                 if results:
                     return results
-            # Fall back to facts table if triples is empty or doesn't exist
-            if "facts" in self._tables(con):
-                facts_where = clause.replace("source", "session_id") if clause else ""
+            if "triples" in tables:
+                params = []
+                clause = build_clause(
+                    "COALESCE(subject, '') || ' ' || COALESCE(predicate, '') || ' ' || COALESCE(object, '') || ' ' || COALESCE(source, '')",
+                    params,
+                )
                 return [dict(r) for r in con.execute(
-                    f"SELECT rowid as id, subject, predicate, object, timestamp as valid_from, NULL as valid_until, session_id as source, confidence, created_at FROM facts {facts_where} ORDER BY created_at DESC LIMIT ?",
+                    f"SELECT id, subject, predicate, object, valid_from, valid_until, source, confidence, created_at FROM triples {clause} ORDER BY created_at DESC LIMIT ?",
                     [*params, limit],
                 )]
             return []

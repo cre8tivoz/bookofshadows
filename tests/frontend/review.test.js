@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  DEFAULT_LIFECYCLE_QUEUE,
   lifecycleQueueHtml,
+  lifecycleQueueSelection,
   mergeReviewItems,
   newReviewItems,
   reviewActionableIds,
@@ -72,6 +74,27 @@ describe("review queue helpers", () => {
 
     expect(html).toContain("review-queue lifecycle-queue glass");
     expect(html).toContain("Open lifecycle filter");
+  });
+
+  test("selects exactly one lifecycle queue, defaulting to recently degraded", () => {
+    const queues = {
+      hot: { title: "Hot memories", items: [] },
+      recently_degraded: { title: "Recently degraded", items: [] },
+      cold: { title: "Cold memories", items: [] },
+    };
+
+    expect(DEFAULT_LIFECYCLE_QUEUE).toBe("recently_degraded");
+
+    const selected = lifecycleQueueSelection(queues, "cold");
+    expect(selected.key).toBe("cold");
+    expect(selected.html).toContain("Cold memories");
+    expect(selected.html).not.toContain("Hot memories");
+    expect(selected.html).not.toContain("Recently degraded");
+
+    const fallback = lifecycleQueueSelection(queues, "missing");
+    expect(fallback.key).toBe("hot");
+    expect(lifecycleQueueSelection(queues).key).toBe("recently_degraded");
+    expect(lifecycleQueueSelection({}).html).toContain("No lifecycle queues available.");
   });
 
   test("deduplicates selected active review ids for admin actions", () => {

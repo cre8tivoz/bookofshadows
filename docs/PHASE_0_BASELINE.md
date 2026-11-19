@@ -7,7 +7,7 @@ This baseline records the current state before the frontend architecture extract
 ## Repository State
 
 - Repository: `cre8tivoz/bookofshadows`
-- Local folder: `/Users/habibi/hermes/apps-codebases/mnemosyne-dashboard`
+- Local folder: `/Users/habibi/hermes/apps-codebases/bookofshadows`
 - Baseline branch: `codex/phase-0-baseline`
 - Base commit: `cdbc358b3b983c8e250a0153e8cd71cefc829b1f`
 - Remote default branch: `main`

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 
+import { $, $$ } from "../../static/src/ui/dom.js";
 import {
+  createGraphFeature,
   graphEdgeInspectorHtml,
   graphLayout,
   graphNodeInspectorHtml,
@@ -60,5 +62,66 @@ describe("graph feature helpers", () => {
     expect(html).toContain("Alpha &lt;subject&gt;");
     expect(html).toContain("Confidence: 0.8");
     expect(html).toContain("Inspect JSON");
+  });
+});
+
+describe("graph loading", () => {
+  function mountGraphDom() {
+    document.body.innerHTML = `
+      <div class="graph-wrap"><svg id="graphSvg"><circle class="node"></circle></svg></div>
+      <input id="graphQuery" value="">
+      <aside id="graphInspector"></aside>
+    `;
+  }
+
+  test("renders an error state and clears a stale graph when the request fails", async () => {
+    mountGraphDom();
+    let seenOptions;
+    let seenPath;
+    const feature = createGraphFeature({
+      $,
+      $$,
+      api: async (path, options) => {
+        seenPath = path;
+        seenOptions = options;
+        throw new Error("graph offline");
+      },
+      showDetail: () => {},
+      switchTab: () => {},
+    });
+
+    await feature.loadGraph();
+
+    expect(seenPath).toBe("/api/graph?q=&limit=300");
+    expect(seenOptions).toEqual({ requestKey: "graph" });
+    expect($("#graphSvg").innerHTML).toBe("");
+    const error = $(".graph-wrap .graph-load-error");
+    expect(error).not.toBeNull();
+    expect(error.querySelector(".state-error")).not.toBeNull();
+    expect(error.textContent).toContain("Could not load knowledge graph");
+    expect(error.textContent).toContain("graph offline");
+  });
+
+  test("clears a previous error state on a successful load", async () => {
+    mountGraphDom();
+    window.matchMedia = () => ({ matches: false });
+    let fail = true;
+    const feature = createGraphFeature({
+      $,
+      $$,
+      api: async () => {
+        if (fail) throw new Error("temporary failure");
+        return { nodes: [], edges: [] };
+      },
+      showDetail: () => {},
+      switchTab: () => {},
+    });
+
+    await feature.loadGraph();
+    expect($(".graph-wrap .graph-load-error")).not.toBeNull();
+
+    fail = false;
+    await feature.loadGraph();
+    expect($(".graph-wrap .graph-load-error")).toBeNull();
   });
 });

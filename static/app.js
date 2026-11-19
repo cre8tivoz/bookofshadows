@@ -747,6 +747,15 @@
   function lifecycleQueueHtml(key, queue) {
     return reviewQueueHtml(key, queue).replace("review-queue glass", "review-queue lifecycle-queue glass").replace("Open filtered browser", "Open lifecycle filter");
   }
+  var DEFAULT_LIFECYCLE_QUEUE = "recently_degraded";
+  function lifecycleQueueSelection(queues = {}, selectedKey = DEFAULT_LIFECYCLE_QUEUE) {
+    const keys = Object.keys(queues || {});
+    const key = keys.includes(selectedKey) ? selectedKey : keys[0] || "";
+    return {
+      key,
+      html: key ? lifecycleQueueHtml(key, queues[key]) : '<p class="muted">No lifecycle queues available.</p>'
+    };
+  }
   function reviewActionableIds(items, selectedSet) {
     return [...new Set(selectedMutableIds(items, selectedSet))];
   }
@@ -1694,7 +1703,29 @@
         wrap.scrollLeft = Math.max(0, (wrap.scrollWidth - wrap.clientWidth) / 2);
       });
     }
+    function clearGraphError() {
+      const svg = $2("#graphSvg");
+      if (svg) svg.style.display = "";
+      document.querySelector(".graph-wrap .graph-load-error")?.remove();
+    }
+    function showGraphError(err) {
+      const svg = $2("#graphSvg");
+      if (svg) {
+        svg.innerHTML = "";
+        svg.style.display = "none";
+      }
+      const wrap = document.querySelector(".graph-wrap");
+      if (!wrap) return;
+      let box = wrap.querySelector(".graph-load-error");
+      if (!box) {
+        box = document.createElement("div");
+        box.className = "graph-load-error";
+        wrap.insertBefore(box, wrap.firstChild);
+      }
+      box.innerHTML = stateHtml("error", "Could not load knowledge graph", err?.message || "The graph request failed.");
+    }
     function drawGraph(g) {
+      clearGraphError();
       const svg = $2("#graphSvg");
       svg.innerHTML = "";
       const layout = graphLayout(g);
@@ -1751,7 +1782,11 @@
       centerGraphOnMobile();
     }
     async function loadGraph2() {
-      drawGraph(await api2(graphQueryPath($2("#graphQuery")?.value || ""), { requestKey: "graph" }));
+      try {
+        drawGraph(await api2(graphQueryPath($2("#graphQuery")?.value || ""), { requestKey: "graph" }));
+      } catch (err) {
+        showGraphError(err);
+      }
     }
     return { drawGraph, loadGraph: loadGraph2, resetGraphView: resetGraphView2, inspectNode, inspectEdge };
   }
@@ -3349,6 +3384,9 @@
   }
 
   // static/src/visualisers/three-visualiser.js
+  function threeNodeDirectOpenMemoryId(node) {
+    return node && node.memory_id ? node.memory_id : null;
+  }
   function createThreeVisualiser({
     $: $2,
     $$: $$2,
@@ -3918,6 +3956,8 @@
         $2("#threeViewport").classList.add("three-fallback");
         $2("#threeLabels").innerHTML = `<div class="three-fallback-card"><h3>3D visualiser unavailable</h3><p>The original Visualiser remains available for this browser.</p></div>`;
         $2("#threeInspector").innerHTML = `<div class="inspector-kicker">Constellation inspector</div><h3>3D visualiser unavailable</h3><p class="muted">Try the original Visualiser, or reopen this page in a browser that supports the 3D view.</p>`;
+        threeVis.nodes = buildThreePositions(data);
+        renderThreeAccessibleList();
         return;
       }
       $2("#threeViewport").classList.remove("three-fallback");
@@ -4278,7 +4318,11 @@
           best = n;
         }
       }
-      if (best) inspectThreeNode(best);
+      if (best) {
+        inspectThreeNode(best);
+        const memoryId = threeNodeDirectOpenMemoryId(best);
+        if (memoryId) openMemoryDetail2(memoryId);
+      }
     }
     function accessibleThreeSummary(node) {
       const kind = node.kind === "memory" ? "Memory" : "Entity/topic";
@@ -4295,7 +4339,11 @@
       $$2("#threeAccessibleList [data-node-id]").forEach((row) => {
         row.onclick = () => {
           const node = threeVis.nodes.find((n) => n.id === row.dataset.nodeId);
-          if (node) inspectThreeNode(node);
+          if (node) {
+            inspectThreeNode(node);
+            const memoryId = threeNodeDirectOpenMemoryId(node);
+            if (memoryId) openMemoryDetail2(memoryId);
+          }
         };
       });
     }
@@ -5114,6 +5162,7 @@
   var memoryListIsPreset = false;
   var goChordUntil = 0;
   var toastTimer = 0;
+  var selectedLifecycleQueue = DEFAULT_LIFECYCLE_QUEUE;
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
@@ -6282,17 +6331,28 @@
       `Weights: hot ×${Number(weights["1"] || 1).toFixed(2)} · warm ×${Number(weights["2"] || 0.5).toFixed(2)} · cold ×${Number(weights["3"] || 0.25).toFixed(2)}`,
       "Read-only: no degradation is triggered from this page"
     ].map((x) => `<span>${esc(x)}</span>`).join("");
-    $("#lifecycleCards").innerHTML = (data.cards || []).map((card) => `<button class="card review-card lifecycle-card" data-lifecycle-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || "")}</p></button>`).join("");
-    $("#lifecycleQueues").innerHTML = Object.entries(queues).map(([key, queue]) => lifecycleQueueHtml(key, queue)).join("") || '<p class="muted">No lifecycle queues available.</p>';
-    bindMemoryClicks($("#lifecycle"));
+    $("#lifecycleCards").innerHTML = (data.cards || []).map((card) => `<button type="button" class="card review-card lifecycle-card" data-lifecycle-key="${esc(card.key)}" aria-pressed="false"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || "")}</p></button>`).join("");
+    const renderSelectedQueue = () => {
+      const selection = lifecycleQueueSelection(queues, selectedLifecycleQueue);
+      selectedLifecycleQueue = selection.key;
+      $("#lifecycleQueues").innerHTML = selection.html;
+      $$("#lifecycle [data-lifecycle-key]").forEach((el) => {
+        const active = el.dataset.lifecycleKey === selection.key;
+        el.classList.toggle("selected", active);
+        el.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      bindMemoryClicks($("#lifecycle"));
+      $$("#lifecycle .review-filter").forEach((el) => el.onclick = (e) => {
+        e.stopPropagation();
+        const key = el.closest("[data-review-key]")?.dataset.reviewKey;
+        applyReviewFilter(queues[key]?.filter || {});
+      });
+    };
+    renderSelectedQueue();
     $$("#lifecycle [data-lifecycle-key]").forEach((el) => el.onclick = (e) => {
       e.stopPropagation();
-      applyReviewFilter(queues[el.dataset.lifecycleKey]?.filter || {});
-    });
-    $$("#lifecycle .review-filter").forEach((el) => el.onclick = (e) => {
-      e.stopPropagation();
-      const key = el.closest("[data-review-key]")?.dataset.reviewKey;
-      applyReviewFilter(queues[key]?.filter || {});
+      selectedLifecycleQueue = el.dataset.lifecycleKey;
+      renderSelectedQueue();
     });
   }
   var canvasConstellationVisualiser = createCanvasConstellationVisualiser({

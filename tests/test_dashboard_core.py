@@ -74,6 +74,42 @@ def make_db(path: Path):
     con.close()
 
 
+def make_facts_db(path: Path):
+    """One legacy `triples` row alongside several populated `facts` rows."""
+    con = sqlite3.connect(path)
+    con.executescript("""
+    CREATE TABLE triples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subject TEXT, predicate TEXT, object TEXT,
+        valid_from TEXT, valid_until TEXT, source TEXT,
+        confidence REAL DEFAULT 1.0, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE facts (
+        fact_id TEXT PRIMARY KEY,
+        session_id TEXT, subject TEXT, predicate TEXT, object TEXT,
+        timestamp TEXT, source_msg_id TEXT,
+        confidence REAL DEFAULT 1.0, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    con.execute(
+        "INSERT INTO triples(subject,predicate,object,valid_from,source,confidence,created_at) VALUES (?,?,?,?,?,?,?)",
+        ('legacy', 'says', 'stale triple row', '2020-01-01', 'legacy-session', 0.1, '2020-01-01T00:00:00'),
+    )
+    fact_rows = [
+        ('f1', 'alpha', 'YC', 'prefers', 'facts source', '2026-01-01', 'msg-1', 0.9, '2026-01-01T00:00:00'),
+        ('f2', 'beta', 'Diana', 'knows', 'YC', '2026-01-02', 'msg-2', 0.8, '2026-01-02T00:00:00'),
+        ('f3', 'alpha', 'YC', 'uses', 'facts table', '2026-01-03', 'msg-3', 0.7, '2026-01-03T00:00:00'),
+        ('f4', 'gamma', 'Obsidian', 'stores', 'notes', '2026-01-04', 'msg-4', 0.6, '2026-01-04T00:00:00'),
+    ]
+    con.executemany(
+        "INSERT INTO facts(fact_id,session_id,subject,predicate,object,timestamp,source_msg_id,confidence,created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        fact_rows,
+    )
+    con.commit()
+    con.close()
+
+
 def test_truthy_edge_cases():
     # Booleans
     assert _truthy(True) is True
@@ -332,6 +368,45 @@ def test_lifecycle_dashboard_surfaces_degradation_queues(tmp_path):
     assert lifecycle['queues']['due_for_degradation']['filter']['due_for_degradation'] == '1'
 
 
+def test_lifecycle_counts_high_importance_degraded_from_full_population(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    con = sqlite3.connect(db)
+    # Small `limit` would previously cap the sampled list and undercount the card.
+    for mid, importance, degraded_at in [
+        ('e3', 0.9, '2026-05-06T00:00:00'),
+        ('e4', 0.8, '2026-05-07T00:00:00'),
+        ('e5', 0.7, '2026-05-08T00:00:00'),
+    ]:
+        con.execute(
+            "INSERT INTO episodic_memory(id,content,source,timestamp,session_id,importance,scope,tier,degraded_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (mid, f'Important degraded {mid}', 'task', '2020-01-01T00:00:00', 's9', importance, 'session', 2, degraded_at),
+        )
+    con.commit()
+    con.close()
+
+    lifecycle = DashboardStore(db).lifecycle_dashboard(limit=1)
+    # e1 (0.6) plus e3/e4/e5, all degraded and above the 0.5 threshold.
+    assert lifecycle['counts']['high_importance_degraded'] == 4
+    high_card = next(c for c in lifecycle['cards'] if c['key'] == 'high_importance_degraded')
+    assert high_card['count'] == 4
+
+
+def test_lifecycle_recently_degraded_sorted_by_degraded_at(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_db(db)
+    con = sqlite3.connect(db)
+    # e1 has an older record timestamp but the newest degradation timestamp.
+    con.execute("UPDATE episodic_memory SET degraded_at = '2026-05-10T00:00:00' WHERE id = 'e1'")
+    con.execute("UPDATE episodic_memory SET degraded_at = '2026-05-01T00:00:00' WHERE id = 'e2'")
+    con.commit()
+    con.close()
+
+    lifecycle = DashboardStore(db).lifecycle_dashboard(limit=10)
+    assert [item['id'] for item in lifecycle['queues']['recently_degraded']['items']] == ['e1', 'e2']
+
+
 def test_search_uses_token_prefix_not_mid_word_substring(tmp_path):
     db = tmp_path / 'mnemosyne.db'
     make_db(db)
@@ -469,6 +544,38 @@ def test_count_memories_uses_same_filters_as_memory_query(tmp_path):
     contaminated = MemoryQuery.from_raw(kind='all', status='active', contaminated_only=True, limit=2)
     assert len(store.query_memories(contaminated)) == 2
     assert store.count_memories(contaminated) == 5
+
+
+def test_triples_prefers_facts_when_both_tables_have_matching_rows(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_facts_db(db)
+    store = DashboardStore(db)
+
+    rows = store.triples(limit=10)
+    assert len(rows) == 4
+    assert all(row['source'] in {'alpha', 'beta', 'gamma'} for row in rows)
+    assert {row['object'] for row in rows} == {'facts source', 'YC', 'facts table', 'notes'}
+    assert [row['object'] for row in rows] == ['notes', 'facts table', 'YC', 'facts source']
+    assert set(rows[0]) == {
+        'id', 'subject', 'predicate', 'object',
+        'valid_from', 'valid_until', 'source', 'confidence', 'created_at',
+    }
+    graph = store.graph(limit=10)
+    assert {edge['predicate'] for edge in graph['edges']} == {'prefers', 'knows', 'uses', 'stores'}
+
+
+def test_triples_facts_filters_map_q_and_columns_and_fall_back_to_triples(tmp_path):
+    db = tmp_path / 'mnemosyne.db'
+    make_facts_db(db)
+    store = DashboardStore(db)
+
+    assert [r['object'] for r in store.triples(q='Diana', limit=10)] == ['YC']
+    assert [r['object'] for r in store.triples(q='alpha', limit=10)] == ['facts table', 'facts source']
+    assert [r['object'] for r in store.triples(subject='YC', limit=10)] == ['facts table', 'facts source']
+    assert [r['object'] for r in store.triples(predicate='stores', limit=10)] == ['notes']
+    assert [r['object'] for r in store.triples(object_='YC', limit=10)] == ['YC']
+    # No facts match, but the legacy triples row does: fall back to it.
+    assert [(r['subject'], r['object']) for r in store.triples(q='legacy', limit=10)] == [('legacy', 'stale triple row')]
 
 
 def test_graph_returns_nodes_edges_and_filterable_metadata(tmp_path):

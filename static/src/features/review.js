@@ -44,6 +44,20 @@ export function lifecycleQueueHtml(key, queue) {
     .replace('Open filtered browser', 'Open lifecycle filter');
 }
 
+export const DEFAULT_LIFECYCLE_QUEUE = 'recently_degraded';
+
+// The lifecycle page shows one queue list at a time; cards select which one.
+export function lifecycleQueueSelection(queues = {}, selectedKey = DEFAULT_LIFECYCLE_QUEUE) {
+  const keys = Object.keys(queues || {});
+  const key = keys.includes(selectedKey) ? selectedKey : (keys[0] || '');
+  return {
+    key,
+    html: key
+      ? lifecycleQueueHtml(key, queues[key])
+      : '<p class="muted">No lifecycle queues available.</p>',
+  };
+}
+
 export function reviewActionableIds(items, selectedSet) {
   return [...new Set(selectedMutableIds(items, selectedSet))];
 }

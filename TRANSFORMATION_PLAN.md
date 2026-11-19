@@ -13,7 +13,7 @@ The transformation should not be a superficial reskin. The goal is to make the i
 ## 2. Current Verified State
 
 **Repository:** `cre8tivoz/bookofshadows`
-**Local folder:** `/Users/habibi/hermes/apps-codebases/mnemosyne-dashboard`
+**Local folder:** `/Users/habibi/hermes/apps-codebases/bookofshadows`
 **Review date:** 2026-07-01
 **Test state at review:** Python suite passed, `45 passed in 4.93s`
 **Frontend state:** no known JS test suite yet
@@ -899,7 +899,7 @@ Book of Shadows reaches the target quality bar when:
 
 - Verified Obsidian vault root: `/Users/habibi/OBSIDIAN-VAULT/Obsidian Vault/.obsidian`
 - Verified target Obsidian folder: `/Users/habibi/OBSIDIAN-VAULT/Obsidian Vault/HERMES/10 Projects/Witch Daddy Labs/Built Apps`
-- Verified local project folder: `/Users/habibi/hermes/apps-codebases/mnemosyne-dashboard`
+- Verified local project folder: `/Users/habibi/hermes/apps-codebases/bookofshadows`
 - Loaded skill: `obsidian`
 - Loaded skill: `matt-pocock-engineering`
 - Loaded reference: `matt-pocock-engineering/references/book-of-shadows-review-2026-06.md`

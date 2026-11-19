@@ -64,7 +64,7 @@ Dark mode uses iron-charcoal surfaces with teal accents. Light mode is warm bone
 If you're already on Hermes, this is the easy path:
 
 ```bash
-hermes plugins install cre8tivoz/mnemosyne-dashboard --enable
+hermes plugins install cre8tivoz/bookofshadows --enable
 hermes gateway restart
 ```
 
@@ -73,7 +73,7 @@ That's it — Hermes handles the rest, and the dashboard will be ready the next 
 Prefer to do it by hand? That works too:
 
 ```bash
-git clone https://github.com/cre8tivoz/mnemosyne-dashboard.git ~/.hermes/plugins/mnemosyne-dashboard
+git clone https://github.com/cre8tivoz/bookofshadows.git ~/.hermes/plugins/mnemosyne-dashboard
 hermes plugins enable mnemosyne-dashboard
 hermes gateway restart
 ```

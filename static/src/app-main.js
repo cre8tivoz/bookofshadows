@@ -8,7 +8,7 @@ import { bootstrapProviderShell } from './providers.js';
 import { endpoints } from './api/endpoints.js';
 import { canonicalTab, routeTabState, routeToUrl, urlToRoute } from './state/routing.js';
 import { bulkSelectionState, isMutableMemory, liveEventMeta, MEMORY_FILTER_PRESETS, MEMORY_PAGE_SIZE, memoryFilterParams, memoryItem, memoryPresetByKey, mergeMemoryPage, meta, selectedMutableIds, sortByExpiringSoon } from './features/memories.js';
-import { lifecycleQueueHtml } from './features/review.js';
+import { DEFAULT_LIFECYCLE_QUEUE, lifecycleQueueSelection } from './features/review.js';
 import { createReviewController } from './features/review-controller.js';
 import { createDetailDrawerController } from './features/detail-drawer.js';
 import { createSettingsController } from './features/settings-controller.js';
@@ -41,6 +41,7 @@ let memoryTotal = null;
 let memoryListIsPreset = false;
 let goChordUntil = 0;
 let toastTimer = 0;
+let selectedLifecycleQueue = DEFAULT_LIFECYCLE_QUEUE;
 
 function setTheme(theme){
   document.documentElement.dataset.theme = theme;
@@ -1110,11 +1111,25 @@ async function loadLifecycle(){
     `Weights: hot ×${Number(weights['1'] || 1).toFixed(2)} · warm ×${Number(weights['2'] || .5).toFixed(2)} · cold ×${Number(weights['3'] || .25).toFixed(2)}`,
     'Read-only: no degradation is triggered from this page'
   ].map(x => `<span>${esc(x)}</span>`).join('');
-  $('#lifecycleCards').innerHTML = (data.cards || []).map(card => `<button class="card review-card lifecycle-card" data-lifecycle-key="${esc(card.key)}"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
-  $('#lifecycleQueues').innerHTML = Object.entries(queues).map(([key, queue]) => lifecycleQueueHtml(key, queue)).join('') || '<p class="muted">No lifecycle queues available.</p>';
-  bindMemoryClicks($('#lifecycle'));
-  $$('#lifecycle [data-lifecycle-key]').forEach(el => el.onclick = e => { e.stopPropagation(); applyReviewFilter(queues[el.dataset.lifecycleKey]?.filter || {}); });
-  $$('#lifecycle .review-filter').forEach(el => el.onclick = e => { e.stopPropagation(); const key = el.closest('[data-review-key]')?.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); });
+  $('#lifecycleCards').innerHTML = (data.cards || []).map(card => `<button type="button" class="card review-card lifecycle-card" data-lifecycle-key="${esc(card.key)}" aria-pressed="false"><div class="num">${Number(card.count || 0).toLocaleString()}</div><div class="label">${esc(card.title)}</div><p>${esc(card.description || '')}</p></button>`).join('');
+  const renderSelectedQueue = () => {
+    const selection = lifecycleQueueSelection(queues, selectedLifecycleQueue);
+    selectedLifecycleQueue = selection.key;
+    $('#lifecycleQueues').innerHTML = selection.html;
+    $$('#lifecycle [data-lifecycle-key]').forEach(el => {
+      const active = el.dataset.lifecycleKey === selection.key;
+      el.classList.toggle('selected', active);
+      el.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    bindMemoryClicks($('#lifecycle'));
+    $$('#lifecycle .review-filter').forEach(el => el.onclick = e => { e.stopPropagation(); const key = el.closest('[data-review-key]')?.dataset.reviewKey; applyReviewFilter(queues[key]?.filter || {}); });
+  };
+  renderSelectedQueue();
+  $$('#lifecycle [data-lifecycle-key]').forEach(el => el.onclick = e => {
+    e.stopPropagation();
+    selectedLifecycleQueue = el.dataset.lifecycleKey;
+    renderSelectedQueue();
+  });
 }
 
 const canvasConstellationVisualiser = createCanvasConstellationVisualiser({

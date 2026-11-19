@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving Mnemosyne Dashboard.
+Thanks for improving Book of Shadows.
 
 ## Local development
 
