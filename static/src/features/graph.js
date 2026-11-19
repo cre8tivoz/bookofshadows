@@ -1,4 +1,5 @@
 import { esc } from '../utils/escape.js';
+import { stateHtml } from '../ui/render.js';
 
 const GRAPH_WIDTH = 1000;
 const GRAPH_HEIGHT = 650;
@@ -110,7 +111,25 @@ export function createGraphFeature({ $, $$, api, showDetail, switchTab }) {
     });
   }
 
+  function clearGraphError(){
+    const svg = $('#graphSvg');
+    if(svg) svg.style.display = '';
+    document.querySelector('.graph-wrap .graph-load-error')?.remove();
+  }
+
+  function showGraphError(err){
+    // Never leave the previous graph on screen after a failed refresh.
+    const svg = $('#graphSvg');
+    if(svg){ svg.innerHTML = ''; svg.style.display = 'none'; }
+    const wrap = document.querySelector('.graph-wrap');
+    if(!wrap) return;
+    let box = wrap.querySelector('.graph-load-error');
+    if(!box){ box = document.createElement('div'); box.className = 'graph-load-error'; wrap.insertBefore(box, wrap.firstChild); }
+    box.innerHTML = stateHtml('error', 'Could not load knowledge graph', err?.message || 'The graph request failed.');
+  }
+
   function drawGraph(g){
+    clearGraphError();
     const svg = $('#graphSvg'); svg.innerHTML = '';
     const layout = graphLayout(g);
     graphState = { ...g, ...layout };
@@ -132,7 +151,11 @@ export function createGraphFeature({ $, $$, api, showDetail, switchTab }) {
   }
 
   async function loadGraph(){
-    drawGraph(await api(graphQueryPath($('#graphQuery')?.value || ''), {requestKey:'graph'}));
+    try{
+      drawGraph(await api(graphQueryPath($('#graphQuery')?.value || ''), {requestKey:'graph'}));
+    }catch(err){
+      showGraphError(err);
+    }
   }
 
   return { drawGraph, loadGraph, resetGraphView, inspectNode, inspectEdge };

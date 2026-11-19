@@ -1,5 +1,7 @@
 # Next Agent Handoff
 
+> **Snapshot notice:** This is a 2026-07-01 snapshot, superseded by merged PRs #60 (History + sidebar Search), #61 (Today local-day), and #62 (Review clarity). The authoritative repo is `cre8tivoz/bookofshadows` at `fb4bbe5`. The historical body below is retained as-is.
+
 Updated on 2026-07-01 after Release 11B was completed.
 
 ## Current State

@@ -7,7 +7,7 @@ Book of Shadows can run as a Hermes Agent plugin or as a standalone local dashbo
 If Hermes Agent is already installed, install and enable the plugin:
 
 ```bash
-hermes plugins install cre8tivoz/mnemosyne-dashboard --enable
+hermes plugins install cre8tivoz/bookofshadows --enable
 hermes gateway restart
 ```
 
@@ -22,7 +22,7 @@ If `HERMES_HOME` is not set, the default is `~/.hermes`.
 ## Manual Plugin Install
 
 ```bash
-git clone https://github.com/cre8tivoz/mnemosyne-dashboard.git ~/.hermes/plugins/mnemosyne-dashboard
+git clone https://github.com/cre8tivoz/bookofshadows.git ~/.hermes/plugins/mnemosyne-dashboard
 hermes plugins enable mnemosyne-dashboard
 hermes gateway restart
 ```

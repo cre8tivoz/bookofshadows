@@ -1,3 +1,11 @@
+// Pure decision helper: a memory node selects straight into the existing
+// detail drawer. Entity/topic nodes return null and keep the "Search this"
+// behaviour. Exported so the decision can be unit-tested without a THREE/DOM
+// harness.
+export function threeNodeDirectOpenMemoryId(node) {
+  return node && node.memory_id ? node.memory_id : null;
+}
+
 export function createThreeVisualiser({
   $,
   $$,
@@ -446,6 +454,11 @@ export function createThreeVisualiser({
       $('#threeViewport').classList.add('three-fallback');
       $('#threeLabels').innerHTML = `<div class="three-fallback-card"><h3>3D visualiser unavailable</h3><p>The original Visualiser remains available for this browser.</p></div>`;
       $('#threeInspector').innerHTML = `<div class="inspector-kicker">Constellation inspector</div><h3>3D visualiser unavailable</h3><p class="muted">Try the original Visualiser, or reopen this page in a browser that supports the 3D view.</p>`;
+      // buildThreePositions is pure math: no THREE module or WebGL context is
+      // needed, so the accessible keyboard list still gets real clickable rows
+      // in both constellation and neural mode even when the renderer cannot start.
+      threeVis.nodes = buildThreePositions(data);
+      renderThreeAccessibleList();
       return;
     }
     $('#threeViewport').classList.remove('three-fallback');
@@ -666,7 +679,11 @@ export function createThreeVisualiser({
       const sx=(v.x*.5+.5)*rect.width, sy=(-v.y*.5+.5)*rect.height; const d=Math.hypot(sx-mouseX, sy-mouseY);
       if(d < bestD && d < 18){ bestD=d; best=n; }
     }
-    if(best) inspectThreeNode(best);
+    if(best){
+      inspectThreeNode(best);
+      const memoryId = threeNodeDirectOpenMemoryId(best);
+      if(memoryId) openMemoryDetail(memoryId);
+    }
   }
   function accessibleThreeSummary(node){
     const kind = node.kind === 'memory' ? 'Memory' : 'Entity/topic';
@@ -686,7 +703,11 @@ export function createThreeVisualiser({
     $$('#threeAccessibleList [data-node-id]').forEach(row => {
       row.onclick = () => {
         const node = threeVis.nodes.find(n => n.id === row.dataset.nodeId);
-        if(node) inspectThreeNode(node);
+        if(node){
+          inspectThreeNode(node);
+          const memoryId = threeNodeDirectOpenMemoryId(node);
+          if(memoryId) openMemoryDetail(memoryId);
+        }
       };
     });
   }
