@@ -46,7 +46,7 @@ Dark mode uses iron-charcoal surfaces with teal accents. Light mode is warm bone
 - **Overview** — the big picture: how many memories you have, what kind, what's been happening lately
 - **Provider Tabs** — segmented control at the top for switching between active memory providers
 - **Provider Sidebar** — status cards showing health, memory count, and connection status for each provider
-- **Today** — a friendly daily digest of what got added, recalled, or tidied up
+- **Today** — a daily digest of what got added, recalled, or tidied up, using the dashboard host’s local time zone
 - **Context Bank** — the patterns and context your agent has picked up about you
 - **Insights** — operational charts and cards for growth, audit activity, trust mix, sources, review backlog, lifecycle events, clusters, and session heat
 - **Visualiser** — a constellation/neural-map/peer view of your memories you can click through and explore
