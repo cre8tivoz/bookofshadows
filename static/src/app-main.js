@@ -589,7 +589,9 @@ async function loadLiveMemoryStream(append=false){
     const seen = new Set(liveMemoryItems.map(item => item.id));
     liveMemoryItems = append ? [...liveMemoryItems, ...items.filter(item => !seen.has(item.id))] : items;
     liveMemoryOffset += items.length;
-    liveMemoryHasMore = items.length === LIVE_MEMORY_PAGE_SIZE;
+    // Overview shows a fixed recent page (the "25 latest memories" label);
+    // no infinite scroll, so the page does not grow without bound.
+    liveMemoryHasMore = false;
   } finally {
     liveMemoryLoading = false;
     renderLiveMemoryStream();
@@ -1422,7 +1424,6 @@ $('#copyBootError').onclick = copyBootErrorDetails;
 function toggleTheme(){ setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'); }
 $('#themeToggle').onclick = toggleTheme;
 $('#mobileThemeToggle').onclick = toggleTheme;
-initLiveMemoryInfiniteScroll();
 window.addEventListener('popstate', e => applyRoute(e.state || urlToRoute()));
 window.addEventListener('hashchange', () => applyRoute(urlToRoute()));
 window.addEventListener('keydown', handleGlobalKeyboard);

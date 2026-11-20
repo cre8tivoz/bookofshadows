@@ -405,7 +405,7 @@
   var _selectedProvider = null;
   var _onSelectCallbacks = [];
   function getDefaultProvider() {
-    return localStorage.getItem(PROVIDER_KEYS.default_provider) || localStorage.getItem(PROVIDER_KEYS.last_selected_provider) || Object.keys(_providers)[0] || null;
+    return localStorage.getItem(PROVIDER_KEYS.default_provider) || localStorage.getItem(PROVIDER_KEYS.last_selected_provider) || (_providers.mnemosyne ? "mnemosyne" : Object.keys(_providers)[0]) || null;
   }
   function setDefaultProvider(slug) {
     localStorage.setItem(PROVIDER_KEYS.default_provider, slug);
@@ -450,6 +450,10 @@
       const h = health[slug] || {};
       const card = document.createElement("div");
       card.className = `provider-card status-${h.status || "unknown"}`;
+      card.dataset.provider = slug;
+      card.setAttribute("role", "button");
+      card.setAttribute("tabindex", "0");
+      card.setAttribute("aria-label", `Show ${info.name} memories`);
       card.innerHTML = `
       <div class="card-swatch" style="background:${info.color}"></div>
       <div class="card-body">
@@ -464,8 +468,22 @@
         <div class="card-count">${h.row_count || 0} memories</div>
       </div>
     `;
+      card.addEventListener("click", () => selectProvider(slug));
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectProvider(slug);
+        }
+      });
       sidebar.appendChild(card);
     }
+  }
+  function clearProviderCenter() {
+    for (const id of ["loadingSkeleton", "emptyState", "errorBanner"]) {
+      document.getElementById(id)?.classList.add("hidden");
+    }
+    const content = document.getElementById("contentArea");
+    if (content) content.innerHTML = "";
   }
   function selectProvider(slug) {
     _selectedProvider = slug;
@@ -475,6 +493,18 @@
     document.querySelectorAll(".provider-tab").forEach((t) => {
       t.classList.toggle("active", t.dataset.provider === slug);
     });
+    document.querySelectorAll("#providerSidebar .provider-card").forEach((c) => {
+      const active = c.dataset.provider === slug;
+      c.classList.toggle("active", active);
+      c.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    const isNative = slug === "mnemosyne";
+    document.body.classList.toggle("provider-browsing", !isNative);
+    if (isNative) {
+      clearProviderCenter();
+    } else {
+      loadProviderContent(slug);
+    }
     const graphSupported = info.capabilities?.graph;
     const tabConstellation = document.getElementById("tab-constellation");
     const tabNeural = document.getElementById("tab-neural");
@@ -507,6 +537,74 @@
     el.classList.remove("hidden");
     const content = document.getElementById("contentArea");
     if (content) content.classList.add("hidden");
+  }
+  function hideEmptyState() {
+    const el = document.getElementById("emptyState");
+    if (el) el.classList.add("hidden");
+    const content = document.getElementById("contentArea");
+    if (content) content.classList.remove("hidden");
+  }
+  function showLoadingSkeleton() {
+    const el = document.getElementById("loadingSkeleton");
+    if (!el) return;
+    el.innerHTML = `
+    <div class="skeleton-line" style="width:60%"></div>
+    <div class="skeleton-line" style="width:80%"></div>
+    <div class="skeleton-line" style="width:40%"></div>
+    <div class="skeleton-line" style="width:70%"></div>
+  `;
+    el.classList.remove("hidden");
+    const content = document.getElementById("contentArea");
+    if (content) content.classList.add("hidden");
+  }
+  function hideLoadingSkeleton() {
+    const el = document.getElementById("loadingSkeleton");
+    if (el) el.classList.add("hidden");
+    const content = document.getElementById("contentArea");
+    if (content) content.classList.remove("hidden");
+  }
+  function showErrorBanner(message, retryFn) {
+    const el = document.getElementById("errorBanner");
+    if (!el) return;
+    const text = document.getElementById("errorText");
+    if (text) text.textContent = message;
+    const btn = document.getElementById("retryBtn");
+    if (btn) btn.onclick = retryFn;
+    el.classList.remove("hidden");
+  }
+  function hideErrorBanner() {
+    const el = document.getElementById("errorBanner");
+    if (el) el.classList.add("hidden");
+  }
+  async function loadProviderContent(slug) {
+    showLoadingSkeleton();
+    hideErrorBanner();
+    try {
+      const resp = await fetch(`/api/${slug}/memories?limit=100`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (_selectedProvider !== slug) return;
+      hideLoadingSkeleton();
+      if (!data.memories || data.memories.length === 0) {
+        const info = _providers[slug];
+        showEmptyState(info?.name || slug, "No memories found.");
+      } else {
+        hideEmptyState();
+        const content = document.getElementById("contentArea");
+        if (content) {
+          content.innerHTML = data.memories.map((m) => `
+          <div class="memory-card">
+            <div class="memory-content">${esc(m.content)}</div>
+            <div class="memory-meta">${esc(m.kind || "memory")} · ${esc(m.timestamp || "")}</div>
+          </div>
+        `).join("");
+        }
+      }
+    } catch (err) {
+      if (_selectedProvider !== slug) return;
+      hideLoadingSkeleton();
+      showErrorBanner(`Failed to load ${slug}: ${err.message}`, () => loadProviderContent(slug));
+    }
   }
   async function bootstrapProviderShell() {
     const providersResp = await fetch("/api/providers");
@@ -5150,7 +5248,6 @@
   var liveMemoryOffset = 0;
   var liveMemoryHasMore = true;
   var liveMemoryLoading = false;
-  var liveMemoryObserver = null;
   var currentRoute = { tab: "overview" };
   var applyingHistory = false;
   var lastBootError = null;
@@ -5762,26 +5859,11 @@
       const seen = new Set(liveMemoryItems.map((item) => item.id));
       liveMemoryItems = append ? [...liveMemoryItems, ...items.filter((item) => !seen.has(item.id))] : items;
       liveMemoryOffset += items.length;
-      liveMemoryHasMore = items.length === LIVE_MEMORY_PAGE_SIZE;
+      liveMemoryHasMore = false;
     } finally {
       liveMemoryLoading = false;
       renderLiveMemoryStream();
     }
-  }
-  function initLiveMemoryInfiniteScroll() {
-    const sentinel = $("#liveMemorySentinel");
-    if (!sentinel) return;
-    if (liveMemoryObserver) liveMemoryObserver.disconnect();
-    if (!("IntersectionObserver" in window)) {
-      window.addEventListener("scroll", () => {
-        if (liveMemoryHasMore && !liveMemoryLoading && window.innerHeight + window.scrollY >= document.body.offsetHeight - 700) loadLiveMemoryStream(true);
-      }, { passive: true });
-      return;
-    }
-    liveMemoryObserver = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) loadLiveMemoryStream(true);
-    }, { rootMargin: "700px 0px" });
-    liveMemoryObserver.observe(sentinel);
   }
   function addLiveMemoryEvent(event) {
     if (!event || !event.memory_id) return;
@@ -6745,7 +6827,6 @@
   }
   $("#themeToggle").onclick = toggleTheme;
   $("#mobileThemeToggle").onclick = toggleTheme;
-  initLiveMemoryInfiniteScroll();
   window.addEventListener("popstate", (e) => applyRoute(e.state || urlToRoute()));
   window.addEventListener("hashchange", () => applyRoute(urlToRoute()));
   window.addEventListener("keydown", handleGlobalKeyboard);

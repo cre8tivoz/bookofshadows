@@ -1,3 +1,5 @@
+import { esc } from './utils/escape.js';
+
 const PROVIDER_KEYS = {
   default_provider: 'bos.default_provider',
   last_selected_provider: 'bos.last_selected_provider',
@@ -27,7 +29,7 @@ export function getProviderHealth(slug) {
 function getDefaultProvider() {
   return localStorage.getItem(PROVIDER_KEYS.default_provider)
     || localStorage.getItem(PROVIDER_KEYS.last_selected_provider)
-    || Object.keys(_providers)[0]
+    || (_providers.mnemosyne ? 'mnemosyne' : Object.keys(_providers)[0])
     || null;
 }
 
@@ -77,6 +79,10 @@ export function renderSidebar(providers, health) {
     const h = health[slug] || {};
     const card = document.createElement('div');
     card.className = `provider-card status-${h.status || 'unknown'}`;
+    card.dataset.provider = slug;
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', `Show ${info.name} memories`);
     card.innerHTML = `
       <div class="card-swatch" style="background:${info.color}"></div>
       <div class="card-body">
@@ -91,8 +97,22 @@ export function renderSidebar(providers, health) {
         <div class="card-count">${h.row_count || 0} memories</div>
       </div>
     `;
+    card.addEventListener('click', () => selectProvider(slug));
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectProvider(slug); }
+    });
     sidebar.appendChild(card);
   }
+}
+
+// The native Mnemosyne console lives in <main>; other providers browse in the
+// provider centre. Clearing the centre restores the clean console view.
+function clearProviderCenter() {
+  for (const id of ['loadingSkeleton', 'emptyState', 'errorBanner']) {
+    document.getElementById(id)?.classList.add('hidden');
+  }
+  const content = document.getElementById('contentArea');
+  if (content) content.innerHTML = '';
 }
 
 export function selectProvider(slug) {
@@ -105,6 +125,23 @@ export function selectProvider(slug) {
   document.querySelectorAll('.provider-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.provider === slug);
   });
+
+  // Update sidebar card active state
+  document.querySelectorAll('#providerSidebar .provider-card').forEach(c => {
+    const active = c.dataset.provider === slug;
+    c.classList.toggle('active', active);
+    c.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+
+  // Mnemosyne is the native console (<main>); other providers browse their own
+  // memories in the provider centre. Switching actually changes what is shown.
+  const isNative = slug === 'mnemosyne';
+  document.body.classList.toggle('provider-browsing', !isNative);
+  if (isNative) {
+    clearProviderCenter();
+  } else {
+    loadProviderContent(slug);
+  }
 
   // Show/hide visualiser tabs based on capabilities
   const graphSupported = info.capabilities?.graph;
@@ -198,6 +235,8 @@ export async function loadProviderContent(slug) {
     const resp = await fetch(`/api/${slug}/memories?limit=100`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
+    // Ignore a stale response if the user has already switched providers.
+    if (_selectedProvider !== slug) return;
     hideLoadingSkeleton();
     if (!data.memories || data.memories.length === 0) {
       const info = _providers[slug];
@@ -206,15 +245,17 @@ export async function loadProviderContent(slug) {
       hideEmptyState();
       const content = document.getElementById('contentArea');
       if (content) {
+        // Escape stored text: memories may contain HTML that must render as text.
         content.innerHTML = data.memories.map(m => `
           <div class="memory-card">
-            <div class="memory-content">${m.content}</div>
-            <div class="memory-meta">${m.kind || 'memory'} · ${m.timestamp || ''}</div>
+            <div class="memory-content">${esc(m.content)}</div>
+            <div class="memory-meta">${esc(m.kind || 'memory')} · ${esc(m.timestamp || '')}</div>
           </div>
         `).join('');
       }
     }
   } catch (err) {
+    if (_selectedProvider !== slug) return;
     hideLoadingSkeleton();
     showErrorBanner(`Failed to load ${slug}: ${err.message}`, () => loadProviderContent(slug));
   }
