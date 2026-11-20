@@ -2,7 +2,9 @@
 
 > **Purpose:** turn Book of Shadows from a strong local Mnemosyne dashboard with an AI-vibe-coded frontend into a polished, fast, usable, product-grade memory console that feels like it had a multi-million-dollar product and engineering team behind it.
 
-## 1. Executive Summary
+> **Status — 20 Nov 2026: largely delivered.** This is the original July 2026 plan, kept as the historical roadmap. The frontend has since been modularised (26 modules under `static/src/`, built into `static/app.js` with esbuild), with 123 frontend tests (Vitest) and 179 backend tests (pytest), hash routing, and a working multi-provider shell. A run of usability fixes landed in Nov 2026 (PRs #60–#65). For the current state read `README.md` and `docs/ARCHITECTURE.md`; the human-facing project note lives in Obsidian ("Book of Shadows"). The phase and sprint checklists below are the original plan, not a live task list.
+
+## 1. Executive Summary (July 2026)
 
 Book of Shadows already has a solid foundation. The Python backend is genuinely respectable: password hashing is sensible, security headers are present, admin mutations are guarded, database writes are backed up, and the dashboard is read-only by default. The visual identity also has a clear direction: iron-dark surfaces, teal accents, memory-console atmosphere, and the distinctive Witch Daddy Labs / Book of Shadows framing.
 
@@ -10,7 +12,9 @@ The weak point is the frontend application layer. The current `static/app.js` is
 
 The transformation should not be a superficial reskin. The goal is to make the interface faster, calmer, easier to understand, easier to navigate, more accessible, and much safer to change. The plan below focuses on architecture first, then UX friction, then premium interface polish, then performance and testing.
 
-## 2. Current Verified State
+## 2. July 2026 baseline (historical)
+
+> The figures below are the July 2026 starting point, not the current state. See the status banner above for where the project is now.
 
 **Repository:** `cre8tivoz/bookofshadows`
 **Local folder:** `/Users/habibi/hermes/apps-codebases/bookofshadows`
