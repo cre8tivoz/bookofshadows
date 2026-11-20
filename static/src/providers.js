@@ -27,7 +27,7 @@ export function getProviderHealth(slug) {
 function getDefaultProvider() {
   return localStorage.getItem(PROVIDER_KEYS.default_provider)
     || localStorage.getItem(PROVIDER_KEYS.last_selected_provider)
-    || Object.keys(_providers)[0]
+    || (_providers.mnemosyne ? 'mnemosyne' : Object.keys(_providers)[0])
     || null;
 }
 
@@ -77,6 +77,10 @@ export function renderSidebar(providers, health) {
     const h = health[slug] || {};
     const card = document.createElement('div');
     card.className = `provider-card status-${h.status || 'unknown'}`;
+    card.dataset.provider = slug;
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', `Show ${info.name} memories`);
     card.innerHTML = `
       <div class="card-swatch" style="background:${info.color}"></div>
       <div class="card-body">
@@ -91,8 +95,22 @@ export function renderSidebar(providers, health) {
         <div class="card-count">${h.row_count || 0} memories</div>
       </div>
     `;
+    card.addEventListener('click', () => selectProvider(slug));
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectProvider(slug); }
+    });
     sidebar.appendChild(card);
   }
+}
+
+// The native Mnemosyne console lives in <main>; other providers browse in the
+// provider centre. Clearing the centre restores the clean console view.
+function clearProviderCenter() {
+  for (const id of ['loadingSkeleton', 'emptyState', 'errorBanner']) {
+    document.getElementById(id)?.classList.add('hidden');
+  }
+  const content = document.getElementById('contentArea');
+  if (content) content.innerHTML = '';
 }
 
 export function selectProvider(slug) {
@@ -105,6 +123,23 @@ export function selectProvider(slug) {
   document.querySelectorAll('.provider-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.provider === slug);
   });
+
+  // Update sidebar card active state
+  document.querySelectorAll('#providerSidebar .provider-card').forEach(c => {
+    const active = c.dataset.provider === slug;
+    c.classList.toggle('active', active);
+    c.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+
+  // Mnemosyne is the native console (<main>); other providers browse their own
+  // memories in the provider centre. Switching actually changes what is shown.
+  const isNative = slug === 'mnemosyne';
+  document.body.classList.toggle('provider-browsing', !isNative);
+  if (isNative) {
+    clearProviderCenter();
+  } else {
+    loadProviderContent(slug);
+  }
 
   // Show/hide visualiser tabs based on capabilities
   const graphSupported = info.capabilities?.graph;
