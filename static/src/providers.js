@@ -1,3 +1,5 @@
+import { esc } from './utils/escape.js';
+
 const PROVIDER_KEYS = {
   default_provider: 'bos.default_provider',
   last_selected_provider: 'bos.last_selected_provider',
@@ -233,6 +235,8 @@ export async function loadProviderContent(slug) {
     const resp = await fetch(`/api/${slug}/memories?limit=100`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
+    // Ignore a stale response if the user has already switched providers.
+    if (_selectedProvider !== slug) return;
     hideLoadingSkeleton();
     if (!data.memories || data.memories.length === 0) {
       const info = _providers[slug];
@@ -241,15 +245,17 @@ export async function loadProviderContent(slug) {
       hideEmptyState();
       const content = document.getElementById('contentArea');
       if (content) {
+        // Escape stored text: memories may contain HTML that must render as text.
         content.innerHTML = data.memories.map(m => `
           <div class="memory-card">
-            <div class="memory-content">${m.content}</div>
-            <div class="memory-meta">${m.kind || 'memory'} · ${m.timestamp || ''}</div>
+            <div class="memory-content">${esc(m.content)}</div>
+            <div class="memory-meta">${esc(m.kind || 'memory')} · ${esc(m.timestamp || '')}</div>
           </div>
         `).join('');
       }
     }
   } catch (err) {
+    if (_selectedProvider !== slug) return;
     hideLoadingSkeleton();
     showErrorBanner(`Failed to load ${slug}: ${err.message}`, () => loadProviderContent(slug));
   }

@@ -583,6 +583,7 @@
       const resp = await fetch(`/api/${slug}/memories?limit=100`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
+      if (_selectedProvider !== slug) return;
       hideLoadingSkeleton();
       if (!data.memories || data.memories.length === 0) {
         const info = _providers[slug];
@@ -593,13 +594,14 @@
         if (content) {
           content.innerHTML = data.memories.map((m) => `
           <div class="memory-card">
-            <div class="memory-content">${m.content}</div>
-            <div class="memory-meta">${m.kind || "memory"} · ${m.timestamp || ""}</div>
+            <div class="memory-content">${esc(m.content)}</div>
+            <div class="memory-meta">${esc(m.kind || "memory")} · ${esc(m.timestamp || "")}</div>
           </div>
         `).join("");
         }
       }
     } catch (err) {
+      if (_selectedProvider !== slug) return;
       hideLoadingSkeleton();
       showErrorBanner(`Failed to load ${slug}: ${err.message}`, () => loadProviderContent(slug));
     }
