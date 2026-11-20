@@ -1,4 +1,4 @@
-import { esc } from './utils/escape.js';
+import { esc, cleanContent } from './utils/escape.js';
 
 const PROVIDER_KEYS = {
   default_provider: 'bos.default_provider',
@@ -9,6 +9,7 @@ let _providers = {};
 let _health = {};
 let _selectedProvider = null;
 let _onSelectCallbacks = [];
+let _onOpenMemory = null;
 
 export function onProviderSelect(cb) {
   _onSelectCallbacks.push(cb);
@@ -245,13 +246,28 @@ export async function loadProviderContent(slug) {
       hideEmptyState();
       const content = document.getElementById('contentArea');
       if (content) {
-        // Escape stored text: memories may contain HTML that must render as text.
-        content.innerHTML = data.memories.map(m => `
-          <div class="memory-card">
-            <div class="memory-content">${esc(m.content)}</div>
+        // Compact previews: stored memories can be long documents, so show a
+        // short clamped excerpt and open the full record on click.
+        content.innerHTML = data.memories.map((m, i) => {
+          const preview = cleanContent(m.content);
+          const short = preview.length > 280 ? preview.slice(0, 280).trimEnd() + '…' : preview;
+          const openable = Boolean(_onOpenMemory);
+          return `
+          <div class="memory-card${openable ? ' clickable' : ''}" data-idx="${i}"${openable ? ' role="button" tabindex="0"' : ''}>
+            <div class="memory-content">${esc(short)}</div>
             <div class="memory-meta">${esc(m.kind || 'memory')} · ${esc(m.timestamp || '')}</div>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
+        if (_onOpenMemory) {
+          content.querySelectorAll('.memory-card').forEach(card => {
+            const m = data.memories[Number(card.dataset.idx)];
+            const open = () => _onOpenMemory(m);
+            card.addEventListener('click', open);
+            card.addEventListener('keydown', e => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+            });
+          });
+        }
       }
     }
   } catch (err) {
@@ -261,7 +277,8 @@ export async function loadProviderContent(slug) {
   }
 }
 
-export async function bootstrapProviderShell() {
+export async function bootstrapProviderShell({ onOpenMemory = null } = {}) {
+  _onOpenMemory = onOpenMemory;
   // Load provider registry
   const providersResp = await fetch('/api/providers');
   const { providers } = await providersResp.json();

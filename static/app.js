@@ -404,6 +404,7 @@
   var _health = {};
   var _selectedProvider = null;
   var _onSelectCallbacks = [];
+  var _onOpenMemory = null;
   function getDefaultProvider() {
     return localStorage.getItem(PROVIDER_KEYS.default_provider) || localStorage.getItem(PROVIDER_KEYS.last_selected_provider) || (_providers.mnemosyne ? "mnemosyne" : Object.keys(_providers)[0]) || null;
   }
@@ -592,12 +593,29 @@
         hideEmptyState();
         const content = document.getElementById("contentArea");
         if (content) {
-          content.innerHTML = data.memories.map((m) => `
-          <div class="memory-card">
-            <div class="memory-content">${esc(m.content)}</div>
+          content.innerHTML = data.memories.map((m, i) => {
+            const preview = cleanContent(m.content);
+            const short = preview.length > 280 ? preview.slice(0, 280).trimEnd() + "…" : preview;
+            const openable = Boolean(_onOpenMemory);
+            return `
+          <div class="memory-card${openable ? " clickable" : ""}" data-idx="${i}"${openable ? ' role="button" tabindex="0"' : ""}>
+            <div class="memory-content">${esc(short)}</div>
             <div class="memory-meta">${esc(m.kind || "memory")} · ${esc(m.timestamp || "")}</div>
-          </div>
-        `).join("");
+          </div>`;
+          }).join("");
+          if (_onOpenMemory) {
+            content.querySelectorAll(".memory-card").forEach((card) => {
+              const m = data.memories[Number(card.dataset.idx)];
+              const open = () => _onOpenMemory(m);
+              card.addEventListener("click", open);
+              card.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  open();
+                }
+              });
+            });
+          }
         }
       }
     } catch (err) {
@@ -606,7 +624,8 @@
       showErrorBanner(`Failed to load ${slug}: ${err.message}`, () => loadProviderContent(slug));
     }
   }
-  async function bootstrapProviderShell() {
+  async function bootstrapProviderShell({ onOpenMemory = null } = {}) {
+    _onOpenMemory = onOpenMemory;
     const providersResp = await fetch("/api/providers");
     const { providers } = await providersResp.json();
     _providers = providers;
@@ -5439,7 +5458,7 @@
     if (route.tab !== "overview" || route.drawer) await applyRoute(route);
     renderBootErrorStatus();
     try {
-      await bootstrapProviderShell();
+      await bootstrapProviderShell({ onOpenMemory: (m) => showDetail(m, `${m.kind || "Memory"} detail`) });
     } catch (e) {
       console.warn("Provider shell bootstrap failed:", e);
     }

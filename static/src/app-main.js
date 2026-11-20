@@ -204,7 +204,7 @@ async function bootstrapDashboard(){
   renderBootErrorStatus();
   // Initialize provider shell (multi-provider dashboard)
   try {
-    await bootstrapProviderShell();
+    await bootstrapProviderShell({ onOpenMemory: (m) => showDetail(m, `${m.kind || 'Memory'} detail`) });
   } catch (e) {
     console.warn('Provider shell bootstrap failed:', e);
   }
